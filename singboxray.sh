@@ -42,9 +42,9 @@ if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
 fi
 
 echo -e "\n[2/6] 正在清理旧代理进程..."
-if [ -f "$WORK_DIR/sb.pid" ]; then kill -9 $(cat "$WORK_DIR/sb.pid") 2>/dev/null \vert{}\vert{} true; rm -f "$WORK_DIR/sb.pid"; fi
-if [ -f "$WORK_DIR/xr.pid" ]; then kill -9 $(cat "$WORK_DIR/xr.pid") 2>/dev/null \vert{}\vert{} true; rm -f "$WORK_DIR/xr.pid"; fi
-if [ -f "$WORK_DIR/cf.pid" ]; then kill -9 $(cat "$WORK_DIR/cf.pid") 2>/dev/null \vert{}\vert{} true; rm -f "$WORK_DIR/cf.pid"; fi
+if [ -f "$WORK_DIR/sb.pid" ]; then kill -9 $(cat "$WORK_DIR/sb.pid") 2>/dev/null || true; rm -f "$WORK_DIR/sb.pid"; fi
+if [ -f "$WORK_DIR/xr.pid" ]; then kill -9 $(cat "$WORK_DIR/xr.pid") 2>/dev/null || true; rm -f "$WORK_DIR/xr.pid"; fi
+if [ -f "$WORK_DIR/cf.pid" ]; then kill -9 $(cat "$WORK_DIR/cf.pid") 2>/dev/null || true; rm -f "$WORK_DIR/cf.pid"; fi
 
 ARCH=$(uname -m)
 case "$ARCH" in
@@ -97,7 +97,7 @@ XHTTP_PATH_ENC=$(urlencode "$XHTTP_PATH")
 
 KEY_PATH="$WORK_DIR/private.key"
 CERT_PATH="$WORK_DIR/cert.pem"
-if [ ! -f "$KEY_PATH" ] \vert{}\vert{} [ ! -f "$CERT_PATH" ]; then
+if [ ! -f "$KEY_PATH" ] || [ ! -f "$CERT_PATH" ]; then
     openssl ecparam -genkey -name prime256v1 -out "$KEY_PATH" 2>/dev/null
     openssl req -new -x509 -days 3650 -key "$KEY_PATH" -out "$CERT_PATH" -subj "/CN=bing.com" 2>/dev/null
     chmod 600 "$KEY_PATH"
@@ -110,7 +110,7 @@ GLOBAL_LINKS=""
 if [ "$INPUT_NAIVE" != "n" ] && [ -n "$INPUT_NAIVE" ]; then
     if [ "$INPUT_NAIVE" = "x" ]; then
         if [ ! -f "$WORK_DIR/port_naive" ]; then
-            echo $((10000 + RANDOM \% 50000)) > "$WORK_DIR/port_naive"
+            echo $((10000 + $(date +%s) % 40000)) > "$WORK_DIR/port_naive"
         fi
         NAIVE_PORT=$(cat "$WORK_DIR/port_naive")
     else
@@ -154,7 +154,7 @@ if [ "$INPUT_XHTTP" != "n" ] && [ -n "$INPUT_XHTTP" ]; then
     HAS_XRAY=true
     if [ "$INPUT_XHTTP" = "x" ]; then
         if [ ! -f "$WORK_DIR/port_xhttp" ]; then
-            echo $((10000 + RANDOM \% 50000)) > "$WORK_DIR/port_xhttp"
+            echo $((12000 + $(date +%s) % 40000)) > "$WORK_DIR/port_xhttp"
         fi
         XHTTP_PORT=$(cat "$WORK_DIR/port_xhttp")
     else
@@ -250,3 +250,7 @@ echo -e "\n[6/6] 部署全部完成！"
 
 if [ -n "$GLOBAL_LINKS" ]; then
     BASE64_SUB=$(echo -e "$GLOBAL_LINKS" | base64 | tr -d '\n')
+    echo -e "\n====================== Base64 订阅/链接 ======================"
+    echo "$BASE64_SUB"
+    echo -e "==============================================================\n"
+fi
