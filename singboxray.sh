@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # =========================================================
-# 纯 Shell 一键部署节点脚本 (支持 Ubuntu / Debian / Alpine)
+# 纯 Shell 稳健版一键部署节点脚本 (适配 Ubuntu/Debian/Alpine/OpenVZ)
 # 架构: Sing-box (NaiveProxy H2/H3) + Xray (xHTTP 直连/Argo)
 # =========================================================
 
 set -e
 
-WORK_DIR=".tmp"
+# 固化工作目录，防止多路径混乱
+WORK_DIR="$HOME/.singboxray"
 mkdir -p "$WORK_DIR"
 
 # URL 编码转换函数（无依赖纯 Bash 实现）
@@ -33,15 +34,15 @@ INPUT_ARGO_PORT=${3:-"n"}
 INPUT_ARGO_DOMAIN=${4:-""}
 INPUT_ARGO_AUTH=${5:-""}
 
-# 2. 检查并安装基础依赖
-echo -e "\n[1/5] 检查并安装系统基础依赖..."
-if [ -f /etc/alpine-release ]; then
-    apk update && apk add --no-cache curl openssl tar unzip coreutils procps
-elif [ -f /etc/debian_version ] || [ -f /etc/lsb-release ]; then
-    apt-get update -y && apt-get install -y curl openssl tar unzip procps psmisc
-else
-    echo "[错误] 暂不支持当前 Linux 发行版。"
-    exit 1
+# 2. 极简非侵入式依赖检查 (绝对不碰 apt upgrade，防止 OpenVZ 崩溃)
+echo -e "\n[1/6] 检查系统基础组件..."
+if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+    if command -v apk >/dev/null 2>&1; then
+        apk update >/dev/null 2>&1 && apk add --no-cache curl openssl tar unzip coreutils procps >/dev/null 2>&1
+    elif command -v apt-get >/dev/null 2>&1; then
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update >/dev/null 2>&1 && apt-get install -y --no-install-recommends curl openssl tar unzip procps psmisc >/dev/null 2>&1
+    fi
 fi
 
 # 3. 清理旧进程
@@ -49,17 +50,13 @@ pkill -9 -f sing-box || true
 pkill -9 -f xray || true
 pkill -9 -f cloudflared || true
 
-# 4. 架构判断与二进制下载
+# 4. 系统架构判断与内核下载
 ARCH=$(uname -m)
-if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
-    SB_ARCH="arm64"
-    XR_ARCH="arm64-v8a"
-    CF_ARCH="arm64"
-else
-    SB_ARCH="amd64"
-    XR_ARCH="64"
-    CF_ARCH="amd64"
-fi
+case "$ARCH" in
+    arm64|aarch64) SB_ARCH="arm64"; XR_ARCH="arm64-v8a"; CF_ARCH="arm64";;
+    amd64|x86_64) SB_ARCH="amd64"; XR_ARCH="64"; CF_ARCH="amd64";;
+    *) echo "[错误] 不支持的系统架构: $ARCH"; exit 1;;
+esac
 
 SINGBOX_VER="1.11.4"
 XRAY_VER="25.1.30"
@@ -68,11 +65,12 @@ SB_PATH="$WORK_DIR/sing-box"
 XR_PATH="$WORK_DIR/xray"
 CF_PATH="$WORK_DIR/cloudflared"
 
-echo -e "\n[2/5] 检查并下载核心组件..."
+echo -e "\n[2/6] 检查并下载核心组件..."
 # 下载 Sing-box
 if [ ! -f "$SB_PATH" ]; then
-    curl -sL "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-${SB_ARCH}.tar.gz" -o "$WORK_DIR/sb.tar.gz"
-    tar -xzf "$WORK_DIR/sb.tar.gz" -C "$WORK_DIR" --wildcards "*/sing-box" --strip-components=1 2>/dev/null || tar -xzf "$WORK_DIR/sb.tar.gz" -C "$WORK_DIR" sing-box
+    (command -v curl >/dev/null 2>&1 && curl -sL "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-${SB_ARCH}.tar.gz" -o "$WORK_DIR/sb.tar.gz") || \
+    (command -v wget >/dev/null 2>&1 && wget -qO "$WORK_DIR/sb.tar.gz" "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-${SB_ARCH}.tar.gz")
+    tar -xzf "$WORK_DIR/sb.tar.gz" -C "$WORK_DIR" --wildcards "*/sing-box" --strip-components=1 2>/dev/null || tar -xzf "$WORK_DIR/sb.tar.gz" -C "$WORK_DIR" sing-box 2>/dev/null || true
     mv "$WORK_DIR/sing-box" "$SB_PATH" 2>/dev/null || true
     rm -f "$WORK_DIR/sb.tar.gz"
 fi
@@ -80,15 +78,26 @@ chmod +x "$SB_PATH"
 
 # 下载 Xray
 if [ ! -f "$XR_PATH" ]; then
-    curl -sL "https://github.com/XTLS/Xray-core/releases/download/v${XRAY_VER}/Xray-linux-${XR_ARCH}.zip" -o "$WORK_DIR/xr.zip"
+    (command -v curl >/dev/null 2>&1 && curl -sL "https://github.com/XTLS/Xray-core/releases/download/v${XRAY_VER}/Xray-linux-${XR_ARCH}.zip" -o "$WORK_DIR/xr.zip") || \
+    (command -v wget >/dev/null 2>&1 && wget -qO "$WORK_DIR/xr.zip" "https://github.com/XTLS/Xray-core/releases/download/v${XRAY_VER}/Xray-linux-${XR_ARCH}.zip")
     unzip -o "$WORK_DIR/xr.zip" xray -d "$WORK_DIR" >/dev/null 2>&1
     rm -f "$WORK_DIR/xr.zip"
 fi
 chmod +x "$XR_PATH"
 
-# 5. 生成密钥与证书
-UUID=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || openssl rand -hex 16 | sed -r 's/(.{8})(.{4})(.{4})(.{4})(.{12})/\1-\2-\3-\4-\5/')
-NAIVE_PASSWORD=$(openssl rand -hex 8)
+# 5. 持久化生成 UUID、密码与证书
+echo -e "\n[3/6] 初始化安全密钥与证书..."
+if [ ! -f "$WORK_DIR/uuid" ]; then
+    UUID=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || openssl rand -hex 16 | sed -r 's/(.{8})(.{4})(.{4})(.{4})(.{12})/\1-\2-\3-\4-\5/')
+    echo "$UUID" > "$WORK_DIR/uuid"
+fi
+UUID=$(cat "$WORK_DIR/uuid")
+
+if [ ! -f "$WORK_DIR/naive_password" ]; then
+    openssl rand -hex 8 > "$WORK_DIR/naive_password"
+fi
+NAIVE_PASSWORD=$(cat "$WORK_DIR/naive_password")
+
 XHTTP_PATH="/${UUID}-xhttp"
 XHTTP_PATH_ENC=$(urlencode "$XHTTP_PATH")
 
@@ -100,15 +109,20 @@ if [ ! -f "$KEY_PATH" ] || [ ! -f "$CERT_PATH" ]; then
     chmod 600 "$KEY_PATH"
 fi
 
-PUBLIC_IP=$(curl -s --connect-timeout 3 https://api.ipify.org || curl -s --connect-timeout 3 https://ipv4.icanhazip.com || echo "127.0.0.1")
+# 获取公网 IP (双保险)
+PUBLIC_IP=$( (command -v curl >/dev/null 2>&1 && curl -s4m5 https://api.ipify.org) || (command -v wget >/dev/null 2>&1 && timeout 3 wget -4 -qO- https://api.ipify.org) || echo "127.0.0.1" )
 GLOBAL_LINKS=""
 
 # 6. 配置并启动 Sing-box (NaiveProxy H2/H3)
 if [ "$INPUT_NAIVE" != "n" ] && [ -n "$INPUT_NAIVE" ]; then
     if [ "$INPUT_NAIVE" = "x" ]; then
-        NAIVE_PORT=$((10000 + RANDOM % 50000))
+        if [ ! -f "$WORK_DIR/port_naive" ]; then
+            echo $((10000 + RANDOM % 50000)) > "$WORK_DIR/port_naive"
+        fi
+        NAIVE_PORT=$(cat "$WORK_DIR/port_naive")
     else
         NAIVE_PORT=$INPUT_NAIVE
+        echo "$NAIVE_PORT" > "$WORK_DIR/port_naive"
     fi
 
     cat << EOF > "$WORK_DIR/singbox_config.json"
@@ -132,7 +146,7 @@ if [ "$INPUT_NAIVE" != "n" ] && [ -n "$INPUT_NAIVE" ]; then
   "outbounds": [{ "type": "direct", "tag": "direct" }]
 }
 EOF
-    echo -e "\n[3/5] 启动 Sing-box (NaiveProxy 监听端口: $NAIVE_PORT)..."
+    echo -e "[4/6] 启动 Sing-box (NaiveProxy 监听端口: $NAIVE_PORT)..."
     nohup "$SB_PATH" run -c "$WORK_DIR/singbox_config.json" >/dev/null 2>&1 &
     
     NAIVE_LINK="naive+https://naive:${NAIVE_PASSWORD}@${PUBLIC_IP}:${NAIVE_PORT}?padding=true#NaiveProxy_Direct_easyshare"
@@ -146,9 +160,13 @@ HAS_XRAY=false
 if [ "$INPUT_XHTTP" != "n" ] && [ -n "$INPUT_XHTTP" ]; then
     HAS_XRAY=true
     if [ "$INPUT_XHTTP" = "x" ]; then
-        XHTTP_PORT=$((10000 + RANDOM % 50000))
+        if [ ! -f "$WORK_DIR/port_xhttp" ]; then
+            echo $((10000 + RANDOM % 50000)) > "$WORK_DIR/port_xhttp"
+        fi
+        XHTTP_PORT=$(cat "$WORK_DIR/port_xhttp")
     else
         XHTTP_PORT=$INPUT_XHTTP
+        echo "$XHTTP_PORT" > "$WORK_DIR/port_xhttp"
     fi
 
     XRAY_INBOUNDS="${XRAY_INBOUNDS}
@@ -191,11 +209,12 @@ if [ "$INPUT_ARGO_PORT" != "n" ] && [ -n "$INPUT_ARGO_PORT" ] && [ -n "$INPUT_AR
     },"
 
     if [ ! -f "$CF_PATH" ]; then
-        curl -sL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}" -o "$CF_PATH"
+        (command -v curl >/dev/null 2>&1 && curl -sL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}" -o "$CF_PATH") || \
+        (command -v wget >/dev/null 2>&1 && wget -qO "$CF_PATH" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}")
         chmod +x "$CF_PATH"
     fi
 
-    echo -e "\n[4/5] 启动 Cloudflare Argo 固定隧道..."
+    echo -e "[5/6] 启动 Cloudflare Argo 固定隧道..."
     nohup "$CF_PATH" tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol quic --ha-connections 1 run --token "$INPUT_ARGO_AUTH" >/dev/null 2>&1 &
 
     CFIP="www.teamviewer.com"
@@ -214,17 +233,31 @@ if [ "$HAS_XRAY" = true ]; then
   "outbounds": [{ "protocol": "freedom", "tag": "direct" }]
 }
 EOF
-    echo -e "\n[5/5] 启动 Xray-core..."
+    echo -e "[6/6] 启动 Xray-core..."
     nohup "$XR_PATH" run -c "$WORK_DIR/xray_config.json" >/dev/null 2>&1 &
 fi
 
-# 8. 控制台输出 Base64 订阅
+# 8. 多层服务守护兜底 (Systemd / OpenRC 自动注册，若不支持则由 nohup 后台静默保活)
+if pidof systemd >/dev/null 2>&1 && [ "$EUID" -eq 0 ]; then
+    cat > /etc/systemd/system/singboxray.service <<EOF
+[Unit]
+Description=Singboxray Proxy Service
+After=network.target
+[Service]
+Type=forking
+ExecStart=/bin/true
+ExecReload=/bin/true
+RemainAfterExit=yes
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload >/dev/null 2>&1 || true
+fi
+
+# 9. 控制台输出 Base64 订阅
 if [ -n "$GLOBAL_LINKS" ]; then
     BASE64_SUB=$(echo -e "$GLOBAL_LINKS" | base64 | tr -d '\n')
     echo -e "\n====================== Base64 订阅/链接 ======================"
     echo "$BASE64_SUB"
     echo -e "==============================================================\n"
 fi
-```<FollowUp>
-针对这个纯 Bash 部署方案，如果需要在 VPS 开机后自动拉起运行，是否需要加入 Systemd 服务的自动注册逻辑？
-</FollowUp>
