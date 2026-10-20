@@ -9,15 +9,31 @@ set -e
 WORK_DIR=".tmp"
 mkdir -p "$WORK_DIR"
 
+# URL 编码转换函数（无依赖纯 Bash 实现）
+urlencode() {
+    local string="${1}"
+    local strlen=${#string}
+    local encoded=""
+    local pos c o
+    for (( pos=0 ; pos<strlen ; pos++ )); do
+        c=${string:$pos:1}
+        case "$c" in
+            [-_.~a-zA-Z0-9]) o="${c}" ;;
+            *) printf -v o '%%%02X' "'$c" ;;
+        esac
+        encoded="${encoded}${o}"
+    done
+    echo "${encoded}"
+}
+
 # 1. 接收命令行参数
-# 格式: ./deploy.sh [naive端口] [xhttp端口] [argo端口] [argo域名] [argo token]
 INPUT_NAIVE=${1:-"n"}
 INPUT_XHTTP=${2:-"n"}
 INPUT_ARGO_PORT=${3:-"n"}
 INPUT_ARGO_DOMAIN=${4:-""}
 INPUT_ARGO_AUTH=${5:-""}
 
-# 2. 检查并安装基础依赖 (curl, openssl, tar, unzip)
+# 2. 检查并安装基础依赖
 echo -e "\n[1/5] 检查并安装系统基础依赖..."
 if [ -f /etc/alpine-release ]; then
     apk update && apk add --no-cache curl openssl tar unzip coreutils procps
@@ -52,7 +68,7 @@ SB_PATH="$WORK_DIR/sing-box"
 XR_PATH="$WORK_DIR/xray"
 CF_PATH="$WORK_DIR/cloudflared"
 
-echo -e "\n[2/5] 正在检查或下载内核二进制文件..."
+echo -e "\n[2/5] 检查并下载核心组件..."
 # 下载 Sing-box
 if [ ! -f "$SB_PATH" ]; then
     curl -sL "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-${SB_ARCH}.tar.gz" -o "$WORK_DIR/sb.tar.gz"
@@ -74,6 +90,7 @@ chmod +x "$XR_PATH"
 UUID=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || openssl rand -hex 16 | sed -r 's/(.{8})(.{4})(.{4})(.{4})(.{12})/\1-\2-\3-\4-\5/')
 NAIVE_PASSWORD=$(openssl rand -hex 8)
 XHTTP_PATH="/${UUID}-xhttp"
+XHTTP_PATH_ENC=$(urlencode "$XHTTP_PATH")
 
 KEY_PATH="$WORK_DIR/private.key"
 CERT_PATH="$WORK_DIR/cert.pem"
@@ -83,9 +100,7 @@ if [ ! -f "$KEY_PATH" ] || [ ! -f "$CERT_PATH" ]; then
     chmod 600 "$KEY_PATH"
 fi
 
-# 获取公网 IP
 PUBLIC_IP=$(curl -s --connect-timeout 3 https://api.ipify.org || curl -s --connect-timeout 3 https://ipv4.icanhazip.com || echo "127.0.0.1")
-
 GLOBAL_LINKS=""
 
 # 6. 配置并启动 Sing-box (NaiveProxy H2/H3)
@@ -117,10 +132,10 @@ if [ "$INPUT_NAIVE" != "n" ] && [ -n "$INPUT_NAIVE" ]; then
   "outbounds": [{ "type": "direct", "tag": "direct" }]
 }
 EOF
-    echo -e "\n[3/5] 启动 Sing-box (NaiveProxy 端口: $NAIVE_PORT)..."
+    echo -e "\n[3/5] 启动 Sing-box (NaiveProxy 监听端口: $NAIVE_PORT)..."
     nohup "$SB_PATH" run -c "$WORK_DIR/singbox_config.json" >/dev/null 2>&1 &
     
-    NAIVE_LINK="naive+https://naive:${NAIVE_PASSWORD}@${PUBLIC_IP}:${NAIVE_PORT}?padding=true#NaiveProxy_Direct"
+    NAIVE_LINK="naive+https://naive:${NAIVE_PASSWORD}@${PUBLIC_IP}:${NAIVE_PORT}?padding=true#NaiveProxy_Direct_easyshare"
     GLOBAL_LINKS="${GLOBAL_LINKS}${NAIVE_LINK}\r\n"
 fi
 
@@ -152,8 +167,8 @@ if [ "$INPUT_XHTTP" != "n" ] && [ -n "$INPUT_XHTTP" ]; then
       }
     },"
 
-    H2_LINK="vless://${UUID}@${PUBLIC_IP}:${XHTTP_PORT}?encryption=none&security=tls&alpn=h2&sni=www.bing.com&fp=chrome&type=xhttp&path=$(echo -n "$XHTTP_PATH" | jq -sRr @uri)#xHTTP_Direct_H2"
-    H3_LINK="vless://${UUID}@${PUBLIC_IP}:${XHTTP_PORT}?encryption=none&security=tls&alpn=h3&sni=www.bing.com&fp=chrome&type=xhttp&path=$(echo -n "$XHTTP_PATH" | jq -sRr @uri)#xHTTP_Direct_H3"
+    H2_LINK="vless://${UUID}@${PUBLIC_IP}:${XHTTP_PORT}?encryption=none&security=tls&alpn=h2&sni=www.bing.com&fp=chrome&type=xhttp&path=${XHTTP_PATH_ENC}#xHTTP_Direct_H2_easyshare"
+    H3_LINK="vless://${UUID}@${PUBLIC_IP}:${XHTTP_PORT}?encryption=none&security=tls&alpn=h3&sni=www.bing.com&fp=chrome&type=xhttp&path=${XHTTP_PATH_ENC}#xHTTP_Direct_H3_easyshare"
     GLOBAL_LINKS="${GLOBAL_LINKS}${H2_LINK}\r\n${H3_LINK}\r\n"
 fi
 
@@ -175,7 +190,6 @@ if [ "$INPUT_ARGO_PORT" != "n" ] && [ -n "$INPUT_ARGO_PORT" ] && [ -n "$INPUT_AR
       }
     },"
 
-    # 下载 Cloudflared
     if [ ! -f "$CF_PATH" ]; then
         curl -sL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}" -o "$CF_PATH"
         chmod +x "$CF_PATH"
@@ -185,14 +199,14 @@ if [ "$INPUT_ARGO_PORT" != "n" ] && [ -n "$INPUT_ARGO_PORT" ] && [ -n "$INPUT_AR
     nohup "$CF_PATH" tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol quic --ha-connections 1 run --token "$INPUT_ARGO_AUTH" >/dev/null 2>&1 &
 
     CFIP="www.teamviewer.com"
-    ARGO_H2="vless://${UUID}@${CFIP}:443?encryption=none&security=tls&alpn=h2&sni=${INPUT_ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=auto&host=${INPUT_ARGO_DOMAIN}&path=$(echo -n "$XHTTP_PATH" | jq -sRr @uri)#xHTTP_Argo_H2"
-    ARGO_H3="vless://${UUID}@${CFIP}:443?encryption=none&security=tls&alpn=h3&sni=${INPUT_ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=auto&host=${INPUT_ARGO_DOMAIN}&path=$(echo -n "$XHTTP_PATH" | jq -sRr @uri)#xHTTP_Argo_H3"
+    ARGO_H2="vless://${UUID}@${CFIP}:443?encryption=none&security=tls&alpn=h2&sni=${INPUT_ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=auto&host=${INPUT_ARGO_DOMAIN}&path=${XHTTP_PATH_ENC}#xHTTP_Argo_H2_easyshare"
+    ARGO_H3="vless://${UUID}@${CFIP}:443?encryption=none&security=tls&alpn=h3&sni=${INPUT_ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=auto&host=${INPUT_ARGO_DOMAIN}&path=${XHTTP_PATH_ENC}#xHTTP_Argo_H3_easyshare"
     GLOBAL_LINKS="${GLOBAL_LINKS}${ARGO_H2}\r\n${ARGO_H3}\r\n"
 fi
 
 # 写入 Xray 配置并启动
 if [ "$HAS_XRAY" = true ]; then
-    XRAY_INBOUNDS="[${XRAY_INBOUNDS%,}]" # 去除尾随逗号
+    XRAY_INBOUNDS="[${XRAY_INBOUNDS%,}]"
     cat << EOF > "$WORK_DIR/xray_config.json"
 {
   "log": { "loglevel": "none" },
@@ -204,10 +218,13 @@ EOF
     nohup "$XR_PATH" run -c "$WORK_DIR/xray_config.json" >/dev/null 2>&1 &
 fi
 
-# 8. 输出 Base64 订阅
+# 8. 控制台输出 Base64 订阅
 if [ -n "$GLOBAL_LINKS" ]; then
     BASE64_SUB=$(echo -e "$GLOBAL_LINKS" | base64 | tr -d '\n')
     echo -e "\n====================== Base64 订阅/链接 ======================"
     echo "$BASE64_SUB"
     echo -e "==============================================================\n"
 fi
+```<FollowUp>
+针对这个纯 Bash 部署方案，如果需要在 VPS 开机后自动拉起运行，是否需要加入 Systemd 服务的自动注册逻辑？
+</FollowUp>
