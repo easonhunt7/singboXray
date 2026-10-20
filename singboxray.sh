@@ -20,10 +20,7 @@ urlencode() {
     echo "${encoded}"
 }
 
-INPUT_NAIVE=${1:-"x"}
-INPUT_XHTTP=${2:-"x"}
-
-echo -e "\n[1/5] 正在检查环境与清理旧进程..."
+echo -e "\n[1/5] 正在清理旧代理进程..."
 if [ -f "$WORK_DIR/sb.pid" ]; then kill -9 $(cat "$WORK_DIR/sb.pid") 2>/dev/null || true; rm -f "$WORK_DIR/sb.pid"; fi
 if [ -f "$WORK_DIR/xr.pid" ]; then kill -9 $(cat "$WORK_DIR/xr.pid") 2>/dev/null || true; rm -f "$WORK_DIR/xr.pid"; fi
 
@@ -68,20 +65,19 @@ if [ ! -f "$KEY_PATH" ] || [ ! -f "$CERT_PATH" ]; then
     openssl req -new -x509 -days 3650 -key "$KEY_PATH" -out "$CERT_PATH" -subj "/CN=bing.com" 2>/dev/null
 fi
 
-# 智能获取外网 IP，若无法联网则让用户手动输入
-PUBLIC_IP=$(curl -s4m3 https://api.ipify.org || curl -s4m3 https://ip.sb || hostname -I | awk '{print $1}')
-if [ -z "$PUBLIC_IP" ] || [[ "$PUBLIC_IP" == 127* ]]; then
-    read -p "未能自动检测到外网 IP，请手动输入你的 VPS 真实公网 IP: " PUBLIC_IP
-fi
+# 强制要求输入真实 IP，彻底杜绝 127.0.0.1
+read -p "请输入当前 VPS 的【真实公网 IP 地址】: " PUBLIC_IP
+while [ -z "$PUBLIC_IP" ]; do
+    read -p "IP 不能为空，请重新输入 VPS 真实公网 IP: " PUBLIC_IP
+done
 
 GLOBAL_LINKS=""
 
-# 1. 强制启动 NaiveProxy
-if [ "$INPUT_NAIVE" != "n" ]; then
-    NAIVE_PORT=10888
-    cat << CFG > "$WORK_DIR/singbox_config.json"
+# 1. 编写并启动 Sing-box NaiveProxy
+NAIVE_PORT=10888
+cat << CFG > "$WORK_DIR/singbox_config.json"
 {
-  "log": { "level": "panic" },
+  "log": { "level": "info" },
   "inbounds": [{
     "type": "naive",
     "tag": "naive-in",
@@ -98,39 +94,55 @@ if [ "$INPUT_NAIVE" != "n" ]; then
   "outbounds": [{ "type": "direct", "tag": "direct" }]
 }
 CFG
-    echo -e " -> 正在启动 Sing-box (NaiveProxy)，监听端口: $NAIVE_PORT"
-    nohup "$SB_PATH" run -c "$WORK_DIR/singbox_config.json" >/dev/null 2>&1 & echo $! > "$WORK_DIR/sb.pid"
-    
-    NAIVE_LINK="naive+https://naive:${NAIVE_PASSWORD}@${PUBLIC_IP}:${NAIVE_PORT}?padding=true#NaiveProxy_Direct_easyshare"
-    GLOBAL_LINKS="${GLOBAL_LINKS}${NAIVE_LINK}\n"
-fi
 
-# 2. 强制启动 Xray xHTTP
-XRAY_INBOUNDS=""
-HAS_XRAY=false
-if [ "$INPUT_XHTTP" != "n" ]; then
-    HAS_XRAY=true
-    XHTTP_PORT=20888
-    XRAY_INBOUNDS="{\"port\": $XHTTP_PORT, \"protocol\": \"vless\", \"settings\": { \"clients\": [{ \"id\": \"$UUID\" }], \"decryption\": \"none\" }, \"streamSettings\": { \"network\": \"xhttp\", \"security\": \"tls\", \"tlsSettings\": { \"certificates\": [{ \"certificateFile\": \"$CERT_PATH\", \"keyFile\": \"$KEY_PATH\" }], \"alpn\": [\"h2\", \"h3\"] }, \"xhttpSettings\": { \"path\": \"$XHTTP_PATH\", \"mode\": \"auto\" } }}"
-    
-    H2_LINK="vless://${UUID}@${PUBLIC_IP}:${XHTTP_PORT}?encryption=none&security=tls&alpn=h2&sni=www.bing.com&fp=chrome&type=xhttp&path=${XHTTP_PATH_ENC}#xHTTP_Direct_H2_easyshare"
-    H3_LINK="vless://${UUID}@${PUBLIC_IP}:${XHTTP_PORT}?encryption=none&security=tls&alpn=h3&sni=www.bing.com&fp=chrome&type=xhttp&path=${XHTTP_PATH_ENC}#xHTTP_Direct_H3_easyshare"
-    GLOBAL_LINKS="${GLOBAL_LINKS}${H2_LINK}\n${H3_LINK}\n"
-fi
+echo -e " -> 正在启动 Sing-box (NaiveProxy)，监听端口: $NAIVE_PORT"
+nohup "$SB_PATH" run -c "$WORK_DIR/singbox_config.json" > "$WORK_DIR/sb.log" 2>&1 & 
+echo $! > "$WORK_DIR/sb.pid"
+sleep 1
 
-if [ "$HAS_XRAY" = true ]; then
-    cat << CFG > "$WORK_DIR/xray_config.json"
+NAIVE_LINK="naive+https://naive:${NAIVE_PASSWORD}@${PUBLIC_IP}:${NAIVE_PORT}?padding=true#NaiveProxy_Direct_easyshare"
+GLOBAL_LINKS="${GLOBAL_LINKS}${NAIVE_LINK}\n"
+
+# 2. 编写并启动 Xray xHTTP
+XHTTP_PORT=20888
+cat << CFG > "$WORK_DIR/xray_config.json"
 {
-  "log": { "loglevel": "none" },
-  "inbounds": [$XRAY_INBOUNDS],
+  "log": { "loglevel": "warning" },
+  "inbounds": [{
+    "port": $XHTTP_PORT,
+    "protocol": "vless",
+    "settings": {
+      "clients": [{ "id": "$UUID" }],
+      "decryption": "none"
+    },
+    "streamSettings": {
+      "network": "xhttp",
+      "security": "tls",
+      "tlsSettings": {
+        "certificates": [{ "certificateFile": "$CERT_PATH", "keyFile": "$KEY_PATH" }],
+        "alpn": ["h2", "h3"]
+      },
+      "xhttpSettings": {
+        "path": "$XHTTP_PATH",
+        "mode": "auto"
+      }
+    }
+  }],
   "outbounds": [{ "protocol": "freedom", "tag": "direct" }]
 }
 CFG
-    echo -e " -> 正在启动 Xray-core (xHTTP 直连)，监听端口: $XHTTP_PORT"
-    nohup "$XR_PATH" run -c "$WORK_DIR/xray_config.json" >/dev/null 2>&1 & echo $! > "$WORK_DIR/xr.pid"
-fi
 
-echo -e "\n[4/5] 部署全部完成！当前确认的外网 IP: $PUBLIC_IP"
+echo -e " -> 正在启动 Xray-core (xHTTP 直连)，监听端口: $XHTTP_PORT"
+nohup "$XR_PATH" run -c "$WORK_DIR/xray_config.json" > "$WORK_DIR/xr.log" 2>&1 & 
+echo $! > "$WORK_DIR/xr.pid"
+sleep 1
+
+H2_LINK="vless://${UUID}@${PUBLIC_IP}:${XHTTP_PORT}?encryption=none&security=tls&alpn=h2&sni=www.bing.com&fp=chrome&type=xhttp&path=${XHTTP_PATH_ENC}#xHTTP_Direct_H2_easyshare"
+H3_LINK="vless://${UUID}@${PUBLIC_IP}:${XHTTP_PORT}?encryption=none&security=tls&alpn=h3&sni=www.bing.com&fp=chrome&type=xhttp&path=${XHTTP_PATH_ENC}#xHTTP_Direct_H3_easyshare"
+GLOBAL_LINKS="${GLOBAL_LINKS}${H2_LINK}\n${H3_LINK}\n"
+
+echo -e "\n[4/5] 部署全部完成！检查后台进程运行状态："
+ps aux | grep -E "sing-box|xray" | grep -v grep || true
 
 if [ -n "$GLOBAL_LINKS" ]; then
     echo -e "\n====================== Base64 订阅链接 ======================"
