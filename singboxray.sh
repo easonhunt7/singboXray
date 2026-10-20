@@ -20,11 +20,8 @@ urlencode() {
     echo "${encoded}"
 }
 
-INPUT_NAIVE=${1:-"n"}
-INPUT_XHTTP=${2:-"n"}
-INPUT_ARGO_PORT=${3:-"n"}
-INPUT_ARGO_DOMAIN=${4:-""}
-INPUT_ARGO_AUTH=${5:-""}
+INPUT_NAIVE=${1:-"x"}
+INPUT_XHTTP=${2:-"x"}
 
 echo -e "\n[1/5] 正在检查环境与清理旧进程..."
 if [ -f "$WORK_DIR/sb.pid" ]; then kill -9 $(cat "$WORK_DIR/sb.pid") 2>/dev/null || true; rm -f "$WORK_DIR/sb.pid"; fi
@@ -71,16 +68,16 @@ if [ ! -f "$KEY_PATH" ] || [ ! -f "$CERT_PATH" ]; then
     openssl req -new -x509 -days 3650 -key "$KEY_PATH" -out "$CERT_PATH" -subj "/CN=bing.com" 2>/dev/null
 fi
 
-# 多源可靠获取真实 VPS 外网 IP
-PUBLIC_IP=$(curl -s4m3 https://api.ipify.org || curl -s4m3 https://ip.sb || curl -s4m3 https://icanhazip.com || hostname -I | awk '{print $1}')
+# 智能获取外网 IP，若无法联网则让用户手动输入
+PUBLIC_IP=$(curl -s4m3 https://api.ipify.org || curl -s4m3 https://ip.sb || hostname -I | awk '{print $1}')
 if [ -z "$PUBLIC_IP" ] || [[ "$PUBLIC_IP" == 127* ]]; then
-    PUBLIC_IP="填写你的小鸡真实IP"
+    read -p "未能自动检测到外网 IP，请手动输入你的 VPS 真实公网 IP: " PUBLIC_IP
 fi
 
 GLOBAL_LINKS=""
 
-# 启动 NaiveProxy
-if [ "$INPUT_NAIVE" != "n" ] && [ -n "$INPUT_NAIVE" ]; then
+# 1. 强制启动 NaiveProxy
+if [ "$INPUT_NAIVE" != "n" ]; then
     NAIVE_PORT=10888
     cat << CFG > "$WORK_DIR/singbox_config.json"
 {
@@ -108,10 +105,10 @@ CFG
     GLOBAL_LINKS="${GLOBAL_LINKS}${NAIVE_LINK}\n"
 fi
 
-# 启动 Xray xHTTP
+# 2. 强制启动 Xray xHTTP
 XRAY_INBOUNDS=""
 HAS_XRAY=false
-if [ "$INPUT_XHTTP" != "n" ] && [ -n "$INPUT_XHTTP" ]; then
+if [ "$INPUT_XHTTP" != "n" ]; then
     HAS_XRAY=true
     XHTTP_PORT=20888
     XRAY_INBOUNDS="{\"port\": $XHTTP_PORT, \"protocol\": \"vless\", \"settings\": { \"clients\": [{ \"id\": \"$UUID\" }], \"decryption\": \"none\" }, \"streamSettings\": { \"network\": \"xhttp\", \"security\": \"tls\", \"tlsSettings\": { \"certificates\": [{ \"certificateFile\": \"$CERT_PATH\", \"keyFile\": \"$KEY_PATH\" }], \"alpn\": [\"h2\", \"h3\"] }, \"xhttpSettings\": { \"path\": \"$XHTTP_PATH\", \"mode\": \"auto\" } }}"
@@ -129,11 +126,11 @@ if [ "$HAS_XRAY" = true ]; then
   "outbounds": [{ "protocol": "freedom", "tag": "direct" }]
 }
 CFG
-    echo -e " -> 正在启动 Xray-core (xHTTP 直连)..."
+    echo -e " -> 正在启动 Xray-core (xHTTP 直连)，监听端口: $XHTTP_PORT"
     nohup "$XR_PATH" run -c "$WORK_DIR/xray_config.json" >/dev/null 2>&1 & echo $! > "$WORK_DIR/xr.pid"
 fi
 
-echo -e "\n[4/5] 部署全部完成！检测到外网 IP: $PUBLIC_IP"
+echo -e "\n[4/5] 部署全部完成！当前确认的外网 IP: $PUBLIC_IP"
 
 if [ -n "$GLOBAL_LINKS" ]; then
     echo -e "\n====================== Base64 订阅链接 ======================"
@@ -142,4 +139,4 @@ if [ -n "$GLOBAL_LINKS" ]; then
 fi
 EOF
 chmod +x singboxray.sh
-./singboxray.sh "x" "x"
+./singboxray.sh
