@@ -1,4 +1,3 @@
-cat << 'EOF' > singboxray.sh
 #!/usr/bin/env bash
 set -e
 WORK_DIR="$HOME/.singboxray"
@@ -21,8 +20,8 @@ urlencode() {
 }
 
 echo -e "\n[1/5] 正在检查环境与清理旧进程..."
-if [ -f "$WORK_DIR/sb.pid" ]; then kill -9 $(cat "$WORK_DIR/sb.pid") 2>/dev/null || true; rm -f "$WORK_DIR/sb.pid"; fi
-if [ -f "$WORK_DIR/xr.pid" ]; then kill -9 $(cat "$WORK_DIR/xr.pid") 2>/dev/null || true; rm -f "$WORK_DIR/xr.pid"; fi
+if [ -f "$WORK_DIR/sb.pid" ]; then kill -9 $(cat "$WORK_DIR/sb.pid") 2>/dev/null \vert{}\vert{} true; rm -f "$WORK_DIR/sb.pid"; fi
+if [ -f "$WORK_DIR/xr.pid" ]; then kill -9 $(cat "$WORK_DIR/xr.pid") 2>/dev/null \vert{}\vert{} true; rm -f "$WORK_DIR/xr.pid"; fi
 
 ARCH=$(uname -m)
 case "$ARCH" in
@@ -51,7 +50,7 @@ fi
 chmod +x "$XR_PATH"
 
 echo -e "\n[3/5] 初始化安全密钥、UUID 与 TLS 证书..."
-[ ! -f "$WORK_DIR/uuid" ] && (cat /proc/sys/kernel/random/uuid 2>/dev/null || openssl rand -hex 16) > "$WORK_DIR/uuid"
+[ ! -f "$WORK_DIR/uuid" ] && (cat /proc/sys/kernel/random/uuid 2>/dev/null \vert{}\vert{} openssl rand -hex 16) > "$WORK_DIR/uuid"
 UUID=$(cat "$WORK_DIR/uuid")
 [ ! -f "$WORK_DIR/naive_password" ] && openssl rand -hex 8 > "$WORK_DIR/naive_password"
 NAIVE_PASSWORD=$(cat "$WORK_DIR/naive_password")
@@ -60,19 +59,31 @@ XHTTP_PATH_ENC=$(urlencode "$XHTTP_PATH")
 
 KEY_PATH="$WORK_DIR/private.key"
 CERT_PATH="$WORK_DIR/cert.pem"
-if [ ! -f "$KEY_PATH" ] || [ ! -f "$CERT_PATH" ]; then
+if [ ! -f "$KEY_PATH" ] \vert{}\vert{} [ ! -f "$CERT_PATH" ]; then
     openssl ecparam -genkey -name prime256v1 -out "$KEY_PATH" 2>/dev/null
     openssl req -new -x509 -days 3650 -key "$KEY_PATH" -out "$CERT_PATH" -subj "/CN=bing.com" 2>/dev/null
 fi
 
-# 甬哥经典 IP 获取逻辑：多源 API 轮询 + 路由表智能嗅探
-PUBLIC_IP=$(curl -s4m5 https://ip.sb || curl -s4m5 https://api.ipify.org || curl -s4m5 https://ipv4.icanhazip.com)
-if [ -z "$PUBLIC_IP" ] || [[ "$PUBLIC_IP" == 127* ]]; then
+echo -e "\n[3.5/5] 正在智能检测服务器公网 IP..."
+# 1. 多源海外高可用 API 轮询
+PUBLIC_IP=$(curl -s4m3 https://ip.sb || curl -s4m3 https://api.ipify.org || curl -s4m3 https://ipv4.icanhazip.com || curl -s4m3 https://ipinfo.io/ip)
+
+# 2. 路由表智能嗅探兜底
+if [ -z "$PUBLIC_IP" ] \vert{}\vert{} [[ "$PUBLIC_IP" =~ ^127\..* ]] || [[ "$PUBLIC_IP" =~ ^10\..* ]] \vert{}\vert{} [[ "$PUBLIC_IP" =~ ^192\.168\..* ]]; then
     PUBLIC_IP=$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7;exit}')
 fi
-if [ -z "$PUBLIC_IP" ] || [[ "$PUBLIC_IP" == 127* ]]; then
-    read -p "自动获取 IP 失败，请手动输入你的 VPS 公网 IP: " PUBLIC_IP
+
+# 3. 本地网卡绑定 IP 提取兜底
+if [ -z "$PUBLIC_IP" ] \vert{}\vert{} [[ "$PUBLIC_IP" =~ ^127\..* ]] || [[ "$PUBLIC_IP" =~ ^10\..* ]] \vert{}\vert{} [[ "$PUBLIC_IP" =~ ^192\.168\..* ]]; then
+    PUBLIC_IP=$(ip -4 addr show 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '127.0.0.1' | head -n 1)
 fi
+
+# 4. 终极防线：交互式等待手动输入，绝对不写死错误 IP
+while [ -z "$PUBLIC_IP" ] \vert{}\vert{} [[ "$PUBLIC_IP" =~ ^127\..* ]]; do
+    echo -e "\n[!] 提示：未能在当前容器环境中自动嗅探到有效的公网 IP。"
+    read -p "请输入你的 VPS 真实公网 IP 地址: " PUBLIC_IP
+done
+
 echo -e " -> 成功锁定服务器 IP: $PUBLIC_IP"
 
 GLOBAL_LINKS=""
@@ -140,16 +151,4 @@ nohup "$XR_PATH" run -c "$WORK_DIR/xray_config.json" >/dev/null 2>&1 & echo $! >
 sleep 1
 
 H2_LINK="vless://${UUID}@${PUBLIC_IP}:${XHTTP_PORT}?encryption=none&security=tls&alpn=h2&sni=www.bing.com&fp=chrome&type=xhttp&path=${XHTTP_PATH_ENC}#xHTTP_Direct_H2_easyshare"
-H3_LINK="vless://${UUID}@${PUBLIC_IP}:${XHTTP_PORT}?encryption=none&security=tls&alpn=h3&sni=www.bing.com&fp=chrome&type=xhttp&path=${XHTTP_PATH_ENC}#xHTTP_Direct_H3_easyshare"
-GLOBAL_LINKS="${GLOBAL_LINKS}${H2_LINK}\n${H3_LINK}\n"
-
-echo -e "\n[4/5] 部署全部完成！"
-
-if [ -n "$GLOBAL_LINKS" ]; then
-    echo -e "\n====================== Base64 订阅链接 ======================"
-    echo -e "$GLOBAL_LINKS" | base64 | tr -d '\n'
-    echo -e "\n=============================================================\n"
-fi
-EOF
-chmod +x singboxray.sh
-./singboxray.sh
+H3
