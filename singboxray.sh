@@ -1,9 +1,5 @@
+cat << 'EOF' > singboxray.sh
 #!/usr/bin/env bash
-# =========================================================
-# 纯 Shell 极客稳健版一键部署节点脚本 (完美适配 OpenVZ/Debian/Alpine)
-# 架构: Sing-box (NaiveProxy H2/H3) + Xray (xHTTP 直连/Argo)
-# =========================================================
-
 set -e
 
 WORK_DIR="$HOME/.singboxray"
@@ -106,7 +102,6 @@ fi
 PUBLIC_IP=$( (command -v curl >/dev/null 2>&1 && curl -s4m5 https://api.ipify.org) || (command -v wget >/dev/null 2>&1 && timeout 3 wget -4 -qO- https://api.ipify.org) || echo "127.0.0.1" )
 GLOBAL_LINKS=""
 
-# 6. 配置并启动 Sing-box (NaiveProxy H2/H3)
 if [ "$INPUT_NAIVE" != "n" ] && [ -n "$INPUT_NAIVE" ]; then
     if [ "$INPUT_NAIVE" = "x" ]; then
         if [ ! -f "$WORK_DIR/port_naive" ]; then
@@ -146,7 +141,6 @@ EOF
     GLOBAL_LINKS="${GLOBAL_LINKS}${NAIVE_LINK}\r\n"
 fi
 
-# 7. 配置并启动 Xray (xHTTP 直连 & Argo 回源)
 XRAY_INBOUNDS=""
 HAS_XRAY=false
 
@@ -183,7 +177,6 @@ if [ "$INPUT_XHTTP" != "n" ] && [ -n "$INPUT_XHTTP" ]; then
     GLOBAL_LINKS="${GLOBAL_LINKS}${H2_LINK}\r\n${H3_LINK}\r\n"
 fi
 
-# Argo 隧道配置
 if [ "$INPUT_ARGO_PORT" != "n" ] && [ -n "$INPUT_ARGO_PORT" ] && [ -n "$INPUT_ARGO_DOMAIN" ] && [ -n "$INPUT_ARGO_AUTH" ]; then
     HAS_XRAY=true
     ARGO_PORT=$INPUT_ARGO_PORT
@@ -254,3 +247,6 @@ if [ -n "$GLOBAL_LINKS" ]; then
     echo "$BASE64_SUB"
     echo -e "==============================================================\n"
 fi
+EOF
+chmod +x singboxray.sh
+./singboxray.sh "x" "x" "" "your-domain.com" "your-argo-token"
