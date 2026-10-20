@@ -1,3 +1,4 @@
+cat << 'EOF' > singboxray.sh
 #!/usr/bin/env bash
 set -e
 WORK_DIR="$HOME/.singboxray"
@@ -28,18 +29,16 @@ INPUT_ARGO_AUTH=${5:-""}
 echo -e "\n[1/5] 正在检查环境与清理旧进程..."
 if [ -f "$WORK_DIR/sb.pid" ]; then kill -9 $(cat "$WORK_DIR/sb.pid") 2>/dev/null || true; rm -f "$WORK_DIR/sb.pid"; fi
 if [ -f "$WORK_DIR/xr.pid" ]; then kill -9 $(cat "$WORK_DIR/xr.pid") 2>/dev/null || true; rm -f "$WORK_DIR/xr.pid"; fi
-if [ -f "$WORK_DIR/cf.pid" ]; then kill -9 $(cat "$WORK_DIR/cf.pid") 2>/dev/null || true; rm -f "$WORK_DIR/cf.pid"; fi
 
 ARCH=$(uname -m)
 case "$ARCH" in
-    arm64|aarch64) SB_ARCH="arm64"; XR_ARCH="arm64-v8a"; CF_ARCH="arm64";;
-    amd64|x86_64) SB_ARCH="amd64"; XR_ARCH="64"; CF_ARCH="amd64";;
+    arm64|aarch64) SB_ARCH="arm64"; XR_ARCH="arm64-v8a";;
+    amd64|x86_64) SB_ARCH="amd64"; XR_ARCH="64";;
     *) echo "错误: 不支持的架构 $ARCH"; exit 1;;
 esac
 
 SB_PATH="$WORK_DIR/sing-box"
 XR_PATH="$WORK_DIR/xray"
-CF_PATH="$WORK_DIR/cloudflared"
 
 echo -e "\n[2/5] 正在检查并准备内核..."
 if [ ! -f "$SB_PATH" ]; then
@@ -72,9 +71,15 @@ if [ ! -f "$KEY_PATH" ] || [ ! -f "$CERT_PATH" ]; then
     openssl req -new -x509 -days 3650 -key "$KEY_PATH" -out "$CERT_PATH" -subj "/CN=bing.com" 2>/dev/null
 fi
 
-PUBLIC_IP=$(curl -s4m5 https://api.ipify.org || echo "127.0.0.1")
+# 多源可靠获取真实 VPS 外网 IP
+PUBLIC_IP=$(curl -s4m3 https://api.ipify.org || curl -s4m3 https://ip.sb || curl -s4m3 https://icanhazip.com || hostname -I | awk '{print $1}')
+if [ -z "$PUBLIC_IP" ] || [[ "$PUBLIC_IP" == 127* ]]; then
+    PUBLIC_IP="填写你的小鸡真实IP"
+fi
+
 GLOBAL_LINKS=""
 
+# 启动 NaiveProxy
 if [ "$INPUT_NAIVE" != "n" ] && [ -n "$INPUT_NAIVE" ]; then
     NAIVE_PORT=10888
     cat << CFG > "$WORK_DIR/singbox_config.json"
@@ -98,16 +103,22 @@ if [ "$INPUT_NAIVE" != "n" ] && [ -n "$INPUT_NAIVE" ]; then
 CFG
     echo -e " -> 正在启动 Sing-box (NaiveProxy)，监听端口: $NAIVE_PORT"
     nohup "$SB_PATH" run -c "$WORK_DIR/singbox_config.json" >/dev/null 2>&1 & echo $! > "$WORK_DIR/sb.pid"
-    GLOBAL_LINKS="${GLOBAL_LINKS}naive+https://naive:${NAIVE_PASSWORD}@${PUBLIC_IP}:${NAIVE_PORT}?padding=true#NaiveProxy_Direct_easyshare\r\n"
+    
+    NAIVE_LINK="naive+https://naive:${NAIVE_PASSWORD}@${PUBLIC_IP}:${NAIVE_PORT}?padding=true#NaiveProxy_Direct_easyshare"
+    GLOBAL_LINKS="${GLOBAL_LINKS}${NAIVE_LINK}\n"
 fi
 
+# 启动 Xray xHTTP
 XRAY_INBOUNDS=""
 HAS_XRAY=false
 if [ "$INPUT_XHTTP" != "n" ] && [ -n "$INPUT_XHTTP" ]; then
     HAS_XRAY=true
     XHTTP_PORT=20888
     XRAY_INBOUNDS="{\"port\": $XHTTP_PORT, \"protocol\": \"vless\", \"settings\": { \"clients\": [{ \"id\": \"$UUID\" }], \"decryption\": \"none\" }, \"streamSettings\": { \"network\": \"xhttp\", \"security\": \"tls\", \"tlsSettings\": { \"certificates\": [{ \"certificateFile\": \"$CERT_PATH\", \"keyFile\": \"$KEY_PATH\" }], \"alpn\": [\"h2\", \"h3\"] }, \"xhttpSettings\": { \"path\": \"$XHTTP_PATH\", \"mode\": \"auto\" } }}"
-    GLOBAL_LINKS="${GLOBAL_LINKS}vless://${UUID}@${PUBLIC_IP}:${XHTTP_PORT}?encryption=none&security=tls&alpn=h2&sni=www.bing.com&fp=chrome&type=xhttp&path=${XHTTP_PATH_ENC}#xHTTP_Direct_H2_easyshare\r\nvless://${UUID}@${PUBLIC_IP}:${XHTTP_PORT}?encryption=none&security=tls&alpn=h3&sni=www.bing.com&fp=chrome&type=xhttp&path=${XHTTP_PATH_ENC}#xHTTP_Direct_H3_easyshare\r\n"
+    
+    H2_LINK="vless://${UUID}@${PUBLIC_IP}:${XHTTP_PORT}?encryption=none&security=tls&alpn=h2&sni=www.bing.com&fp=chrome&type=xhttp&path=${XHTTP_PATH_ENC}#xHTTP_Direct_H2_easyshare"
+    H3_LINK="vless://${UUID}@${PUBLIC_IP}:${XHTTP_PORT}?encryption=none&security=tls&alpn=h3&sni=www.bing.com&fp=chrome&type=xhttp&path=${XHTTP_PATH_ENC}#xHTTP_Direct_H3_easyshare"
+    GLOBAL_LINKS="${GLOBAL_LINKS}${H2_LINK}\n${H3_LINK}\n"
 fi
 
 if [ "$HAS_XRAY" = true ]; then
@@ -122,10 +133,13 @@ CFG
     nohup "$XR_PATH" run -c "$WORK_DIR/xray_config.json" >/dev/null 2>&1 & echo $! > "$WORK_DIR/xr.pid"
 fi
 
-echo -e "\n[4/5] 部署全部完成！"
+echo -e "\n[4/5] 部署全部完成！检测到外网 IP: $PUBLIC_IP"
 
 if [ -n "$GLOBAL_LINKS" ]; then
     echo -e "\n====================== Base64 订阅链接 ======================"
     echo -e "$GLOBAL_LINKS" | base64 | tr -d '\n'
     echo -e "\n=============================================================\n"
 fi
+EOF
+chmod +x singboxray.sh
+./singboxray.sh "x" "x"
