@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # =========================================================
-# OpenVZ 极致兼容版一键部署节点脚本 (零进程扫描，彻底防 Killed)
+# 纯 Shell 极客稳健版一键部署节点脚本 (完美适配 OpenVZ/Debian/Alpine)
 # 架构: Sing-box (NaiveProxy H2/H3) + Xray (xHTTP 直连/Argo)
 # =========================================================
 
 set -e
 
+# 固化工作目录，所有核心、配置、密钥统一绝对路径托管
 WORK_DIR="$HOME/.singboxray"
 mkdir -p "$WORK_DIR"
 
+# URL 编码转换函数（无依赖纯 Bash 实现）
 urlencode() {
     local string="${1}"
     local strlen=${#string}
@@ -25,6 +27,7 @@ urlencode() {
     echo "${encoded}"
 }
 
+# 1. 接收命令行参数
 INPUT_NAIVE=${1:-"n"}
 INPUT_XHTTP=${2:-"n"}
 INPUT_ARGO_PORT=${3:-"n"}
@@ -35,17 +38,20 @@ echo -e "\n========================================================="
 echo -e "         开始执行轻量化节点一键部署程序                    "
 echo -e "========================================================="
 
-echo -e "\n[1/5] 正在检查系统环境与基础组件..."
+# 2. 基础环境检查 (零侵入，绝不执行 apt upgrade，防止 OpenVZ 崩溃)
+echo -e "\n[1/6] 正在检查系统环境与基础组件..."
 if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
     echo "[错误] 系统未检测到 curl 或 wget，请先手动安装！"
     exit 1
 fi
 
-# 2. 安全清理：通过 PID 文件清理旧进程，绝不遍历全局 /proc
-if [ -f "$WORK_DIR/sb.pid" ]; then kill -9 $(cat "$WORK_DIR/sb.pid") 2>/dev/null || true; fi
-if [ -f "$WORK_DIR/xr.pid" ]; then kill -9 $(cat "$WORK_DIR/xr.pid") 2>/dev/null || true; fi
-if [ -f "$WORK_DIR/cf.pid" ]; then kill -9 $(cat "$WORK_DIR/cf.pid") 2>/dev/null || true; fi
+# 3. 安全清理旧进程 (拒绝危险的 pkill -f 全局扫描，改用精确 PID 终止)
+echo -e "\n[2/6] 正在清理旧代理进程..."
+if [ -f "$WORK_DIR/sb.pid" ]; then kill -9 $(cat "$WORK_DIR/sb.pid") 2>/dev/null \vert{}\vert{} true; rm -f "$WORK_DIR/sb.pid"; fi
+if [ -f "$WORK_DIR/xr.pid" ]; then kill -9 $(cat "$WORK_DIR/xr.pid") 2>/dev/null \vert{}\vert{} true; rm -f "$WORK_DIR/xr.pid"; fi
+if [ -f "$WORK_DIR/cf.pid" ]; then kill -9 $(cat "$WORK_DIR/cf.pid") 2>/dev/null \vert{}\vert{} true; rm -f "$WORK_DIR/cf.pid"; fi
 
+# 4. 系统架构判断与内核下载
 ARCH=$(uname -m)
 case "$ARCH" in
     arm64|aarch64) SB_ARCH="arm64"; XR_ARCH="arm64-v8a"; CF_ARCH="arm64";;
@@ -60,7 +66,8 @@ SB_PATH="$WORK_DIR/sing-box"
 XR_PATH="$WORK_DIR/xray"
 CF_PATH="$WORK_DIR/cloudflared"
 
-echo -e "\n[2/5] 正在检查并下载 Sing-box 与 Xray 核心..."
+echo -e "\n[3/6] 正在检查并下载 Sing-box 与 Xray 核心..."
+# 下载 Sing-box
 if [ ! -f "$SB_PATH" ]; then
     echo " -> 正在下载 Sing-box 内核..."
     (command -v curl >/dev/null 2>&1 && curl -sL "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-${SB_ARCH}.tar.gz" -o "$WORK_DIR/sb.tar.gz") || \
@@ -71,6 +78,7 @@ if [ ! -f "$SB_PATH" ]; then
 fi
 chmod +x "$SB_PATH"
 
+# 下载 Xray
 if [ ! -f "$XR_PATH" ]; then
     echo " -> 正在下载 Xray-core 内核..."
     (command -v curl >/dev/null 2>&1 && curl -sL "https://github.com/XTLS/Xray-core/releases/download/v${XRAY_VER}/Xray-linux-${XR_ARCH}.zip" -o "$WORK_DIR/xr.zip") || \
@@ -80,7 +88,8 @@ if [ ! -f "$XR_PATH" ]; then
 fi
 chmod +x "$XR_PATH"
 
-echo -e "\n[3/5] 正在初始化安全密钥、UUID 与 TLS 证书..."
+# 5. 持久化生成或读取安全密钥、UUID 与自签证书
+echo -e "\n[4/6] 正在初始化安全密钥、UUID 与 TLS 证书..."
 if [ ! -f "$WORK_DIR/uuid" ]; then
     UUID=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || openssl rand -hex 16 | sed -r 's/(.{8})(.{4})(.{4})(.{4})(.{12})/\1-\2-\3-\4-\5/')
     echo "$UUID" > "$WORK_DIR/uuid"
@@ -97,20 +106,21 @@ XHTTP_PATH_ENC=$(urlencode "$XHTTP_PATH")
 
 KEY_PATH="$WORK_DIR/private.key"
 CERT_PATH="$WORK_DIR/cert.pem"
-if [ ! -f "$KEY_PATH" ] || [ ! -f "$CERT_PATH" ]; then
+if [ ! -f "$KEY_PATH" ] \vert{}\vert{} [ ! -f "$CERT_PATH" ]; then
     openssl ecparam -genkey -name prime256v1 -out "$KEY_PATH" 2>/dev/null
     openssl req -new -x509 -days 3650 -key "$KEY_PATH" -out "$CERT_PATH" -subj "/CN=bing.com" 2>/dev/null
     chmod 600 "$KEY_PATH"
 fi
 
+# 获取公网 IP (双保险)
 PUBLIC_IP=$( (command -v curl >/dev/null 2>&1 && curl -s4m5 https://api.ipify.org) || (command -v wget >/dev/null 2>&1 && timeout 3 wget -4 -qO- https://api.ipify.org) || echo "127.0.0.1" )
 GLOBAL_LINKS=""
 
-# 3. 配置并启动 Sing-box
+# 6. 配置并启动 Sing-box (NaiveProxy H2/H3)
 if [ "$INPUT_NAIVE" != "n" ] && [ -n "$INPUT_NAIVE" ]; then
     if [ "$INPUT_NAIVE" = "x" ]; then
         if [ ! -f "$WORK_DIR/port_naive" ]; then
-            echo $((10000 + RANDOM % 50000)) > "$WORK_DIR/port_naive"
+            echo $((10000 + RANDOM \% 50000)) > "$WORK_DIR/port_naive"
         fi
         NAIVE_PORT=$(cat "$WORK_DIR/port_naive")
     else
@@ -146,7 +156,7 @@ EOF
     GLOBAL_LINKS="${GLOBAL_LINKS}${NAIVE_LINK}\r\n"
 fi
 
-# 4. 配置并启动 Xray
+# 7. 配置并启动 Xray (xHTTP 直连 & Argo 回源)
 XRAY_INBOUNDS=""
 HAS_XRAY=false
 
@@ -154,7 +164,7 @@ if [ "$INPUT_XHTTP" != "n" ] && [ -n "$INPUT_XHTTP" ]; then
     HAS_XRAY=true
     if [ "$INPUT_XHTTP" = "x" ]; then
         if [ ! -f "$WORK_DIR/port_xhttp" ]; then
-            echo $((10000 + RANDOM % 50000)) > "$WORK_DIR/port_xhttp"
+            echo $((10000 + RANDOM \% 50000)) > "$WORK_DIR/port_xhttp"
         fi
         XHTTP_PORT=$(cat "$WORK_DIR/port_xhttp")
     else
@@ -183,6 +193,7 @@ if [ "$INPUT_XHTTP" != "n" ] && [ -n "$INPUT_XHTTP" ]; then
     GLOBAL_LINKS="${GLOBAL_LINKS}${H2_LINK}\r\n${H3_LINK}\r\n"
 fi
 
+# Argo 隧道配置
 if [ "$INPUT_ARGO_PORT" != "n" ] && [ -n "$INPUT_ARGO_PORT" ] && [ -n "$INPUT_ARGO_DOMAIN" ] && [ -n "$INPUT_ARGO_AUTH" ]; then
     HAS_XRAY=true
     ARGO_PORT=$INPUT_ARGO_PORT
@@ -196,44 +207,4 @@ if [ "$INPUT_ARGO_PORT" != "n" ] && [ -n "$INPUT_ARGO_PORT" ] && [ -n "$INPUT_AR
       \"streamSettings\": {
         \"network\": \"xhttp\",
         \"security\": \"none\",
-        \"xhttpSettings\": { \"path\": \"$XHTTP_PATH\", \"mode\": \"auto\", \"scMaxConcurrentStreams\": 16 }
-      }
-    },"
-
-    if [ ! -f "$CF_PATH" ]; then
-        echo " -> 正在下载 Cloudflared 客户端..."
-        (command -v curl >/dev/null 2>&1 && curl -sL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}" -o "$CF_PATH") || \
-        (command -v wget >/dev/null 2>&1 && wget -qO "$CF_PATH" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}")
-        chmod +x "$CF_PATH"
-    fi
-
-    echo -e " -> [配置] 正在启动 Cloudflare Argo 固定隧道..."
-    nohup "$CF_PATH" tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol quic run --token "$INPUT_ARGO_AUTH" >/dev/null 2>&1 & echo $! > "$WORK_DIR/cf.pid"
-
-    CFIP="www.teamviewer.com"
-    ARGO_H2="vless://${UUID}@${CFIP}:443?encryption=none&security=tls&alpn=h2&sni=${INPUT_ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=auto&host=${INPUT_ARGO_DOMAIN}&path=${XHTTP_PATH_ENC}#xHTTP_Argo_H2_easyshare"
-    ARGO_H3="vless://${UUID}@${CFIP}:443?encryption=none&security=tls&alpn=h3&sni=${INPUT_ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=auto&host=${INPUT_ARGO_DOMAIN}&path=${XHTTP_PATH_ENC}#xHTTP_Argo_H3_easyshare"
-    GLOBAL_LINKS="${GLOBAL_LINKS}${ARGO_H2}\r\n${ARGO_H3}\r\n"
-fi
-
-if [ "$HAS_XRAY" = true ]; then
-    XRAY_INBOUNDS="[${XRAY_INBOUNDS%,}]"
-    cat << EOF > "$WORK_DIR/xray_config.json"
-{
-  "log": { "loglevel": "none" },
-  "inbounds": $XRAY_INBOUNDS,
-  "outbounds": [{ "protocol": "freedom", "tag": "direct" }]
-}
-EOF
-    echo -e "\n[4/5] 正在启动 Xray-core (xHTTP 直连/Argo回源)..."
-    nohup "$XR_PATH" run -c "$WORK_DIR/xray_config.json" >/dev/null 2>&1 & echo $! > "$WORK_DIR/xr.pid"
-fi
-
-echo -e "\n[5/5] 部署全部完成！"
-
-if [ -n "$GLOBAL_LINKS" ]; then
-    BASE64_SUB=$(echo -e "$GLOBAL_LINKS" | base64 | tr -d '\n')
-    echo -e "\n====================== Base64 订阅/链接 ======================"
-    echo "$BASE64_SUB"
-    echo -e "==============================================================\n"
-fi
+        \"xhttpSettings\": { \"path\": \"$XHTTP_
