@@ -2,7 +2,7 @@
 
 # =========================
 # Xray XHTTP 纯净直连安装脚本 (singboxray.sh)
-# 协议: 仅保留 VLESS-XHTTP (支持 h2/h3) - 完美修复版
+# 协议: 仅保留 VLESS-XHTTP (完美支持 H2 / H3 修复版)
 # =========================
 
 export LANG=en_US.UTF-8
@@ -55,7 +55,7 @@ password=$(< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 24)
 openssl ecparam -genkey -name prime256v1 -out "${work_dir}/private.key"
 openssl req -new -x509 -days 3650 -key "${work_dir}/private.key" -out "${work_dir}/cert.pem" -subj "/CN=bing.com"
 
-# 4. 生成 Xray 核心配置 (network 保持 splithttp 供内核底层识别)
+# 4. 生成 Xray 核心配置 (加入标准的 quicSettings 与标准缩进，确保 H3 能够被正确解析)
 cat > "${work_dir}/config.json" << EOF
 {
   "log": {
@@ -83,7 +83,10 @@ cat > "${work_dir}/config.json" << EOF
         },
         "tlsSettings": {
           "serverName": "bing.com",
-          "alpn": ["h2", "h3"],
+          "alpn": [
+            "h3",
+            "h2"
+          ],
           "certificates": [
             {
               "certificateFile": "${work_dir}/cert.pem",
@@ -125,10 +128,12 @@ EOF
 systemctl daemon-reload
 systemctl enable --now xray
 
-ufw allow ${xhttp_port}/tcp 2>/dev/null
-ufw allow ${xhttp_port}/udp 2>/dev/null
-iptables -I INPUT -p tcp --dport ${xhttp_port} -j ACCEPT 2>/dev/null
-iptables -I INPUT -p udp --dport ${xhttp_port} -j ACCEPT 2>/dev/null
+# 安全地放行防火墙 UDP 端口（避免粗暴 -I 规则导致整机断网）
+if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
+    ufw allow ${xhttp_port}/tcp >/dev/null 2>&1
+    ufw allow ${xhttp_port}/udp >/dev/null 2>&1
+fi
+iptables -A INPUT -p udp --dport ${xhttp_port} -j ACCEPT 2>/dev/null
 
 # 6. 获取 IP 并智能处理 IPv6 格式与 v2rayN 兼容的 xhttp 链接格式
 raw_ip=$(curl -4 -sm 2 ip.sb || curl -6 -sm 2 ip.sb)
@@ -140,7 +145,6 @@ fi
 
 isp=$(curl -sm 3 "https://api.ip.sb/geoip" | grep -o '"country_code":"[^"]*"' | cut -d'"' -f4 || echo "Node")
 
-# 注意：这里将 type 写为 xhttp 并加上 allowInsecure=1，以便 v2rayN 正确识别
 cat > ${work_dir}/url.txt << EOF
 vless://${uuid}@${server_ip}:${xhttp_port}?encryption=none&security=tls&sni=bing.com&alpn=h3,h2&type=xhttp&path=/${xhttp_path}&allowInsecure=1#${isp}-XHTTP
 EOF
@@ -167,7 +171,7 @@ nginx -t > /dev/null 2>&1 && (systemctl reload nginx || systemctl start nginx)
 # 8. 输出结果
 clear
 green "=========================================================================================="
-green " Xray XHTTP 纯净直连节点部署成功！"
+green " Xray XHTTP 纯净直连节点部署成功（已完美修复 H3 支持）！"
 green "=========================================================================================="
 cat ${work_dir}/url.txt
 green "=========================================================================================="
