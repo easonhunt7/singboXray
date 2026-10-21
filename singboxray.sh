@@ -2,7 +2,7 @@
 
 # =========================================================================
 # Xray XHTTP 纯净直连安装脚本 (singboxray.sh)
-# 协议: 支持 VLESS-XHTTP-H3 与 VLESS-XHTTP-H2 (独立双端口、无订阅逻辑)
+# 协议: 支持 VLESS-XHTTP-H3 与 VLESS-XHTTP-H2 (严格按参部署、无订阅逻辑)
 # 用法: bash singboxray.sh [h2参数] [h3参数]
 # 参数说明: y/Y(随机端口), 数字(指定端口), 留空/n/N(放弃部署)
 # =========================================================================
@@ -18,7 +18,10 @@ ARG_H3="$2"
 
 parse_port() {
     local input="$1"
-    if [ "$input" = "y" ] || [ "$input" = "Y" ]; then
+    # 如果明确传了 n 或 N，或者为空，则返回空
+    if [ "$input" = "n" ] || [ "$input" = "N" ] || [ -z "$input" ]; then
+        echo ""
+    elif [ "$input" = "y" ] || [ "$input" = "Y" ]; then
         shuf -i 1000-65000 -n 1
     elif [[ "$input" =~ ^[0-9]+$ ]]; then
         echo "$input"
@@ -30,10 +33,10 @@ parse_port() {
 h2_port=$(parse_port "$ARG_H2")
 h3_port=$(parse_port "$ARG_H3")
 
-# 如果两个参数都为空或放弃，则默认随机开一个 H3 体验，或提示退出
+# 如果两个参数解析出来都为空，说明用户未指定或选择放弃，直接安全退出
 if [ -z "$h2_port" ] && [ -z "$h3_port" ]; then
-    yellow "未指定有效参数，默认随机部署一个 H3 节点..."
-    h3_port=$(shuf -i 1000-65000 -n 1)
+    yellow "提示：未检测到有效的部署参数（H2和H3均未启用）。脚本已安全退出。"
+    exit 0
 fi
 
 work_dir="/etc/xray"
@@ -218,7 +221,7 @@ for p in "$h2_port" "$h3_port"; do
     iptables -A INPUT -p udp --dport $p -j ACCEPT 2>/dev/null
 done
 
-# 7. 获取 IP 并输出节点链接
+# 7. 获取 IP 并输出节点链接与 Base64 编码
 raw_ip=$(curl -4 -sm 2 ip.sb || curl -6 -sm 2 ip.sb)
 if [[ "$raw_ip" =~ : ]]; then
     server_ip="[$raw_ip]"
@@ -228,10 +231,18 @@ fi
 
 isp=$(curl -sm 3 "https://api.ip.sb/geoip" | grep -o '"country_code":"[^"]*"' | cut -d'"' -f4 || echo "Node")
 
+> "${work_dir}/url.txt"
+[ -n "$h3_port" ] && echo "vless://${uuid}@${server_ip}:${h3_port}?encryption=none&security=tls&sni=bing.com&alpn=h3&type=xhttp&path=/${h3_path}&allowInsecure=1#${isp}-XHTTP-H3" >> "${work_dir}/url.txt"
+[ -n "$h2_port" ] && echo "vless://${uuid}@${server_ip}:${h2_port}?encryption=none&security=tls&sni=bing.com&alpn=h2&type=xhttp&path=/${h2_path}&allowInsecure=1#${isp}-XHTTP-H2" >> "${work_dir}/url.txt"
+
+base64_str=$(base64 -w0 "${work_dir}/url.txt" 2>/dev/null || base64 "${work_dir}/url.txt" | tr -d '\n')
+
 clear
 green "=========================================================================================="
-green " Xray XHTTP 纯净直连节点部署成功（无订阅逻辑）！"
+green " Xray XHTTP 纯净直连节点部署成功（严格按参、无订阅逻辑）！"
 green "=========================================================================================="
-[ -n "$h3_port" ] && echo -e "\e[1;32mvless://${uuid}@${server_ip}:${h3_port}?encryption=none&security=tls&sni=bing.com&alpn=h3&type=xhttp&path=/${h3_path}&allowInsecure=1#${isp}-XHTTP-H3\033[0m"
-[ -n "$h2_port" ] && echo -e "\e[1;32mvless://${uuid}@${server_ip}:${h2_port}?encryption=none&security=tls&sni=bing.com&alpn=h2&type=xhttp&path=/${h2_path}&allowInsecure=1#${isp}-XHTTP-H2\033[0m"
+cat "${work_dir}/url.txt"
+green "------------------------------------------------------------------------------------------"
+yellow "Base64 编码链接（可直接用于客户端批量导入）："
+green "$base64_str"
 green "=========================================================================================="
