@@ -2,7 +2,7 @@
 
 # =========================
 # Xray XHTTP 纯净直连安装脚本 (singboxray.sh)
-# 协议: 仅保留 VLESS-XHTTP (修复 H3 协议标准字段)
+# 协议: 仅保留 VLESS-XHTTP-H3 (纯 H3 UDP 专属修复版)
 # =========================
 
 export LANG=en_US.UTF-8
@@ -48,14 +48,14 @@ chmod +x ${work_dir}/xray
 
 # 3. 生成变量与自签证书
 uuid=$(cat /proc/sys/kernel/random/uuid)
-xhttp_path=$(< /dev/urandom tr -dc 'a-z0-9' | head -c 8)
+xhttp_path="${uuid}-xu" # 采用与甬哥一致的标准规范后缀，确保内核完全识别
 nginx_port=$(($xhttp_port + 1))
 password=$(< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 24)
 
 openssl ecparam -genkey -name prime256v1 -out "${work_dir}/private.key"
 openssl req -new -x509 -days 3650 -key "${work_dir}/private.key" -out "${work_dir}/cert.pem" -subj "/CN=bing.com"
 
-# 4. 生成 Xray 核心配置 (修正 network 为 xhttp 并加入标准 xhttpSettings)
+# 4. 生成 Xray 核心配置 (严格对齐 H3 专属 alpn 和 sniffing)
 cat > "${work_dir}/config.json" << EOF
 {
   "log": {
@@ -64,14 +64,15 @@ cat > "${work_dir}/config.json" << EOF
   },
   "inbounds": [
     {
-      "tag": "vless-xhttp",
+      "tag": "xhttp-h3",
       "listen": "::",
       "port": $xhttp_port,
       "protocol": "vless",
       "settings": {
         "clients": [
           {
-            "id": "$uuid"
+            "id": "$uuid",
+            "flow": ""
           }
         ],
         "decryption": "none"
@@ -86,8 +87,7 @@ cat > "${work_dir}/config.json" << EOF
         "tlsSettings": {
           "serverName": "bing.com",
           "alpn": [
-            "h3",
-            "h2"
+            "h3"
           ],
           "certificates": [
             {
@@ -96,6 +96,11 @@ cat > "${work_dir}/config.json" << EOF
             }
           ]
         }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls", "quic"],
+        "metadataOnly": false
       }
     }
   ],
@@ -130,7 +135,7 @@ EOF
 systemctl daemon-reload
 systemctl enable --now xray
 
-# 6. 放行防火墙端口 (TCP 与 UDP 双向放行)
+# 6. 放行防火墙端口 (H3 依赖 UDP，必须确保放行)
 if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
     ufw allow ${xhttp_port}/tcp >/dev/null 2>&1
     ufw allow ${xhttp_port}/udp >/dev/null 2>&1
@@ -138,7 +143,7 @@ fi
 iptables -A INPUT -p tcp --dport ${xhttp_port} -j ACCEPT 2>/dev/null
 iptables -A INPUT -p udp --dport ${xhttp_port} -j ACCEPT 2>/dev/null
 
-# 7. 获取 IP 并生成 v2rayN 兼容的 xhttp 链接格式
+# 7. 获取 IP 并生成兼容的 xhttp-h3 链接格式
 raw_ip=$(curl -4 -sm 2 ip.sb || curl -6 -sm 2 ip.sb)
 if [[ "$raw_ip" =~ : ]]; then
     server_ip="[$raw_ip]"
@@ -149,13 +154,13 @@ fi
 isp=$(curl -sm 3 "https://api.ip.sb/geoip" | grep -o '"country_code":"[^"]*"' | cut -d'"' -f4 || echo "Node")
 
 cat > ${work_dir}/url.txt << EOF
-vless://${uuid}@${server_ip}:${xhttp_port}?encryption=none&security=tls&sni=bing.com&alpn=h3,h2&type=xhttp&path=/${xhttp_path}&allowInsecure=1#${isp}-XHTTP
+vless://${uuid}@${server_ip}:${xhttp_port}?encryption=none&security=tls&sni=bing.com&alpn=h3&type=xhttp&path=/${xhttp_path}&allowInsecure=1#${isp}-XHTTP-H3
 EOF
 
 # 8. 输出结果
 clear
 green "=========================================================================================="
-green " Xray XHTTP 纯净直连节点部署成功（已修正 H3 底层标准配置）！"
+green " Xray XHTTP-H3 纯净直连节点部署成功（已对齐甬哥 H3 专属核心参数）！"
 green "=========================================================================================="
 cat ${work_dir}/url.txt
 green "=========================================================================================="
