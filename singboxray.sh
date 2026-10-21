@@ -23,10 +23,10 @@ reading() { read -p "$(red "$1")" "$2"; }
 INPUT_ARG="$1"
 [ "$1" = "-i" ] && INPUT_ARG="$2"
 
-if [ "$INPUT_ARG" = "n" ] \vert{}\vert{} [ "$INPUT_ARG" = "N" ]; then
+if [ "$INPUT_ARG" = "n" ] || [ "$INPUT_ARG" = "N" ]; then
     yellow "已根据指令取消部署。"
     exit 0
-elif [ "$INPUT_ARG" = "y" ] \vert{}\vert{} [ "$INPUT_ARG" = "Y" ]; then
+elif [ "$INPUT_ARG" = "y" ] || [ "$INPUT_ARG" = "Y" ]; then
     export xhttp_port=$(shuf -i 1000-65000 -n 1)
 elif [[ "$INPUT_ARG" =~ ^[0-9]+$ ]]; then
     export xhttp_port="$INPUT_ARG"
@@ -56,7 +56,7 @@ check_service() {
     if command_exists apk; then
         rc-service "${service_name}" status | grep -q "started" && green "running" || yellow "not running"
     else
-        systemctl is-active "${service_name}" \vert{} grep -q "^active$" && green "running" || yellow "not running"
+        systemctl is-active "${service_name}" | grep -q "^active$" && green "running" || yellow "not running"
     fi
     return $?
 }
@@ -102,7 +102,7 @@ manage_packages() {
 get_realip() {
     ip=$(curl -4 -sm 2 ip.sb)
     ipv6() { curl -6 -sm 2 ip.sb; }
-    [ -z "$ip" ] && echo "[$(ipv6)]" \vert{}\vert{} echo "$ip"
+    [ -z "$ip" ] && echo "[$(ipv6)]" || echo "$ip"
 }
 
 allow_port() {
@@ -112,10 +112,10 @@ allow_port() {
     command_exists iptables && has_iptables=1
 
     for rule in "$@"; do
-        port=${rule\%/*}; proto=${rule#*/}
+        port=${rule%/*}; proto=${rule#*/}
         [ "$has_ufw" -eq 1 ] && ufw allow in ${port}/${proto} >/dev/null 2>&1
         [ "$has_firewalld" -eq 1 ] && firewall-cmd --permanent --add-port=${port}/${proto} >/dev/null 2>&1
-        [ "$has_iptables" -eq 1 ] && (iptables -C INPUT -p ${proto} --dport${port} -j ACCEPT 2>/dev/null || iptables -I INPUT 4 -p ${proto} --dport${port} -j ACCEPT)
+        [ "$has_iptables" -eq 1 ] && (iptables -C INPUT -p ${proto} --dport ${port} -j ACCEPT 2>/dev/null || iptables -I INPUT 4 -p ${proto} --dport ${port} -j ACCEPT)
     done
     [ "$has_firewalld" -eq 1 ] && firewall-cmd --reload >/dev/null 2>&1
 }
@@ -144,14 +144,14 @@ install_xray() {
     curl -sLo "${work_dir}/argo" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
     curl -sLo "${work_dir}/qrencode" "https://raw.githubusercontent.com/eooce/test/master/qrencode" 2>/dev/null || true
 
-    chmod +x ${work_dir}/xray ${work_dir}/argo${work_dir}/qrencode 2>/dev/null || true
+    chmod +x ${work_dir}/xray ${work_dir}/argo ${work_dir}/qrencode 2>/dev/null || true
 
     nginx_port=$(($xhttp_port + 1))
     uuid=$(cat /proc/sys/kernel/random/uuid)
     xhttp_path=$(< /dev/urandom tr -dc 'a-z0-9' | head -c 8)
 
     # 放行 XHTTP 端口（TCP + UDP 用于 H3/QUIC）以及订阅端口
-    allow_port $xhttp_port/tcp $xhttp_port/udp$nginx_port/tcp > /dev/null 2>&1
+    allow_port $xhttp_port/tcp $xhttp_port/udp $nginx_port/tcp > /dev/null 2>&1
 
     # 生成自签证书供 XHTTP TLS / H3 使用
     openssl ecparam -genkey -name prime256v1 -out "${work_dir}/private.key"
@@ -238,7 +238,7 @@ After=network.target nss-lookup.target
 User=root
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
-ExecStart=${work_dir}/xray run -config${work_dir}/config.json
+ExecStart=${work_dir}/xray run -config ${work_dir}/config.json
 Restart=on-failure
 RestartSec=10
 LimitNOFILE=infinity
@@ -254,7 +254,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/bin/sh -c "${work_dir}/argo tunnel --url http://localhost:${ARGO_PORT} --no-autoupdate --edge-ip-version auto --protocol http2 >${work_dir}/argo.log 2>&1"
+ExecStart=/bin/sh -c "${work_dir}/argo tunnel --url http://localhost:${ARGO_PORT} --no-autoupdate --edge-ip-version auto --protocol http2 > ${work_dir}/argo.log 2>&1"
 Restart=on-failure
 RestartSec=5s
 
@@ -285,7 +285,60 @@ get_info() {
     cat > ${work_dir}/url.txt << EOF
 vless://${uuid}@${server_ip}:${xhttp_port}?encryption=none&security=tls&sni=bing.com&alpn=h3,h2&type=splithttp&path=/${xhttp_path}#${isp}-XHTTP
 
-vmess://$(echo "$VMESS" \vert{} base64 -w0 2>/dev/null \vert{}\vert{} echo "$VMESS" | base64)
+vmess://$(echo "$VMESS" | base64 -w0 2>/dev/null || echo "$VMESS" | base64)
 EOF
 
-    base64 -w0 ${work_dir}/url.txt >${work_dir}/sub.txt 2>/dev/null || base
+    base64 -w0 ${work_dir}/url.txt > ${work_dir}/sub.txt 2>/dev/null || base64 ${work_dir}/url.txt | tr -d '\n' > ${work_dir}/sub.txt
+    chmod 644 ${work_dir}/sub.txt
+
+    green "\n=========================================================================================="
+    green " Xray XHTTP 直连节点及 Argo 备用节点部署成功！"
+    green "=========================================================================================="
+    while IFS= read -r line; do echo -e "${purple}$line${re}"; done < ${work_dir}/url.txt
+    green "=========================================================================================="
+    green " 订阅地址 (Nginx托管): http://${server_ip}:${nginx_port}/${password}"
+    green "==========================================================================================\n"
+}
+
+# 配置 Nginx 订阅分发
+add_nginx_conf() {
+    if ! command_exists nginx; then
+        manage_packages install nginx
+    fi
+    mkdir -p /etc/nginx/conf.d
+    cat > /etc/nginx/conf.d/xray.conf << EOF
+server {
+    listen $(($xhttp_port + 1));
+    server_name _;
+    location = /$password {
+        alias ${work_dir}/sub.txt;
+        default_type 'text/plain; charset=utf-8';
+    }
+    location / { return 404; }
+}
+EOF
+    nginx -t > /dev/null 2>&1 && (systemctl reload nginx || systemctl start nginx)
+}
+
+# 创建快捷指令
+create_shortcut() {
+    cat > "/usr/bin/singboxray" << 'EOF'
+#!/usr/bin/env bash
+echo "Xray XHTTP 管理脚本"
+EOF
+    chmod +x /usr/bin/singboxray
+    ln -sf /usr/bin/singboxray /usr/bin/sb
+}
+
+# 主安装流程
+main() {
+    manage_packages install curl wget jq unzip openssl nginx
+    install_xray
+    main_systemd_services
+    sleep 3
+    get_info
+    add_nginx_conf
+    create_shortcut
+}
+
+main
