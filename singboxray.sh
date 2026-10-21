@@ -1,191 +1,170 @@
 #!/bin/bash
 
-# 定义颜色输出
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-CYAN='\033[0;36m'
-NC='\033[0m' # 恢复默认颜色
+# =========================
+# Xray XHTTP 纯净直连安装脚本 (singboxray.sh)
+# 协议: 仅保留 VLESS-XHTTP (支持 h2/h3) - 完美修复版
+# =========================
 
-# 检查是否为 root 用户
-if [[ $EUID -ne 0 ]]; then
-   echo -e "${RED}错误：必须使用 root 用户运行此脚本！请使用 sudo -i 切换后重试。${NC}"
-   exit 1
+export LANG=en_US.UTF-8
+green() { echo -e "\e[1;32m$1\033[0m"; }
+yellow() { echo -e "\e[1;33m$1\033[0m"; }
+red() { echo -e "\e[1;91m$1\033[0m"; }
+
+# 接收并解析命令行参数 (支持自定义端口)
+INPUT_ARG="$1"
+[ "$1" = "-i" ] && INPUT_ARG="$2"
+
+if [ "$INPUT_ARG" = "n" ] || [ "$INPUT_ARG" = "N" ]; then
+    yellow "已根据指令取消部署。"
+    exit 0
+elif [ "$INPUT_ARG" = "y" ] || [ "$INPUT_ARG" = "Y" ]; then
+    export xhttp_port=$(shuf -i 1000-65000 -n 1)
+elif [[ "$INPUT_ARG" =~ ^[0-9]+$ ]]; then
+    export xhttp_port="$INPUT_ARG"
+else
+    export xhttp_port=${PORT:-$(shuf -i 1000-65000 -n 1)}
 fi
 
-# ==================== 安装功能 ====================
-function install_singbox() {
-    echo -e "\n${YELLOW}📝 请输入节点配置信息：${NC}"
+work_dir="/etc/xray"
+[[ $EUID -ne 0 ]] && red "请在root用户下运行" && exit 1
 
-    read -p "👉 请输入你的解析好的域名 (例如: naive.example.com): " DOMAIN
-    read -p "👉 请输入你的邮箱 (用于 Let's Encrypt 自动申请证书): " EMAIL
-    read -p "👉 请设置 NaiveProxy 用户名 (默认直接回车为 user123): " USERNAME
-    USERNAME=${USERNAME:-user123}
-    read -p "👉 请设置 NaiveProxy 密码 (默认直接回车为 pass123): " PASSWORD
-    PASSWORD=${PASSWORD:-pass123}
-    read -p "👉 请给这个节点起个名字 (默认直接回车为 NaiveProxy): " NODE_NAME
-    NODE_NAME=${NODE_NAME:-NaiveProxy}
+# 1. 清理旧服务并安装依赖
+systemctl stop xray nginx 2>/dev/null || true
+yellow "正在更新系统并安装必要组件..."
+apt update && apt install -y curl wget jq unzip openssl nginx 2>/dev/null || yum install -y curl wget jq unzip openssl nginx 2>/dev/null
 
-    echo -e "\n${YELLOW}🧹 [1/4] 正在清理旧环境，释放 80 和 443 端口...${NC}"
-    systemctl stop caddy sing-box nginx apache2 2>/dev/null
-    pkill -9 caddy sing-box nginx apache2 2>/dev/null
+# 2. 下载 Xray-core
+mkdir -p "${work_dir}"
+ARCH_RAW=$(uname -m)
+case "${ARCH_RAW}" in
+    'x86_64' | 'amd64') ARCH='64' ;;
+    'aarch64' | 'arm64') ARCH='arm64-v8a' ;;
+    *) ARCH='64' ;;
+esac
 
-    echo -e "${YELLOW}📦 [2/4] 正在下载并安装 Sing-box (1.13.0)...${NC}"
-    cd /tmp
-    wget -qO sing-box.tar.gz https://github.com/SagerNet/sing-box/releases/download/v1.13.0-rc.5/sing-box-1.13.0-rc.5-linux-amd64.tar.gz
-    tar -zxf sing-box.tar.gz
-    cp sing-box-1.13.0-rc.5-linux-amd64/sing-box /usr/local/bin/
-    chmod +x /usr/local/bin/sing-box
-    rm -rf sing-box.tar.gz sing-box-1.13.0-rc.5-linux-amd64
+curl -sLo "${work_dir}/xray.zip" "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${ARCH}.zip"
+unzip -qo "${work_dir}/xray.zip" -d "${work_dir}/" && rm -f "${work_dir}/xray.zip"
+chmod +x ${work_dir}/xray
 
-    echo -e "${YELLOW}⚙️ [3/4] 正在生成服务端配置文件...${NC}"
-    mkdir -p /etc/sing-box
-    cat << 'EOF' > /etc/sing-box/config.json
+# 3. 生成变量与自签证书
+uuid=$(cat /proc/sys/kernel/random/uuid)
+xhttp_path=$(< /dev/urandom tr -dc 'a-z0-9' | head -c 8)
+nginx_port=$(($xhttp_port + 1))
+password=$(< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 24)
+
+openssl ecparam -genkey -name prime256v1 -out "${work_dir}/private.key"
+openssl req -new -x509 -days 3650 -key "${work_dir}/private.key" -out "${work_dir}/cert.pem" -subj "/CN=bing.com"
+
+# 4. 生成 Xray 核心配置 (network 保持 splithttp 供内核底层识别)
+cat > "${work_dir}/config.json" << EOF
 {
   "log": {
-    "level": "info"
+    "loglevel": "warning",
+    "error": "${work_dir}/xray.log"
   },
   "inbounds": [
     {
-      "type": "naive",
-      "tag": "naive-in",
-      "listen": "::",
-      "listen_port": 443,
-      "users": [
-        {
-          "username": "REPLACE_USERNAME",
-          "password": "REPLACE_PASSWORD"
-        }
-      ],
-      "tls": {
-        "enabled": true,
-        "server_name": "REPLACE_DOMAIN",
-        "acme": {
-          "domain": ["REPLACE_DOMAIN"],
-          "email": "REPLACE_EMAIL"
+      "tag": "vless-xhttp",
+      "port": $xhttp_port,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "$uuid"
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "splithttp",
+        "security": "tls",
+        "splithttpSettings": {
+          "path": "/${xhttp_path}"
+        },
+        "tlsSettings": {
+          "serverName": "bing.com",
+          "alpn": ["h2", "h3"],
+          "certificates": [
+            {
+              "certificateFile": "${work_dir}/cert.pem",
+              "keyFile": "${work_dir}/private.key"
+            }
+          ]
         }
       }
     }
   ],
   "outbounds": [
     {
-      "type": "direct",
-      "tag": "direct"
+      "tag": "direct",
+      "protocol": "freedom"
     }
   ]
 }
 EOF
 
-    # 替换配置文件里的变量
-    sed -i "s/REPLACE_USERNAME/$USERNAME/g" /etc/sing-box/config.json
-    sed -i "s/REPLACE_PASSWORD/$PASSWORD/g" /etc/sing-box/config.json
-    sed -i "s/REPLACE_DOMAIN/$DOMAIN/g" /etc/sing-box/config.json
-    sed -i "s/REPLACE_EMAIL/$EMAIL/g" /etc/sing-box/config.json
-
-    echo -e "${YELLOW}🚀 [4/4] 正在配置系统服务并启动 Sing-box...${NC}"
-
-    echo -e "${YELLOW}🛡️ 正在自动放行系统防火墙端口...${NC}"
-    ufw allow 80,443/tcp 2>/dev/null
-    ufw allow 443/udp 2>/dev/null
-    iptables -I INPUT -p tcp --dport 443 -j ACCEPT 2>/dev/null
-    iptables -I INPUT -p udp --dport 443 -j ACCEPT 2>/dev/null
-    
-    cat << 'EOF' > /etc/systemd/system/sing-box.service
+# 5. 配置 Systemd 服务
+cat > /etc/systemd/system/xray.service << EOF
 [Unit]
-Description=sing-box service
-Documentation=https://sing-box.sagernet.org
-After=network.target nss-lookup.target network-online.target
+Description=Xray Service
+After=network.target nss-lookup.target
 
 [Service]
+User=root
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
-ExecStart=/usr/local/bin/sing-box run -c /etc/sing-box/config.json
-ExecReload=/bin/kill -HUP $MAINPID
+ExecStart=${work_dir}/xray run -config ${work_dir}/config.json
 Restart=on-failure
-RestartSec=10s
+RestartSec=10
 LimitNOFILE=infinity
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-    systemctl daemon-reload
-    systemctl enable sing-box
-    systemctl restart sing-box
+systemctl daemon-reload
+systemctl enable --now xray
 
-    SHARE_LINK="naive+https://${USERNAME}:${PASSWORD}@${DOMAIN}:443?padding=true#${NODE_NAME}"
+# 6. 获取 IP 并智能处理 IPv6 格式与 v2rayN 兼容的 xhttp 链接格式
+raw_ip=$(curl -4 -sm 2 ip.sb || curl -6 -sm 2 ip.sb)
+if [[ "$raw_ip" =~ : ]]; then
+    server_ip="[$raw_ip]"
+else
+    server_ip="$raw_ip"
+fi
 
-    echo -e "\n${GREEN}==================================================${NC}"
-    echo -e "${GREEN}🎉 搭建彻底完成！${NC}"
-    echo -e "--------------------------------------------------"
-    echo -e "${YELLOW}👇 请复制下方链接，直接导入到你的 Flowz 客户端：${NC}"
-    echo -e ""
-    echo -e "${CYAN}${SHARE_LINK}${NC}"
-    echo -e ""
-    echo -e "--------------------------------------------------"
-    echo -e "${YELLOW}⚠️ 注意事项：${NC}"
-    echo -e "1. 首次启动时，Sing-box 需要向 Let's Encrypt 申请证书，请等待 1-2 分钟后再连接。"
-    echo -e "2. 如果连接失败，请在 VPS 运行以下命令查看证书是否申请成功："
-    echo -e "   ${GREEN}journalctl -u sing-box -f${NC}"
-    echo -e "${GREEN}==================================================${NC}"
+isp=$(curl -sm 3 "https://api.ip.sb/geoip" | grep -o '"country_code":"[^"]*"' | cut -d'"' -f4 || echo "Node")
+
+# 注意：这里将 type 写为 xhttp 并加上 allowInsecure=1，以便 v2rayN 正确识别
+cat > ${work_dir}/url.txt << EOF
+vless://${uuid}@${server_ip}:${xhttp_port}?encryption=none&security=tls&sni=bing.com&alpn=h3,h2&type=xhttp&path=/${xhttp_path}&allowInsecure=1#${isp}-XHTTP
+EOF
+
+base64 -w0 ${work_dir}/url.txt > ${work_dir}/sub.txt 2>/dev/null || base64 ${work_dir}/url.txt | tr -d '\n' > ${work_dir}/sub.txt
+chmod 644 ${work_dir}/sub.txt
+
+# 7. 配置 Nginx 托管订阅
+mkdir -p /etc/nginx/conf.d
+cat > /etc/nginx/conf.d/xray.conf << EOF
+server {
+    listen $nginx_port;
+    server_name _;
+    location = /$password {
+        alias ${work_dir}/sub.txt;
+        default_type 'text/plain; charset=utf-8';
+    }
+    location / { return 404; }
 }
+EOF
 
-# ==================== 卸载功能 ====================
-function uninstall_singbox() {
-    echo -e "\n${YELLOW}⚠️ 准备卸载 Sing-box...${NC}"
-    read -p "确定要彻底卸载 Sing-box 及其所有配置文件吗？[y/N]: " confirm
-    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-        echo -e "${GREEN}已取消卸载。${NC}"
-        exit 0
-    fi
+nginx -t > /dev/null 2>&1 && (systemctl reload nginx || systemctl start nginx)
 
-    echo -e "${YELLOW}正在停止并禁用系统服务...${NC}"
-    systemctl stop sing-box 2>/dev/null
-    systemctl disable sing-box 2>/dev/null
-
-    echo -e "${YELLOW}正在删除核心文件和配置文件...${NC}"
-    rm -f /usr/local/bin/sing-box
-    rm -rf /etc/sing-box
-    rm -f /etc/systemd/system/sing-box.service
-
-    echo -e "${YELLOW}正在重载系统守护进程...${NC}"
-    systemctl daemon-reload
-
-    echo -e "${GREEN}==================================================${NC}"
-    echo -e "${GREEN}🗑️ 卸载完成！Sing-box 已从你的系统中彻底移除。${NC}"
-    echo -e "${GREEN}==================================================${NC}"
-}
-
-# ==================== 主菜单 ====================
-function main_menu() {
-    clear
-    echo -e "${GREEN}==================================================${NC}"
-    echo -e "${CYAN}      Sing-box (NaiveProxy 协议) 一键管理脚本     ${NC}"
-    echo -e "${GREEN}==================================================${NC}"
-    echo -e "  ${YELLOW}1.${NC} 安装 Sing-box (Naive 协议)"
-    echo -e "  ${YELLOW}2.${NC} 彻底卸载 Sing-box"
-    echo -e "  ${YELLOW}0.${NC} 退出脚本"
-    echo -e "${GREEN}==================================================${NC}"
-    read -p "请输入数字选择 [0-2]: " choice
-
-    case "$choice" in
-        1)
-            install_singbox
-            ;;
-        2)
-            uninstall_singbox
-            ;;
-        0)
-            echo -e "${GREEN}感谢使用，再见！${NC}"
-            exit 0
-            ;;
-        *)
-            echo -e "${RED}输入错误，请输入正确的数字！${NC}"
-            sleep 2
-            main_menu
-            ;;
-    esac
-}
-
-# 运行主菜单
-main_menu
+# 8. 输出结果
+clear
+green "=========================================================================================="
+green " Xray XHTTP 纯净直连节点部署成功！"
+green "=========================================================================================="
+cat ${work_dir}/url.txt
+green "=========================================================================================="
+green " 订阅地址: http://${raw_ip}:${nginx_port}/${password}"
+green "==========================================================================================\n"
