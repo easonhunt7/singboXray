@@ -2,7 +2,7 @@
 
 # =========================
 # Xray XHTTP 纯净直连安装脚本 (singboxray.sh)
-# 协议: 仅保留 VLESS-XHTTP (完美支持 H2 / H3 修复版)
+# 协议: 仅保留 VLESS-XHTTP (修复 H3 协议标准字段)
 # =========================
 
 export LANG=en_US.UTF-8
@@ -55,7 +55,7 @@ password=$(< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 24)
 openssl ecparam -genkey -name prime256v1 -out "${work_dir}/private.key"
 openssl req -new -x509 -days 3650 -key "${work_dir}/private.key" -out "${work_dir}/cert.pem" -subj "/CN=bing.com"
 
-# 4. 生成 Xray 核心配置 (加入标准的 quicSettings 与标准缩进，确保 H3 能够被正确解析)
+# 4. 生成 Xray 核心配置 (修正 network 为 xhttp 并加入标准 xhttpSettings)
 cat > "${work_dir}/config.json" << EOF
 {
   "log": {
@@ -65,6 +65,7 @@ cat > "${work_dir}/config.json" << EOF
   "inbounds": [
     {
       "tag": "vless-xhttp",
+      "listen": "::",
       "port": $xhttp_port,
       "protocol": "vless",
       "settings": {
@@ -76,9 +77,10 @@ cat > "${work_dir}/config.json" << EOF
         "decryption": "none"
       },
       "streamSettings": {
-        "network": "splithttp",
+        "network": "xhttp",
         "security": "tls",
-        "splithttpSettings": {
+        "xhttpSettings": {
+          "mode": "auto",
           "path": "/${xhttp_path}"
         },
         "tlsSettings": {
@@ -128,14 +130,15 @@ EOF
 systemctl daemon-reload
 systemctl enable --now xray
 
-# 安全地放行防火墙 UDP 端口（避免粗暴 -I 规则导致整机断网）
+# 6. 放行防火墙端口 (TCP 与 UDP 双向放行)
 if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
     ufw allow ${xhttp_port}/tcp >/dev/null 2>&1
     ufw allow ${xhttp_port}/udp >/dev/null 2>&1
 fi
+iptables -A INPUT -p tcp --dport ${xhttp_port} -j ACCEPT 2>/dev/null
 iptables -A INPUT -p udp --dport ${xhttp_port} -j ACCEPT 2>/dev/null
 
-# 6. 获取 IP 并智能处理 IPv6 格式与 v2rayN 兼容的 xhttp 链接格式
+# 7. 获取 IP 并生成 v2rayN 兼容的 xhttp 链接格式
 raw_ip=$(curl -4 -sm 2 ip.sb || curl -6 -sm 2 ip.sb)
 if [[ "$raw_ip" =~ : ]]; then
     server_ip="[$raw_ip]"
@@ -149,31 +152,10 @@ cat > ${work_dir}/url.txt << EOF
 vless://${uuid}@${server_ip}:${xhttp_port}?encryption=none&security=tls&sni=bing.com&alpn=h3,h2&type=xhttp&path=/${xhttp_path}&allowInsecure=1#${isp}-XHTTP
 EOF
 
-base64 -w0 ${work_dir}/url.txt > ${work_dir}/sub.txt 2>/dev/null || base64 ${work_dir}/url.txt | tr -d '\n' > ${work_dir}/sub.txt
-chmod 644 ${work_dir}/sub.txt
-
-# 7. 配置 Nginx 托管订阅
-mkdir -p /etc/nginx/conf.d
-cat > /etc/nginx/conf.d/xray.conf << EOF
-server {
-    listen $nginx_port;
-    server_name _;
-    location = /$password {
-        alias ${work_dir}/sub.txt;
-        default_type 'text/plain; charset=utf-8';
-    }
-    location / { return 404; }
-}
-EOF
-
-nginx -t > /dev/null 2>&1 && (systemctl reload nginx || systemctl start nginx)
-
 # 8. 输出结果
 clear
 green "=========================================================================================="
-green " Xray XHTTP 纯净直连节点部署成功（已完美修复 H3 支持）！"
+green " Xray XHTTP 纯净直连节点部署成功（已修正 H3 底层标准配置）！"
 green "=========================================================================================="
 cat ${work_dir}/url.txt
 green "=========================================================================================="
-green " 订阅地址: http://${raw_ip}:${nginx_port}/${password}"
-green "==========================================================================================\n"
