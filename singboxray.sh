@@ -2,7 +2,7 @@
 
 # =========================
 # Xray XHTTP 纯净直连安装脚本 (singboxray.sh)
-# 协议: 仅保留 VLESS-XHTTP (支持 h2/h3)
+# 协议: 仅保留 VLESS-XHTTP (支持 h2/h3) - 完美修复版
 # =========================
 
 export LANG=en_US.UTF-8
@@ -55,7 +55,7 @@ password=$(< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 24)
 openssl ecparam -genkey -name prime256v1 -out "${work_dir}/private.key"
 openssl req -new -x509 -days 3650 -key "${work_dir}/private.key" -out "${work_dir}/cert.pem" -subj "/CN=bing.com"
 
-# 4. 生成极简纯净的 Xray 配置
+# 4. 生成 Xray 核心配置 (network 保持 splithttp 供内核底层识别)
 cat > "${work_dir}/config.json" << EOF
 {
   "log": {
@@ -125,12 +125,19 @@ EOF
 systemctl daemon-reload
 systemctl enable --now xray
 
-# 6. 获取 IP 并生成订阅信息
-server_ip=$(curl -4 -sm 2 ip.sb || curl -6 -sm 2 ip.sb)
+# 6. 获取 IP 并智能处理 IPv6 格式与 v2rayN 兼容的 xhttp 链接格式
+raw_ip=$(curl -4 -sm 2 ip.sb || curl -6 -sm 2 ip.sb)
+if [[ "$raw_ip" =~ : ]]; then
+    server_ip="[$raw_ip]"
+else
+    server_ip="$raw_ip"
+fi
+
 isp=$(curl -sm 3 "https://api.ip.sb/geoip" | grep -o '"country_code":"[^"]*"' | cut -d'"' -f4 || echo "Node")
 
+# 注意：这里将 type 写为 xhttp 并加上 allowInsecure=1，以便 v2rayN 正确识别
 cat > ${work_dir}/url.txt << EOF
-vless://${uuid}@${server_ip}:${xhttp_port}?encryption=none&security=tls&sni=bing.com&alpn=h3,h2&type=splithttp&path=/${xhttp_path}#${isp}-XHTTP
+vless://${uuid}@${server_ip}:${xhttp_port}?encryption=none&security=tls&sni=bing.com&alpn=h3,h2&type=xhttp&path=/${xhttp_path}&allowInsecure=1#${isp}-XHTTP
 EOF
 
 base64 -w0 ${work_dir}/url.txt > ${work_dir}/sub.txt 2>/dev/null || base64 ${work_dir}/url.txt | tr -d '\n' > ${work_dir}/sub.txt
@@ -159,5 +166,5 @@ green " Xray XHTTP 纯净直连节点部署成功！"
 green "=========================================================================================="
 cat ${work_dir}/url.txt
 green "=========================================================================================="
-green " 订阅地址: http://${server_ip}:${nginx_port}/${password}"
+green " 订阅地址: http://${raw_ip}:${nginx_port}/${password}"
 green "==========================================================================================\n"
