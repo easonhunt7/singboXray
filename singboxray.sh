@@ -41,7 +41,7 @@ systemctl stop caddy nginx 2>/dev/null || true
 yellow "正在更新系统并安装必要组件..."
 apt update && apt install -y curl wget jq unzip openssl nginx 2>/dev/null || yum install -y curl wget jq unzip openssl nginx 2>/dev/null
 
-# 2. 下载带有 naiveproxy 插件的官方 Caddy 二进制文件
+# 2. 下载带有 naiveproxy (forwardproxy) 插件的官方 Caddy 二进制文件
 mkdir -p "${work_dir}"
 ARCH_RAW=$(uname -m)
 case "${ARCH_RAW}" in
@@ -50,24 +50,30 @@ case "${ARCH_RAW}" in
     *) ARCH='amd64' ;;
 esac
 
-yellow "正在下载带 NaiveProxy 模块的 Caddy 服务端..."
-curl -sLo "${work_dir}/caddy" "https://github.com/klzgrad/naiveproxy/releases/latest/download/naiveproxy-v130.0.6723.58-1-linux-${ARCH}.tar.xz" || true
-
-# 如果官方带插件的完整包无法直接提取，备用通用下载点：
-if [ ! -f "${work_dir}/caddy" ]; then
-    curl -sLo "${work_dir}/caddy" "https://caddyserver.com/api/download?os=linux&arch=${ARCH}&p=github.com%2Fcaddyserver%2Fforwardproxy"
-fi
+yellow "正在通过官方 API 下载编译包含 NaiveProxy 模块的 Caddy..."
+curl -sLo "${work_dir}/caddy" "https://caddyserver.com/api/download?os=linux&arch=${ARCH}&p=github.com%2Fcaddyserver%2Fforwardproxy"
 chmod +x ${work_dir}/caddy
+
+# 验证二进制文件是否下载成功
+if ! file "${work_dir}/caddy" | grep -q "ELF"; then
+    red "错误: Caddy 二进制文件下载失败或格式不正确，请检查网络后重试！"
+    exit 1
+fi
 
 # 3. 生成 NaiveProxy 认证账号密码与订阅路径
 user=$(< /dev/urandom tr -dc 'a-z0-9' | head -c 8)
 pass=$(< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 16)
 password=$(< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 24)
 
-# 4. 生成 Caddyfile 配置 (自动申领 Let's Encrypt / ZeroSSL 正规证书，原生开启 H2/H3)
+# 4. 生成 Caddyfile 配置 (自动申领正规证书，全局开启 H3 / QUIC)
 cat > "${work_dir}/Caddyfile" << EOF
 {
     admin off
+    servers {
+        protocol {
+            experimental_http3
+        }
+    }
 }
 
 :443, ${DOMAIN}:443 {
@@ -138,7 +144,7 @@ green "=========================================================================
 green " NaiveProxy (Caddy H2/H3) 纯净节点部署成功！"
 green "=========================================================================================="
 green " 域名: ${DOMAIN}"
-green " 端口: 443 (TCP / UDP H3 原生支持)"
+green " 端口: 443 (TCP H2 / UDP H3 原生支持)"
 green " 用户名: ${user}"
 green " 密码: ${pass}"
 green "=========================================================================================="
