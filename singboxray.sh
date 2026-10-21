@@ -1,6 +1,14 @@
-cat << 'EOF' > singboxray.sh
 #!/usr/bin/env bash
 export LANG=en_US.UTF-8
+
+# =========================================================================
+# 参数映射：
+# $1: nvpt -> NaiveProxy 直连 ("y"=随机端口，数字=指定端口，""/n=不部署)
+# $2: xhpt -> Xray xhttp 直连 ("y"=随机端口，数字=指定端口，""/n=不部署)
+# $3: ARGO_PORT -> Argo 回源端口 (留空则默认 8001)
+# $4: ARGO_DOMAIN -> Argo 固定隧道域名 (必须有 Domain + Token 才会部署 Argo)
+# $5: ARGO_AUTH -> Argo 固定隧道 Token
+# =========================================================================
 
 nvpt="${1:-}"
 xhpt="${2:-}"
@@ -8,11 +16,12 @@ ARGO_PORT="${3:-8001}"
 ARGO_DOMAIN="${4:-}"
 ARGO_AUTH="${5:-}"
 
-ARGO_PROTOCOL="${ARGO_PROTOCOL:-quic}"
-ARGO_CONNECTIONS="${ARGO_CONNECTIONS:-1}"
-CFIP="${CFIP:-www.teamviewer.com}"
-CFPORT="${CFPORT:-443}"
+ARGO_PROTOCOL="${ARGO_PROTOCOL:-quic}"      
+ARGO_CONNECTIONS="${ARGO_CONNECTIONS:-1}"   
+CFIP="${CFIP:-www.teamviewer.com}"          
+CFPORT="${CFPORT:-443}"                     
 
+# 颜色定义
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -21,16 +30,8 @@ info() { echo -e "${GREEN}[INFO] $1${NC}"; }
 warn() { echo -e "${YELLOW}[WARN] $1${NC}"; }
 error() { echo -e "${RED}[ERROR] $1${NC}"; exit 1; }
 
+# 检查权限
 [ "$EUID" -ne 0 ] && error "请使用 root 权限运行此脚本！"
-
-# 防内存溢出：如果内存较小且没有 Swap，自动创建一个 1GB 的 Swap 虚拟内存
-if [ $(free -m | awk '/Swap:/ {print $2}') -eq 0 ]; then
-    info "检测到系统无 Swap 内存，正在临时创建 1GB Swap 防止 OOM 崩溃..."
-    fallocate -l 1G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=1024
-    chmod 600 /swapfile
-    mkswap /swapfile
-    swapon /swapfile
-fi
 
 case $(uname -m) in
     arm64|aarch64) cpu=arm64 ;;
@@ -42,7 +43,7 @@ INSTALL_DIR="/etc/easyshare"
 mkdir -p "$INSTALL_DIR/cert"
 cd "$INSTALL_DIR" || exit
 
-info "检查并精简安装基础依赖..."
+info "检查并安装基础依赖..."
 if command -v apk >/dev/null 2>&1; then
     apk update >/dev/null 2>&1 && apk add --no-cache bash curl wget openssl jq >/dev/null 2>&1
 elif command -v apt >/dev/null 2>&1; then
@@ -67,15 +68,17 @@ fi
 UUID=$(echo "$UUID" | tr '[:upper:]' '[:lower:]')
 XHTTP_PATH="/${UUID}-xhttp"
 
+# 【安全进程清理】使用 -x 精确匹配，防止把当前 Shell 脚本杀掉
 info "清理残留进程..."
 systemctl stop singbox xray cloudflared 2>/dev/null
-pkill -9 -f sing-box 2>/dev/null
-pkill -9 -f xray 2>/dev/null
-pkill -9 -f cloudflared 2>/dev/null
+pkill -9 -x sing-box 2>/dev/null
+pkill -9 -x xray 2>/dev/null
+pkill -9 -x cloudflared 2>/dev/null
 
 SB_VER="1.11.4"
 XRAY_VER="25.1.30"
 
+# 下载 Sing-box (用于 NaiveProxy)
 if [ -n "$nvpt" ] && [ "$nvpt" != "n" ] && [ "$nvpt" != "N" ]; then
     if [ ! -f "sing-box" ]; then
         info "正在下载 Sing-box v$SB_VER..."
@@ -86,6 +89,7 @@ if [ -n "$nvpt" ] && [ "$nvpt" != "n" ] && [ "$nvpt" != "N" ]; then
     fi
 fi
 
+# 下载 Xray-core (用于 xhttp 直连或 Argo 隧道)
 if ([ -n "$xhpt" ] && [ "$xhpt" != "n" ] && [ "$xhpt" != "N" ]) || ([ -n "$ARGO_DOMAIN" ] && [ -n "$ARGO_AUTH" ]); then
     if [ ! -f "xray" ]; then
         info "正在下载 Xray-core v$XRAY_VER..."
@@ -104,6 +108,7 @@ if ([ -n "$xhpt" ] && [ "$xhpt" != "n" ] && [ "$xhpt" != "N" ]) || ([ -n "$ARGO_
     fi
 fi
 
+# 下载 Cloudflared
 if [ -n "$ARGO_DOMAIN" ] && [ -n "$ARGO_AUTH" ]; then
     if [ ! -f "cloudflared" ]; then
         info "正在下载 Cloudflared..."
@@ -112,6 +117,7 @@ if [ -n "$ARGO_DOMAIN" ] && [ -n "$ARGO_AUTH" ]; then
     fi
 fi
 
+# 生成自签 TLS 证书
 if [ ! -f "cert/cert.pem" ] || [ ! -f "cert/private.key" ]; then
     info "正在生成自签名 TLS 证书..."
     openssl ecparam -genkey -name prime256v1 -out cert/private.key 2>/dev/null
@@ -123,14 +129,17 @@ GLOBAL_LINKS=""
 HAS_SINGBOX=false
 HAS_XRAY=false
 
+# =========================================================================
+# 1. 配置 NaiveProxy 直连 (Sing-box)
+# =========================================================================
 if [ -n "$nvpt" ] && [ "$nvpt" != "n" ] && [ "$nvpt" != "N" ]; then
-    if [ "$nvpt" = "y" ] || [ "$nvpt" = "Y" ]; then
+    if [ "$nvpt" = "y" ] \vert{}\vert{} [ "$nvpt" = "Y" ]; then
         NAIVE_PORT=$(shuf -i 10000-65535 -n 1)
     else
         NAIVE_PORT="$nvpt"
     fi
     
-    info "已启用 NaiveProxy (Sing-box 内核)，监听端口: $NAIVE_PORT"
+    info "已启用 NaiveProxy (Sing-box)，监听端口: $NAIVE_PORT"
     HAS_SINGBOX=true
     
 cat > singbox_config.json <<EOF
@@ -163,14 +172,62 @@ EOF
     GLOBAL_LINKS+="$NAIVE_LINK\n"
 fi
 
+# =========================================================================
+# 2. 配置 Xray xHTTP 直连 或 Argo 回源
+# =========================================================================
+XRAY_INBOUNDS=""
+
+# 直连 xHTTP 节点
+if [ -n "$xhpt" ] && [ "$xhpt" != "n" ] && [ "$xhpt" != "N" ]; then
+    if [ "$xhpt" = "y" ] \vert{}\vert{} [ "$xhpt" = "Y" ]; then
+        XHTTP_PORT=$(shuf -i 10000-65535 -n 1)
+    else
+        XHTTP_PORT="$xhpt"
+    fi
+    
+    info "已启用 Xray xHTTP 直连，监听端口: $XHTTP_PORT"
+    HAS_XRAY=true
+    
+    XHTTP_DIRECT_INBOUND=$(cat <<EOF
+    {
+      "port": ${XHTTP_PORT},
+      "listen": "::",
+      "protocol": "vless",
+      "settings": {
+        "clients": [{ "id": "${UUID}" }],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "tls",
+        "tlsSettings": {
+          "alpn": ["h3", "h2"],
+          "certificates": [{
+            "certificateFile": "$INSTALL_DIR/cert/cert.pem",
+            "keyFile": "$INSTALL_DIR/cert/private.key"
+          }]
+        },
+        "xhttpSettings": {
+          "path": "/${UUID}-direct",
+          "mode": "auto"
+        }
+      }
+    }
+EOF
+)
+    XRAY_INBOUNDS="$XHTTP_DIRECT_INBOUND"
+    
+    DIRECT_H2="vless://${UUID}@${PUBLIC_IP}:${XHTTP_PORT}?encryption=none&security=tls&alpn=h2&sni=bing.com&fp=chrome&type=xhttp&mode=auto&path=\%2F${UUID}-direct&allowInsecure=1#xHTTP_Direct_H2"
+    DIRECT_H3="vless://${UUID}@${PUBLIC_IP}:${XHTTP_PORT}?encryption=none&security=tls&alpn=h3&sni=bing.com&fp=chrome&type=xhttp&mode=auto&path=\%2F${UUID}-direct&allowInsecure=1#xHTTP_Direct_H3"
+    GLOBAL_LINKS+="$DIRECT_H2\n$DIRECT_H3\n"
+fi
+
+# Argo 隧道回源节点
 if [ -n "$ARGO_DOMAIN" ] && [ -n "$ARGO_AUTH" ]; then
     HAS_XRAY=true
-    info "检测到完整的 Argo 隧道变量，准备配置 Xray xhttp 回源..."
-
-cat > xray_config.json <<EOF
-{
-  "log": { "loglevel": "none" },
-  "inbounds": [
+    info "已启用 Xray xHTTP (Argo 隧道回源)，监听端口: $ARGO_PORT"
+    
+    ARGO_INBOUND=$(cat <<EOF
     {
       "port": ${ARGO_PORT},
       "listen": "127.0.0.1",
@@ -189,83 +246,13 @@ cat > xray_config.json <<EOF
         }
       }
     }
-  ],
-  "outbounds": [{ "protocol": "freedom", "tag": "direct" }]
-}
 EOF
+)
+    if [ -n "$XRAY_INBOUNDS" ]; then
+        XRAY_INBOUNDS="$XRAY_INBOUNDS,$ARGO_INBOUND"
+    else
+        XRAY_INBOUNDS="$ARGO_INBOUND"
+    fi
 
     ARGO_LINK_H2="vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&alpn=h2&sni=${ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=auto&host=${ARGO_DOMAIN}&path=$(echo -n "$XHTTP_PATH" | jq -sRr @uri)#xHTTP_Argo_H2"
-    ARGO_LINK_H3="vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&alpn=h3&sni=${ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=auto&host=${ARGO_DOMAIN}&path=$(echo -n "$XHTTP_PATH" | jq -sRr @uri)#xHTTP_Argo_H3"
-    GLOBAL_LINKS+="$ARGO_LINK_H2\n$ARGO_LINK_H3\n"
-fi
-
-if [ "$HAS_SINGBOX" = true ]; then
-    cat <<EOF > /etc/systemd/system/singbox.service
-[Unit]
-Description=Sing-box Service (NaiveProxy)
-After=network.target
-[Service]
-Type=simple
-WorkingDirectory=$INSTALL_DIR
-ExecStart=$INSTALL_DIR/sing-box run -c $INSTALL_DIR/singbox_config.json
-Restart=on-failure
-RestartSec=5
-[Install]
-WantedBy=multi-user.target
-EOF
-    systemctl daemon-reload
-    systemctl enable --now singbox
-    info "Sing-box 服务已成功启动！"
-fi
-
-if [ "$HAS_XRAY" = true ]; then
-    cat <<EOF > /etc/systemd/system/xray.service
-[Unit]
-Description=Xray Service (Argo xHTTP)
-After=network.target
-[Service]
-Type=simple
-WorkingDirectory=$INSTALL_DIR
-ExecStart=$INSTALL_DIR/xray run -c $INSTALL_DIR/xray_config.json
-Restart=on-failure
-RestartSec=5
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    cat <<EOF > /etc/systemd/system/cloudflared.service
-[Unit]
-Description=Cloudflare Tunnel Service
-After=network.target
-[Service]
-Type=simple
-WorkingDirectory=$INSTALL_DIR
-ExecStart=$INSTALL_DIR/cloudflared tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol ${ARGO_PROTOCOL} --ha-connections ${ARGO_CONNECTIONS} run --token ${ARGO_AUTH}
-Restart=on-failure
-RestartSec=5
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    systemctl daemon-reload
-    systemctl enable --now xray
-    systemctl enable --now cloudflared
-    info "Xray 与 Cloudflared 隧道服务已成功启动！"
-fi
-
-if [ -n "$GLOBAL_LINKS" ]; then
-    BASE64_SUB=$(echo -e "$GLOBAL_LINKS" | base64 | tr -d '\n')
-    echo "$BASE64_SUB" > "$INSTALL_DIR/sub.txt"
-    
-    echo -e "\n====================== 节点部署完成 ======================"
-    echo -e "${GREEN}订阅文件已保存至: $INSTALL_DIR/sub.txt${NC}"
-    echo -e "----------------------------------------------------------"
-    echo -e "${YELLOW}【Base64 订阅链接】:${NC}"
-    echo "$BASE64_SUB"
-    echo -e "=========================================================="
-else
-    warn "未部署任何有效节点，请检查入参！"
-fi
-EOF
-chmod +x singboxray.sh
-./singboxray.sh "y" "" "" "your-domain.com" "your-argo-token"
+    ARGO_LINK_H
