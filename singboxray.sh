@@ -235,7 +235,7 @@ isp=$(curl -sm 3 "https://api.ip.sb/geoip" | grep -o '"country_code":"[^"]*"' | 
 [ -n "$h3_port" ] && echo "vless://${uuid}@${server_ip}:${h3_port}?encryption=none&security=tls&sni=bing.com&alpn=h3&type=xhttp&path=/${h3_path}&allowInsecure=1#${isp}-XHTTP-H3" >> "${work_dir}/url.txt"
 [ -n "$h2_port" ] && echo "vless://${uuid}@${server_ip}:${h2_port}?encryption=none&security=tls&sni=bing.com&alpn=h2&type=xhttp&path=/${h2_path}&allowInsecure=1#${isp}-XHTTP-H2" >> "${work_dir}/url.txt"
 
-base64_str=$(base64 -w0 "${work_dir}/url.txt" 2>/dev/null || base64 "${work_dir}/url.txt" | tr -d '\n')
+base64_str=$(cat "${work_dir}/url.txt" | base64 | tr -d '\n' | tr -d '\r')
 
 clear
 green "=========================================================================================="
