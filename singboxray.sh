@@ -1,311 +1,344 @@
-#!/usr/bin/env bash
+#!/bin/bash
+
+# =========================
+# Xray XHTTP 直连 & Argo 四合一安装脚本 (singboxray.sh)
+# 协议: VLESS-XHTTP (支持 h2/h3) + VMess-WS-Argo 备份
+# =========================
+
 export LANG=en_US.UTF-8
+re="\033[0m"
+red="\033[1;91m"
+green="\e[1;32m"
+yellow="\e[1;33m"
+purple="\e[1;35m"
+skyblue="\e[1;36m"
+red() { echo -e "\e[1;91m$1\033[0m"; }
+green() { echo -e "\e[1;32m$1\033[0m"; }
+yellow() { echo -e "\e[1;33m$1\033[0m"; }
+purple() { echo -e "\e[1;35m$1\033[0m"; }
+skyblue() { echo -e "\e[1;36m$1\033[0m"; }
+reading() { read -p "$(red "$1")" "$2"; }
 
-# =========================================================================
-# 兼容管道执行与本地执行的双保险传参：
-# $1: nvpt -> NaiveProxy 变量 ("y"=随机端口，数字=指定端口，""=不部署)
-# $2: xhpt -> Xray xHTTP 直连 ("y"=随机端口，数字=指定端口，""=不部署)
-# $3: ARGO_PORT -> Argo 回源端口 (默认 8001)
-# $4: ARGO_DOMAIN -> Argo 域名
-# $5: ARGO_AUTH -> Argo Token
-# =========================================================================
-nvpt="${1:-}"
-xhpt="${2:-}"
-ARGO_PORT="${3:-8001}"
-ARGO_DOMAIN="${4:-}"
-ARGO_AUTH="${5:-}"
+# 接收并解析命令行参数 (-i / n / y / 端口数字)
+INPUT_ARG="$1"
+[ "$1" = "-i" ] && INPUT_ARG="$2"
 
-ARGO_PROTOCOL="${ARGO_PROTOCOL:-quic}"
-ARGO_CONNECTIONS="${ARGO_CONNECTIONS:-1}"
-CFIP="${CFIP:-www.teamviewer.com}"
-CFPORT="${CFPORT:-443}"
-
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
-info() { echo -e "${GREEN}[INFO] $1${NC}"; }
-warn() { echo -e "${YELLOW}[WARN] $1${NC}"; }
-error() { echo -e "${RED}[ERROR] $1${NC}"; exit 1; }
-
-[ "$EUID" -ne 0 ] && error "请使用 root 权限运行此脚本！"
-
-case $(uname -m) in
-    arm64|aarch64) cpu=arm64; x_cpu="arm64-v8a" ;;
-    amd64|x86_64) cpu=amd64; x_cpu="64" ;;
-    *) error "目前脚本不支持 $(uname -m) 架构" ;;
-esac
-
-INSTALL_DIR="/etc/easyshare"
-mkdir -p "$INSTALL_DIR/cert"
-cd "$INSTALL_DIR" || exit
-
-info "初始化运行环境..."
-
-# 获取公网 IP
-get_public_ip() {
-    local ip
-    ip=$(curl -s4m 3 https://api.ipify.org || wget -4qO- https://api.ipify.org 2>/dev/null)
-    [ -z "$ip" ] && ip="127.0.0.1"
-    echo "$ip"
-}
-PUBLIC_IP=$(get_public_ip)
-
-if [ ! -f "uuid.txt" ]; then
-    UUID=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || cat /dev/urandom | tr -dc 'a-f0-9' | fold -w 32 | head -n 1)
-    echo "$UUID" > uuid.txt
+if [ "$INPUT_ARG" = "n" ] || [ "$INPUT_ARG" = "N" ]; then
+    yellow "已根据指令取消部署。"
+    exit 0
+elif [ "$INPUT_ARG" = "y" ] || [ "$INPUT_ARG" = "Y" ]; then
+    export xhttp_port=$(shuf -i 1000-65000 -n 1)
+elif [[ "$INPUT_ARG" =~ ^[0-9]+$ ]]; then
+    export xhttp_port="$INPUT_ARG"
 else
-    UUID=$(cat uuid.txt)
+    export xhttp_port=${PORT:-$(shuf -i 1000-65000 -n 1)}
 fi
-UUID=$(echo "$UUID" | tr '[:upper:]' '[:lower:]')
-XHTTP_PATH="/${UUID}-xhttp"
 
-info "清理残留进程..."
-if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
-    systemctl stop singbox xray cloudflared 2>/dev/null
-fi
-pkill -9 -x sing-box 2>/dev/null
-pkill -9 -x xray 2>/dev/null
-pkill -9 -x cloudflared 2>/dev/null
+# 定义常量
+server_name="xray"
+work_dir="/etc/xray"
+client_dir="${work_dir}/url.txt"
+export CFIP=${CFIP:-'cdns.doon.eu.org'} 
+export ARGO_PORT='8001' 
+export CFPORT=${CFPORT:-'443'} 
 
-SB_VER="1.11.4"
-XRAY_VER="25.1.30"
+# 检查是否为root下运行
+[[ $EUID -ne 0 ]] && red "请在root用户下运行脚本，可输入 sudo -i 回车切换到root用户" && exit 1
 
-download_file() {
-    local url="$1"
-    local output="$2"
-    if command -v curl >/dev/null 2>&1; then
-        curl -L -o "$output" -# --retry 2 "$url"
-    elif command -v wget >/dev/null 2>&1; then
-        wget -O "$output" --tries=2 "$url"
-    else
-        error "系统中未找到 curl 或 wget！"
-    fi
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
 }
 
-if [ -n "$nvpt" ] && [ "$nvpt" != "n" ] && [ "$nvpt" != "N" ]; then
-    if [ ! -f "sing-box" ]; then
-        info "正在下载 Sing-box v$SB_VER..."
-        download_file "https://github.com/SagerNet/sing-box/releases/download/v${SB_VER}/sing-box-${SB_VER}-linux-${cpu}.tar.gz" "singbox.tar.gz"
-        tar -xzf singbox.tar.gz --wildcards "*/sing-box" --strip-components=1 2>/dev/null || tar -xzf singbox.tar.gz sing-box 2>/dev/null
-        [ -f "sing-box" ] && chmod +x sing-box
-        rm -f singbox.tar.gz
-    fi
-fi
-
-ENABLE_ARGO=false
-domainTrim="$(echo "$ARGO_DOMAIN" | xargs)"
-authTrim="$(echo "$ARGO_AUTH" | xargs)"
-portTrim="$(echo "$ARGO_PORT" | xargs)"
-
-if [ -n "$portTrim" ] && [ "$portTrim" != "0" ] && [ -n "$domainTrim" ] && [ "${#authTrim}" -gt 30 ]; then
-    ENABLE_ARGO=true
-fi
-
-if ([ -n "$xhpt" ] && [ "$xhpt" != "n" ] && [ "$xhpt" != "N" ]) || [ "$ENABLE_ARGO" = true ]; then
-    if [ ! -f "xray" ]; then
-        info "正在下载 Xray-core v$XRAY_VER..."
-        download_file "https://github.com/XTLS/Xray-core/releases/download/v${XRAY_VER}/Xray-linux-${x_cpu}.zip" "xray.zip"
-        if command -v python3 &>/dev/null; then
-            python3 -c "import zipfile; zipfile.ZipFile('xray.zip').extract('xray', '.')"
-        elif command -v unzip &>/dev/null; then
-            unzip -qo xray.zip xray
-        fi
-        [ -f "xray" ] && chmod +x xray
-        rm -f xray.zip
-    fi
-fi
-
-if [ "$ENABLE_ARGO" = true ]; then
-    if [ ! -f "cloudflared" ]; then
-        info "正在下载 Cloudflared..."
-        download_file "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${cpu}" "cloudflared"
-        chmod +x cloudflared
-    fi
-fi
-
-if [ ! -f "cert/cert.pem" ] || [ ! -f "cert/private.key" ]; then
-    info "正在生成自签名证书..."
-    openssl ecparam -genkey -name prime256v1 -out cert/private.key 2>/dev/null
-    openssl req -new -x509 -days 3650 -key cert/private.key -out cert/cert.pem -subj "/CN=bing.com" 2>/dev/null
-    chmod 600 cert/private.key
-fi
-
-GLOBAL_LINKS=""
-HAS_SINGBOX=false
-HAS_XRAY=false
-
-if [ -n "$nvpt" ] && [ "$nvpt" != "n" ] && [ "$nvpt" != "N" ]; then
-    if [ "$nvpt" = "y" ] || [ "$nvpt" = "Y" ]; then
-        NAIVE_PORT=$(shuf -i 10000-65535 -n 1)
+check_service() {
+    local service_name=$1
+    local service_file=$2
+    [[ ! -f "${service_file}" ]] && { red "not installed"; return 2; }
+    if command_exists apk; then
+        rc-service "${service_name}" status | grep -q "started" && green "running" || yellow "not running"
     else
-        NAIVE_PORT="$nvpt"
+        systemctl is-active "${service_name}" | grep -q "^active$" && green "running" || yellow "not running"
     fi
-    info "已配置 NaiveProxy，端口: $NAIVE_PORT"
-    HAS_SINGBOX=true
-    
-cat > singbox_config.json <<EOF
+    return $?
+}
+
+check_xray() {
+    check_service "xray" "${work_dir}/xray"
+}
+
+check_argo() {
+    check_service "argo" "${work_dir}/argo"
+}
+
+manage_packages() {
+    if [ $# -lt 2 ]; then return 1; fi
+    action=$1; shift
+    if [ "$action" == "install" ] && [ ! -d "$work_dir" ]; then
+        yellow "正在更新系统软件包...\n"
+        if command_exists apt; then
+            DEBIAN_FRONTEND=noninteractive apt update -y
+        elif command_exists dnf || command_exists yum; then
+            yum update -y || dnf update -y
+        elif command_exists apk; then
+            apk update
+        fi
+    fi
+    for package in "$@"; do
+        if [ "$action" == "install" ]; then
+            command_exists "$package" && continue
+            yellow "正在安装 ${package}..."
+            if command_exists apt; then
+                DEBIAN_FRONTEND=noninteractive apt install -y "$package"
+            elif command_exists dnf; then
+                dnf install -y "$package"
+            elif command_exists yum; then
+                yum install -y "$package"
+            elif command_exists apk; then
+                apk add "$package"
+            fi
+        fi
+    done
+}
+
+get_realip() {
+    ip=$(curl -4 -sm 2 ip.sb)
+    ipv6() { curl -6 -sm 2 ip.sb; }
+    [ -z "$ip" ] && echo "[$(ipv6)]" || echo "$ip"
+}
+
+allow_port() {
+    has_ufw=0; has_firewalld=0; has_iptables=0
+    command_exists ufw && has_ufw=1
+    command_exists firewall-cmd && systemctl is-active firewalld >/dev/null 2>&1 && has_firewalld=1
+    command_exists iptables && has_iptables=1
+
+    for rule in "$@"; do
+        port=${rule%/*}; proto=${rule#*/}
+        [ "$has_ufw" -eq 1 ] && ufw allow in ${port}/${proto} >/dev/null 2>&1
+        [ "$has_firewalld" -eq 1 ] && firewall-cmd --permanent --add-port=${port}/${proto} >/dev/null 2>&1
+        [ "$has_iptables" -eq 1 ] && (iptables -C INPUT -p ${proto} --dport ${port} -j ACCEPT 2>/dev/null || iptables -I INPUT 4 -p ${proto} --dport ${port} -j ACCEPT)
+    done
+    [ "$has_firewalld" -eq 1 ] && firewall-cmd --reload >/dev/null 2>&1
+}
+
+# 安装 Xray 和 cloudflared (argo)
+install_xray() {
+    clear
+    purple "正在安装 Xray-core 及依赖中，请稍后..."
+    ARCH_RAW=$(uname -m)
+    case "${ARCH_RAW}" in
+        'x86_64' | 'amd64')  ARCH='64' ;;
+        'aarch64' | 'arm64') ARCH='arm64-v8a' ;;
+        'armv7l')  ARCH='arm32-v7a' ;;
+        *) red "不支持的架构: ${ARCH_RAW}"; exit 1 ;;
+    es-raw=... 2>/dev/null || true
+
+    [ ! -d "${work_dir}" ] && mkdir -p "${work_dir}" && chmod 777 "${work_dir}"
+
+    # 下载 Xray 官方发布包并解压
+    curl -sLo "${work_dir}/xray.zip" "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${ARCH}.zip"
+    unzip -qo "${work_dir}/xray.zip" -d "${work_dir}/"
+    rm -f "${work_dir}/xray.zip"
+
+    # 下载 Argo 和 qrencode
+    curl -sLo "${work_dir}/argo" "https://$(uname -m | grep -q 'x86_64' && echo 'amd64' || echo 'arm64').eooce.com/bot" 2>/dev/null || \
+    curl -sLo "${work_dir}/argo" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
+    curl -sLo "${work_dir}/qrencode" "https://raw.githubusercontent.com/eooce/test/master/qrencode" 2>/dev/null || true
+
+    chmod +x ${work_dir}/xray ${work_dir}/argo ${work_dir}/qrencode 2>/dev/null || true
+
+    nginx_port=$(($xhttp_port + 1))
+    uuid=$(cat /proc/sys/kernel/random/uuid)
+    xhttp_path=$(< /dev/urandom tr -dc 'a-z0-9' | head -c 8)
+
+    # 放行 XHTTP 端口（TCP + UDP 用于 H3/QUIC）以及订阅端口
+    allow_port $xhttp_port/tcp $xhttp_port/udp $nginx_port/tcp > /dev/null 2>&1
+
+    # 生成自签证书供 XHTTP TLS / H3 使用
+    openssl ecparam -genkey -name prime256v1 -out "${work_dir}/private.key"
+    openssl req -new -x509 -days 3650 -key "${work_dir}/private.key" -out "${work_dir}/cert.pem" -subj "/CN=bing.com"
+
+    password=$(< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 24)
+
+    # 生成 Xray 核心配置文件 config.json
+    cat > "${work_dir}/config.json" << EOF
 {
-  "log": { "level": "error" },
+  "log": {
+    "loglevel": "warning",
+    "error": "${work_dir}/xray.log"
+  },
   "inbounds": [
     {
-      "type": "naive",
-      "tag": "naive-in",
-      "listen": "::",
-      "listen_port": ${NAIVE_PORT},
-      "users": [{ "username": "${UUID}", "password": "${UUID}" }],
-      "tls": {
-        "enabled": true,
-        "certificate_path": "$INSTALL_DIR/cert/cert.pem",
-        "key_path": "$INSTALL_DIR/cert/private.key",
-        "alpn": ["h3", "h2"]
+      "tag": "vless-xhttp",
+      "port": $xhttp_port,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "$uuid"
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "splithttp",
+        "security": "tls",
+        "splithttpSettings": {
+          "path": "/${xhttp_path}"
+        },
+        "tlsSettings": {
+          "serverName": "bing.com",
+          "alpn": ["h2", "h3"],
+          "certificates": [
+            {
+              "certificateFile": "${work_dir}/cert.pem",
+              "keyFile": "${work_dir}/private.key"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tag": "vmess-ws",
+      "port": ${ARGO_PORT},
+      "protocol": "vmess",
+      "settings": {
+        "clients": [
+          {
+            "id": "$uuid"
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "ws",
+        "wsSettings": {
+          "path": "/vmess-argo"
+        }
       }
     }
   ],
-  "outbounds": [{ "type": "direct", "tag": "direct" }]
+  "outbounds": [
+    {
+      "tag": "direct",
+      "protocol": "freedom"
+    }
+  ]
 }
 EOF
-    GLOBAL_LINKS+="naive+https://${UUID}:${UUID}@${PUBLIC_IP}:${NAIVE_PORT}?sni=bing.com&alpn=h3,h2&allowInsecure=1#NaiveProxy_Direct\n"
-fi
-
-XRAY_INBOUNDS=""
-
-if [ -n "$xhpt" ] && [ "$xhpt" != "n" ] && [ "$xhpt" != "N" ]; then
-    if [ "$xhpt" = "y" ] || [ "$xhpt" = "Y" ]; then
-        XHTTP_PORT=$(shuf -i 10000-65535 -n 1)
-    else
-        XHTTP_PORT="$xhpt"
-    fi
-    info "已配置 Xray xHTTP 直连，端口: $XHTTP_PORT"
-    HAS_XRAY=true
-    
-    XHTTP_DIRECT_INBOUND=$(cat <<EOF
-    {
-      "port": ${XHTTP_PORT},
-      "listen": "::",
-      "protocol": "vless",
-      "settings": { "clients": [{ "id": "${UUID}" }], "decryption": "none" },
-      "streamSettings": {
-        "network": "xhttp",
-        "security": "tls",
-        "tlsSettings": {
-          "alpn": ["h3", "h2"],
-          "certificates": [{ "certificateFile": "$INSTALL_DIR/cert/cert.pem", "keyFile": "$INSTALL_DIR/cert/private.key" }]
-        },
-        "xhttpSettings": { "path": "/${UUID}-direct", "mode": "auto" }
-      }
-    }
-EOF
-)
-    XRAY_INBOUNDS="$XHTTP_DIRECT_INBOUND"
-    GLOBAL_LINKS+="vless://${UUID}@${PUBLIC_IP}:${XHTTP_PORT}?encryption=none&security=tls&alpn=h2&sni=bing.com&fp=chrome&type=xhttp&mode=auto&path=%2F${UUID}-direct&allowInsecure=1#xHTTP_Direct_H2\n"
-    GLOBAL_LINKS+="vless://${UUID}@${PUBLIC_IP}:${XHTTP_PORT}?encryption=none&security=tls&alpn=h3&sni=bing.com&fp=chrome&type=xhttp&mode=auto&path=%2F${UUID}-direct&allowInsecure=1#xHTTP_Direct_H3\n"
-fi
-
-if [ "$ENABLE_ARGO" = true ]; then
-    HAS_XRAY=true
-    info "已启用 Xray xHTTP (Argo 回源)，端口: $ARGO_PORT"
-    
-    ARGO_INBOUND=$(cat <<EOF
-    {
-      "port": ${ARGO_PORT},
-      "listen": "127.0.0.1",
-      "protocol": "vless",
-      "settings": { "clients": [{ "id": "${UUID}" }], "decryption": "none" },
-      "streamSettings": {
-        "network": "xhttp",
-        "security": "none",
-        "xhttpSettings": { "path": "${XHTTP_PATH}", "mode": "auto", "scMaxConcurrentStreams": 16 }
-      }
-    }
-EOF
-)
-    if [ -n "$XRAY_INBOUNDS" ]; then
-        XRAY_INBOUNDS="$XRAY_INBOUNDS, $ARGO_INBOUND"
-    else
-        XRAY_INBOUNDS="$ARGO_INBOUND"
-    fi
-
-    ENCODED_PATH=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${XHTTP_PATH}'))" 2>/dev/null || echo "${XHTTP_PATH}")
-
-    GLOBAL_LINKS+="vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&alpn=h2&sni=${domainTrim}&fp=chrome&type=xhttp&mode=auto&host=${domainTrim}&path=${ENCODED_PATH}#xHTTP_Argo_H2\n"
-    GLOBAL_LINKS+="vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&alpn=h3&sni=${domainTrim}&fp=chrome&type=xhttp&mode=auto&host=${domainTrim}&path=${ENCODED_PATH}#xHTTP_Argo_H3\n"
-fi
-
-if [ "$HAS_XRAY" = true ]; then
-cat > xray_config.json <<EOF
-{
-  "log": { "loglevel": "none" },
-  "inbounds": [ $XRAY_INBOUNDS ],
-  "outbounds": [{ "protocol": "freedom", "tag": "direct" }]
 }
-EOF
-fi
 
-if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
-    [ "$HAS_SINGBOX" = true ] && cat <<EOF > /etc/systemd/system/singbox.service
+# Systemd 守护进程配置
+main_systemd_services() {
+    cat > /etc/systemd/system/xray.service << EOF
 [Unit]
-Description=Sing-box Service (NaiveProxy)
-After=network.target
+Description=Xray Service
+Documentation=https://github.com/xtls
+After=network.target nss-lookup.target
+
 [Service]
-Type=simple
-WorkingDirectory=$INSTALL_DIR
-ExecStart=$INSTALL_DIR/sing-box run -c $INSTALL_DIR/singbox_config.json
+User=root
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+ExecStart=${work_dir}/xray run -config ${work_dir}/config.json
 Restart=on-failure
-RestartSec=5
+RestartSec=10
+LimitNOFILE=infinity
+
 [Install]
 WantedBy=multi-user.target
 EOF
 
-    [ "$HAS_XRAY" = true ] && cat <<EOF > /etc/systemd/system/xray.service
+    cat > /etc/systemd/system/argo.service << EOF
 [Unit]
-Description=Xray Service (xHTTP)
+Description=Cloudflare Tunnel
 After=network.target
-[Service]
-Type=simple
-WorkingDirectory=$INSTALL_DIR
-ExecStart=$INSTALL_DIR/xray run -c $INSTALL_DIR/xray_config.json
-Restart=on-failure
-RestartSec=5
-[Install]
-WantedBy=multi-user.target
-EOF
 
-    [ "$ENABLE_ARGO" = true ] && cat <<EOF > /etc/systemd/system/cloudflared.service
-[Unit]
-Description=Cloudflare Tunnel Service
-After=network.target
 [Service]
 Type=simple
-WorkingDirectory=$INSTALL_DIR
-ExecStart=$INSTALL_DIR/cloudflared tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol ${ARGO_PROTOCOL} --ha-connections ${ARGO_CONNECTIONS} run --token ${authTrim}
+ExecStart=/bin/sh -c "${work_dir}/argo tunnel --url http://localhost:${ARGO_PORT} --no-autoupdate --edge-ip-version auto --protocol http2 > ${work_dir}/argo.log 2>&1"
 Restart=on-failure
-RestartSec=5
+RestartSec=5s
+
 [Install]
 WantedBy=multi-user.target
 EOF
 
     systemctl daemon-reload
-    [ "$HAS_SINGBOX" = true ] && systemctl enable --now singbox
-    [ "$HAS_XRAY" = true ] && systemctl enable --now xray
-    [ "$ENABLE_ARGO" = true ] && systemctl enable --now cloudflared
-    info "服务已通过 Systemd 成功启动！"
-else
-    warn "当前无 Systemd，已自动切换为后台守护运行..."
-    [ "$HAS_SINGBOX" = true ] && nohup "$INSTALL_DIR/sing-box" run -c "$INSTALL_DIR/singbox_config.json" >/dev/null 2>&1 &
-    [ "$HAS_XRAY" = true ] && nohup "$INSTALL_DIR/xray" run -c "$INSTALL_DIR/xray_config.json" >/dev/null 2>&1 &
-    [ "$ENABLE_ARGO" = true ] && nohup "$INSTALL_DIR/cloudflared" tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol "${ARGO_PROTOCOL}" --ha-connections "${ARGO_CONNECTIONS}" run --token "${authTrim}" >/dev/null 2>&1 &
-    info "后台守护进程已启动！"
-fi
+    systemctl enable xray argo
+    systemctl start xray argo
+}
 
-if [ -n "$GLOBAL_LINKS" ]; then
-    BASE64_SUB=$(echo -e "$GLOBAL_LINKS" | base64 | tr -d '\n')
-    echo "$BASE64_SUB" > "$INSTALL_DIR/sub.txt"
+# 生成节点信息与订阅
+get_info() {
+    yellow "\n正在获取服务器外网信息与 Argo 域名...\n"
+    server_ip=$(get_realip)
     
-    echo -e "\n====================== 节点部署完成 ======================"
-    echo -e "${GREEN}订阅文件已保存至: $INSTALL_DIR/sub.txt${NC}"
-    echo -e "----------------------------------------------------------"
-    echo -e "${YELLOW}【Base64 订阅内容】:${NC}"
-    echo "$BASE64_SUB"
-    echo -e "=========================================================="
-fi
+    for i in {1..6}; do
+        argodomain=$(sed -n 's|.*https://\([^/]*trycloudflare\.com\).*|\1|p' "${work_dir}/argo.log" 2>/dev/null)
+        [ -n "$argodomain" ] && break
+        sleep 2
+    done
+
+    isp=$(curl -sm 3 "https://api.ip.sb/geoip" | grep -o '"country_code":"[^"]*"' | cut -d'"' -f4 || echo "Node")
+
+    VMESS="{ \"v\": \"2\", \"ps\": \"${isp}-Argo\", \"add\": \"${CFIP}\", \"port\": \"${CFPORT}\", \"id\": \"${uuid}\", \"aid\": \"0\", \"scy\": \"auto\", \"net\": \"ws\", \"type\": \"none\", \"host\": \"${argodomain}\", \"path\": \"/vmess-argo?ed=2560\", \"tls\": \"tls\", \"sni\": \"${argodomain}\", \"alpn\": \"\", \"fp\": \"firefox\", \"allowInsecure\": \"false\"}"
+
+    cat > ${work_dir}/url.txt << EOF
+vless://${uuid}@${server_ip}:${xhttp_port}?encryption=none&security=tls&sni=bing.com&alpn=h3,h2&type=splithttp&path=/${xhttp_path}#${isp}-XHTTP
+
+vmess://$(echo "$VMESS" | base64 -w0 2>/dev/null || echo "$VMESS" | base64)
+EOF
+
+    base64 -w0 ${work_dir}/url.txt > ${work_dir}/sub.txt 2>/dev/null || base64 ${work_dir}/url.txt | tr -d '\n' > ${work_dir}/sub.txt
+    chmod 644 ${work_dir}/sub.txt
+
+    green "\n=========================================================================================="
+    green " Xray XHTTP 直连节点及 Argo 备用节点部署成功！"
+    green "=========================================================================================="
+    while IFS= read -r line; do echo -e "${purple}$line${re}"; done < ${work_dir}/url.txt
+    green "=========================================================================================="
+    green " 订阅地址 (Nginx托管): http://${server_ip}:${nginx_port}/${password}"
+    green "==========================================================================================\n"
+}
+
+# 配置 Nginx 订阅分发
+add_nginx_conf() {
+    if ! command_exists nginx; then
+        manage_packages install nginx
+    fi
+    mkdir -p /etc/nginx/conf.d
+    cat > /etc/nginx/conf.d/xray.conf << EOF
+server {
+    listen $(($xhttp_port + 1));
+    server_name _;
+    location = /$password {
+        alias ${work_dir}/sub.txt;
+        default_type 'text/plain; charset=utf-8';
+    }
+    location / { return 404; }
+}
+EOF
+    nginx -t > /dev/null 2>&1 && (systemctl reload nginx || systemctl start nginx)
+}
+
+# 创建快捷指令 sb / xray
+create_shortcut() {
+    cat > "/usr/bin/singboxray" << 'EOF'
+#!/usr/bin/env bash
+echo "Xray XHTTP 管理脚本"
+EOF
+    chmod +x /usr/bin/singboxray
+    ln -sf /usr/bin/singboxray /usr/bin/sb
+}
+
+# 主安装流程
+main() {
+    manage_packages install curl wget jq unzip openssl nginx
+    install_xray
+    main_systemd_services
+    sleep 3
+    get_info
+    add_nginx_conf
+    create_shortcut
+}
+
+main
