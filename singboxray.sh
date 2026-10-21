@@ -1,14 +1,6 @@
+cat << 'EOF' > singboxray.sh
 #!/usr/bin/env bash
 export LANG=en_US.UTF-8
-
-# =========================================================================
-# 通过命令行位置参数接收变量映射：
-# $1: nvpt -> NaiveProxy 直连 ("y"=随机端口，数字=指定端口，""=不部署)
-# $2: xhpt -> Xray xhttp 直连 ("y"=随机端口，数字=指定端口，""=不部署)
-# $3: ARGO_PORT -> Argo 回源端口 (留空则默认 8001)
-# $4: ARGO_DOMAIN -> Argo 固定隧道域名 (必须有 Domain + Token 才会部署 Argo)
-# $5: ARGO_AUTH -> Argo 固定隧道 Token
-# =========================================================================
 
 nvpt="${1:-}"
 xhpt="${2:-}"
@@ -16,12 +8,11 @@ ARGO_PORT="${3:-8001}"
 ARGO_DOMAIN="${4:-}"
 ARGO_AUTH="${5:-}"
 
-ARGO_PROTOCOL="${ARGO_PROTOCOL:-quic}"      # 默认 quic
-ARGO_CONNECTIONS="${ARGO_CONNECTIONS:-1}"   # 默认连接数
-CFIP="${CFIP:-www.teamviewer.com}"          # 优选域名
-CFPORT="${CFPORT:-443}"                     # 客户端连接端口
+ARGO_PROTOCOL="${ARGO_PROTOCOL:-quic}"
+ARGO_CONNECTIONS="${ARGO_CONNECTIONS:-1}"
+CFIP="${CFIP:-www.teamviewer.com}"
+CFPORT="${CFPORT:-443}"
 
-# 颜色定义
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -30,10 +21,17 @@ info() { echo -e "${GREEN}[INFO] $1${NC}"; }
 warn() { echo -e "${YELLOW}[WARN] $1${NC}"; }
 error() { echo -e "${RED}[ERROR] $1${NC}"; exit 1; }
 
-# 检查权限
-[ "$EUID" -ne 0 ] && error "请使用 root 权限运行此脚本！(例如: sudo ./singboxray.sh ...)"
+[ "$EUID" -ne 0 ] && error "请使用 root 权限运行此脚本！"
 
-# 系统架构判断
+# 防内存溢出：如果内存较小且没有 Swap，自动创建一个 1GB 的 Swap 虚拟内存
+if [ $(free -m | awk '/Swap:/ {print $2}') -eq 0 ]; then
+    info "检测到系统无 Swap 内存，正在临时创建 1GB Swap 防止 OOM 崩溃..."
+    fallocate -l 1G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=1024
+    chmod 600 /swapfile
+    mkswap /swapfile
+    swapon /swapfile
+fi
+
 case $(uname -m) in
     arm64|aarch64) cpu=arm64 ;;
     amd64|x86_64) cpu=amd64 ;;
@@ -44,8 +42,7 @@ INSTALL_DIR="/etc/easyshare"
 mkdir -p "$INSTALL_DIR/cert"
 cd "$INSTALL_DIR" || exit
 
-# 安装基础依赖
-info "检查并安装基础依赖..."
+info "检查并精简安装基础依赖..."
 if command -v apk >/dev/null 2>&1; then
     apk update >/dev/null 2>&1 && apk add --no-cache bash curl wget openssl jq >/dev/null 2>&1
 elif command -v apt >/dev/null 2>&1; then
@@ -53,7 +50,6 @@ elif command -v apt >/dev/null 2>&1; then
     apt update >/dev/null 2>&1 && apt install -y curl wget openssl jq ca-certificates >/dev/null 2>&1
 fi
 
-# 获取公网 IP
 get_public_ip() {
     local ip
     ip=$(curl -s4m 3 https://api.ipify.org || curl -s4m 3 https://ipv4.icanhazip.com)
@@ -62,7 +58,6 @@ get_public_ip() {
 }
 PUBLIC_IP=$(get_public_ip)
 
-# 生成 UUID 与固定密钥
 if [ ! -f "uuid.txt" ]; then
     UUID=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || cat /dev/urandom | tr -dc 'a-f0-9' | fold -w 32 | head -n 1)
     echo "$UUID" > uuid.txt
@@ -72,18 +67,15 @@ fi
 UUID=$(echo "$UUID" | tr '[:upper:]' '[:lower:]')
 XHTTP_PATH="/${UUID}-xhttp"
 
-# 停止旧进程
 info "清理残留进程..."
 systemctl stop singbox xray cloudflared 2>/dev/null
 pkill -9 -f sing-box 2>/dev/null
 pkill -9 -f xray 2>/dev/null
 pkill -9 -f cloudflared 2>/dev/null
 
-# 内核版本定义
 SB_VER="1.11.4"
 XRAY_VER="25.1.30"
 
-# 下载 Sing-box (如果启用了 naiveproxy)
 if [ -n "$nvpt" ] && [ "$nvpt" != "n" ] && [ "$nvpt" != "N" ]; then
     if [ ! -f "sing-box" ]; then
         info "正在下载 Sing-box v$SB_VER..."
@@ -94,7 +86,6 @@ if [ -n "$nvpt" ] && [ "$nvpt" != "n" ] && [ "$nvpt" != "N" ]; then
     fi
 fi
 
-# 下载 Xray-core (如果启用了 xhttp 直连或 argo 隧道)
 if ([ -n "$xhpt" ] && [ "$xhpt" != "n" ] && [ "$xhpt" != "N" ]) || ([ -n "$ARGO_DOMAIN" ] && [ -n "$ARGO_AUTH" ]); then
     if [ ! -f "xray" ]; then
         info "正在下载 Xray-core v$XRAY_VER..."
@@ -113,7 +104,6 @@ if ([ -n "$xhpt" ] && [ "$xhpt" != "n" ] && [ "$xhpt" != "N" ]) || ([ -n "$ARGO_
     fi
 fi
 
-# 下载 Cloudflared (如果完整提供了 Argo 变量)
 if [ -n "$ARGO_DOMAIN" ] && [ -n "$ARGO_AUTH" ]; then
     if [ ! -f "cloudflared" ]; then
         info "正在下载 Cloudflared..."
@@ -122,7 +112,6 @@ if [ -n "$ARGO_DOMAIN" ] && [ -n "$ARGO_AUTH" ]; then
     fi
 fi
 
-# 生成自签 TLS 证书（NaiveProxy 及 H2/H3 需要）
 if [ ! -f "cert/cert.pem" ] || [ ! -f "cert/private.key" ]; then
     info "正在生成自签名 TLS 证书..."
     openssl ecparam -genkey -name prime256v1 -out cert/private.key 2>/dev/null
@@ -134,11 +123,8 @@ GLOBAL_LINKS=""
 HAS_SINGBOX=false
 HAS_XRAY=false
 
-# =========================================================================
-# 1. 部署 Sing-box: NaiveProxy (h2/h3)
-# =========================================================================
 if [ -n "$nvpt" ] && [ "$nvpt" != "n" ] && [ "$nvpt" != "N" ]; then
-    if [ "$nvpt" = "y" ] \vert{}\vert{} [ "$nvpt" = "Y" ]; then
+    if [ "$nvpt" = "y" ] || [ "$nvpt" = "Y" ]; then
         NAIVE_PORT=$(shuf -i 10000-65535 -n 1)
     else
         NAIVE_PORT="$nvpt"
@@ -177,9 +163,6 @@ EOF
     GLOBAL_LINKS+="$NAIVE_LINK\n"
 fi
 
-# =========================================================================
-# 2. 部署 Xray: xHTTP 固定隧道 (Argo)
-# =========================================================================
 if [ -n "$ARGO_DOMAIN" ] && [ -n "$ARGO_AUTH" ]; then
     HAS_XRAY=true
     info "检测到完整的 Argo 隧道变量，准备配置 Xray xhttp 回源..."
@@ -214,13 +197,8 @@ EOF
     ARGO_LINK_H2="vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&alpn=h2&sni=${ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=auto&host=${ARGO_DOMAIN}&path=$(echo -n "$XHTTP_PATH" | jq -sRr @uri)#xHTTP_Argo_H2"
     ARGO_LINK_H3="vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&alpn=h3&sni=${ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=auto&host=${ARGO_DOMAIN}&path=$(echo -n "$XHTTP_PATH" | jq -sRr @uri)#xHTTP_Argo_H3"
     GLOBAL_LINKS+="$ARGO_LINK_H2\n$ARGO_LINK_H3\n"
-else
-    warn "Argo 隧道变量不完整（DOMAIN 与 AUTH 必须同时具备），已放弃部署 Argo 隧道。"
 fi
 
-# =========================================================================
-# 启动系统服务守护 (Systemd)
-# =========================================================================
 if [ "$HAS_SINGBOX" = true ]; then
     cat <<EOF > /etc/systemd/system/singbox.service
 [Unit]
@@ -229,7 +207,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$INSTALL_DIR
-ExecStart=$INSTALL_DIR/sing-box run -c$INSTALL_DIR/singbox_config.json
+ExecStart=$INSTALL_DIR/sing-box run -c $INSTALL_DIR/singbox_config.json
 Restart=on-failure
 RestartSec=5
 [Install]
@@ -248,7 +226,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$INSTALL_DIR
-ExecStart=$INSTALL_DIR/xray run -c$INSTALL_DIR/xray_config.json
+ExecStart=$INSTALL_DIR/xray run -c $INSTALL_DIR/xray_config.json
 Restart=on-failure
 RestartSec=5
 [Install]
@@ -262,7 +240,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$INSTALL_DIR
-ExecStart=$INSTALL_DIR/cloudflared tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol${ARGO_PROTOCOL} --ha-connections ${ARGO_CONNECTIONS} run --token${ARGO_AUTH}
+ExecStart=$INSTALL_DIR/cloudflared tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol ${ARGO_PROTOCOL} --ha-connections ${ARGO_CONNECTIONS} run --token ${ARGO_AUTH}
 Restart=on-failure
 RestartSec=5
 [Install]
@@ -274,3 +252,20 @@ EOF
     systemctl enable --now cloudflared
     info "Xray 与 Cloudflared 隧道服务已成功启动！"
 fi
+
+if [ -n "$GLOBAL_LINKS" ]; then
+    BASE64_SUB=$(echo -e "$GLOBAL_LINKS" | base64 | tr -d '\n')
+    echo "$BASE64_SUB" > "$INSTALL_DIR/sub.txt"
+    
+    echo -e "\n====================== 节点部署完成 ======================"
+    echo -e "${GREEN}订阅文件已保存至: $INSTALL_DIR/sub.txt${NC}"
+    echo -e "----------------------------------------------------------"
+    echo -e "${YELLOW}【Base64 订阅链接】:${NC}"
+    echo "$BASE64_SUB"
+    echo -e "=========================================================="
+else
+    warn "未部署任何有效节点，请检查入参！"
+fi
+EOF
+chmod +x singboxray.sh
+./singboxray.sh "y" "" "" "your-domain.com" "your-argo-token"
