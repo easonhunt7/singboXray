@@ -65,18 +65,13 @@ user=$(< /dev/urandom tr -dc 'a-z0-9' | head -c 8)
 pass=$(< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 16)
 password=$(< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 24)
 
-# 4. 生成 Caddyfile 配置 (自动申领正规证书，全局开启 H3 / QUIC)
+# 4. 生成精简正确的 Caddyfile 配置 (自动申请证书并绑定域名和 443 端口)
 cat > "${work_dir}/Caddyfile" << EOF
 {
     admin off
-    servers {
-        protocol {
-            experimental_http3
-        }
-    }
 }
 
-:443, ${DOMAIN}:443 {
+${DOMAIN}:443 {
     tls admin@${DOMAIN}
     forward_proxy {
         basic_auth ${user} ${pass}
