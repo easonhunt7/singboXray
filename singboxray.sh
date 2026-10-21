@@ -1,149 +1,191 @@
 #!/bin/bash
 
-# =========================
-# NaiveProxy (Caddy) 纯净直连安装脚本
-# 协议: NaiveProxy (支持 h2/h3) - 自动 SSL 证书版
-# =========================
+# 定义颜色输出
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+CYAN='\033[0;36m'
+NC='\033[0m' # 恢复默认颜色
 
-export LANG=en_US.UTF-8
-green() { echo -e "\e[1;32m$1\033[0m"; }
-yellow() { echo -e "\e[1;33m$1\033[0m"; }
-red() { echo -e "\e[1;91m$1\033[0m"; }
-
-# 接收并解析命令行参数
-INPUT_ARG="$1"
-[ "$1" = "-i" ] && INPUT_ARG="$2" && DOMAIN_ARG="$3" || DOMAIN_ARG="$2"
-
-if [ "$INPUT_ARG" = "n" ] || [ "$INPUT_ARG" = "N" ]; then
-    yellow "已根据指令取消部署。"
-    exit 0
-elif [ "$INPUT_ARG" = "y" ] || [ "$INPUT_ARG" = "Y" ]; then
-    export sub_port=$(shuf -i 10000-65000 -n 1)
-elif [[ "$INPUT_ARG" =~ ^[0-9]+$ ]]; then
-    export sub_port="$INPUT_ARG"
-else
-    export sub_port=${PORT:-$(shuf -i 10000-65000 -n 1)}
+# 检查是否为 root 用户
+if [[ $EUID -ne 0 ]]; then
+   echo -e "${RED}错误：必须使用 root 用户运行此脚本！请使用 sudo -i 切换后重试。${NC}"
+   exit 1
 fi
 
-# 获取域名参数
-DOMAIN="${DOMAIN_ARG:-$DOMAIN}"
-if [ -z "$DOMAIN" ]; then
-    red "错误: 未提供有效的域名！请在命令末尾指定解析到本机的子域名。"
-    echo "用法: ./singboxray.sh \"y\" \"naive.yourdomain.com\""
-    exit 1
-fi
+# ==================== 安装功能 ====================
+function install_singbox() {
+    echo -e "\n${YELLOW}📝 请输入节点配置信息：${NC}"
 
-work_dir="/etc/caddy"
-[[ $EUID -ne 0 ]] && red "请在root用户下运行" && exit 1
+    read -p "👉 请输入你的解析好的域名 (例如: naive.example.com): " DOMAIN
+    read -p "👉 请输入你的邮箱 (用于 Let's Encrypt 自动申请证书): " EMAIL
+    read -p "👉 请设置 NaiveProxy 用户名 (默认直接回车为 user123): " USERNAME
+    USERNAME=${USERNAME:-user123}
+    read -p "👉 请设置 NaiveProxy 密码 (默认直接回车为 pass123): " PASSWORD
+    PASSWORD=${PASSWORD:-pass123}
+    read -p "👉 请给这个节点起个名字 (默认直接回车为 NaiveProxy): " NODE_NAME
+    NODE_NAME=${NODE_NAME:-NaiveProxy}
 
-# 1. 清理旧服务并安装依赖
-systemctl stop caddy nginx 2>/dev/null || true
-yellow "正在更新系统并安装必要组件..."
-apt update && apt install -y curl wget jq unzip openssl nginx 2>/dev/null || yum install -y curl wget jq unzip openssl nginx 2>/dev/null
+    echo -e "\n${YELLOW}🧹 [1/4] 正在清理旧环境，释放 80 和 443 端口...${NC}"
+    systemctl stop caddy sing-box nginx apache2 2>/dev/null
+    pkill -9 caddy sing-box nginx apache2 2>/dev/null
 
-# 2. 下载带有 naiveproxy (forwardproxy) 插件的官方 Caddy 二进制文件
-mkdir -p "${work_dir}"
-ARCH_RAW=$(uname -m)
-case "${ARCH_RAW}" in
-    'x86_64' | 'amd64') ARCH='amd64' ;;
-    'aarch64' | 'arm64') ARCH='arm64' ;;
-    *) ARCH='amd64' ;;
-esac
+    echo -e "${YELLOW}📦 [2/4] 正在下载并安装 Sing-box (1.13.0)...${NC}"
+    cd /tmp
+    wget -qO sing-box.tar.gz https://github.com/SagerNet/sing-box/releases/download/v1.13.0-rc.5/sing-box-1.13.0-rc.5-linux-amd64.tar.gz
+    tar -zxf sing-box.tar.gz
+    cp sing-box-1.13.0-rc.5-linux-amd64/sing-box /usr/local/bin/
+    chmod +x /usr/local/bin/sing-box
+    rm -rf sing-box.tar.gz sing-box-1.13.0-rc.5-linux-amd64
 
-yellow "正在通过官方 API 下载编译包含 NaiveProxy 模块的 Caddy..."
-curl -sLo "${work_dir}/caddy" "https://caddyserver.com/api/download?os=linux&arch=${ARCH}&p=github.com%2Fcaddyserver%2Fforwardproxy"
-chmod +x ${work_dir}/caddy
-
-# 验证二进制文件是否下载成功
-if ! file "${work_dir}/caddy" | grep -q "ELF"; then
-    red "错误: Caddy 二进制文件下载失败或格式不正确，请检查网络后重试！"
-    exit 1
-fi
-
-# 3. 生成 NaiveProxy 认证账号密码与订阅路径
-user=$(< /dev/urandom tr -dc 'a-z0-9' | head -c 8)
-pass=$(< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 16)
-password=$(< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 24)
-
-# 4. 生成精简正确的 Caddyfile 配置 (自动申请证书并绑定域名和 443 端口)
-cat > "${work_dir}/Caddyfile" << EOF
+    echo -e "${YELLOW}⚙️ [3/4] 正在生成服务端配置文件...${NC}"
+    mkdir -p /etc/sing-box
+    cat << 'EOF' > /etc/sing-box/config.json
 {
-    admin off
-}
-
-${DOMAIN}:443 {
-    tls admin@${DOMAIN}
-    forward_proxy {
-        basic_auth ${user} ${pass}
-        hide_ip
-        hide_via
+  "log": {
+    "level": "info"
+  },
+  "inbounds": [
+    {
+      "type": "naive",
+      "tag": "naive-in",
+      "listen": "::",
+      "listen_port": 443,
+      "users": [
+        {
+          "username": "REPLACE_USERNAME",
+          "password": "REPLACE_PASSWORD"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "server_name": "REPLACE_DOMAIN",
+        "acme": {
+          "domain": ["REPLACE_DOMAIN"],
+          "email": "REPLACE_EMAIL"
+        }
+      }
     }
-    reverse_proxy https://www.bing.com {
-        header_up Host {upstream_hostport}
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct"
     }
+  ]
 }
 EOF
 
-# 5. 配置 Systemd 服务
-cat > /etc/systemd/system/caddy.service << EOF
+    # 替换配置文件里的变量
+    sed -i "s/REPLACE_USERNAME/$USERNAME/g" /etc/sing-box/config.json
+    sed -i "s/REPLACE_PASSWORD/$PASSWORD/g" /etc/sing-box/config.json
+    sed -i "s/REPLACE_DOMAIN/$DOMAIN/g" /etc/sing-box/config.json
+    sed -i "s/REPLACE_EMAIL/$EMAIL/g" /etc/sing-box/config.json
+
+    echo -e "${YELLOW}🚀 [4/4] 正在配置系统服务并启动 Sing-box...${NC}"
+
+    echo -e "${YELLOW}🛡️ 正在自动放行系统防火墙端口...${NC}"
+    ufw allow 80,443/tcp 2>/dev/null
+    ufw allow 443/udp 2>/dev/null
+    iptables -I INPUT -p tcp --dport 443 -j ACCEPT 2>/dev/null
+    iptables -I INPUT -p udp --dport 443 -j ACCEPT 2>/dev/null
+    
+    cat << 'EOF' > /etc/systemd/system/sing-box.service
 [Unit]
-Description=Caddy NaiveProxy Service
-After=network.target nss-lookup.target
+Description=sing-box service
+Documentation=https://sing-box.sagernet.org
+After=network.target nss-lookup.target network-online.target
 
 [Service]
-User=root
-ExecStart=${work_dir}/caddy run --config ${work_dir}/Caddyfile --adapter caddyfile
-ExecReload=${work_dir}/caddy reload --config ${work_dir}/Caddyfile --adapter caddyfile
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+ExecStart=/usr/local/bin/sing-box run -c /etc/sing-box/config.json
+ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
-RestartSec=10
+RestartSec=10s
 LimitNOFILE=infinity
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-systemctl daemon-reload
-systemctl enable --now caddy
+    systemctl daemon-reload
+    systemctl enable sing-box
+    systemctl restart sing-box
 
-# 6. 获取 IP 并生成兼容 v2rayN / NekoBox 的 NaiveProxy 节点与订阅
-raw_ip=$(curl -4 -sm 2 ip.sb || curl -6 -sm 2 ip.sb)
-isp=$(curl -sm 3 "https://api.ip.sb/geoip" | grep -o '"country_code":"[^"]*"' | cut -d'"' -f4 || echo "Node")
+    SHARE_LINK="naive+https://${USERNAME}:${PASSWORD}@${DOMAIN}:443?padding=true#${NODE_NAME}"
 
-# 生成标准 NaiveProxy 共享链接 (naive+https)
-cat > ${work_dir}/url.txt << EOF
-naive+https://${user}:${pass}@${DOMAIN}:443?padding=true#${isp}-NaiveProxy
-EOF
-
-base64 -w0 ${work_dir}/url.txt > ${work_dir}/sub.txt 2>/dev/null || base64 ${work_dir}/url.txt | tr -d '\n' > ${work_dir}/sub.txt
-chmod 644 ${work_dir}/sub.txt
-
-# 7. 配置 Nginx 托管订阅
-mkdir -p /etc/nginx/conf.d
-cat > /etc/nginx/conf.d/naive_sub.conf << EOF
-server {
-    listen $sub_port;
-    server_name _;
-    location = /$password {
-        alias ${work_dir}/sub.txt;
-        default_type 'text/plain; charset=utf-8';
-    }
-    location / { return 404; }
+    echo -e "\n${GREEN}==================================================${NC}"
+    echo -e "${GREEN}🎉 搭建彻底完成！${NC}"
+    echo -e "--------------------------------------------------"
+    echo -e "${YELLOW}👇 请复制下方链接，直接导入到你的 Flowz 客户端：${NC}"
+    echo -e ""
+    echo -e "${CYAN}${SHARE_LINK}${NC}"
+    echo -e ""
+    echo -e "--------------------------------------------------"
+    echo -e "${YELLOW}⚠️ 注意事项：${NC}"
+    echo -e "1. 首次启动时，Sing-box 需要向 Let's Encrypt 申请证书，请等待 1-2 分钟后再连接。"
+    echo -e "2. 如果连接失败，请在 VPS 运行以下命令查看证书是否申请成功："
+    echo -e "   ${GREEN}journalctl -u sing-box -f${NC}"
+    echo -e "${GREEN}==================================================${NC}"
 }
-EOF
 
-nginx -t > /dev/null 2>&1 && (systemctl reload nginx || systemctl start nginx)
+# ==================== 卸载功能 ====================
+function uninstall_singbox() {
+    echo -e "\n${YELLOW}⚠️ 准备卸载 Sing-box...${NC}"
+    read -p "确定要彻底卸载 Sing-box 及其所有配置文件吗？[y/N]: " confirm
+    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+        echo -e "${GREEN}已取消卸载。${NC}"
+        exit 0
+    fi
 
-# 8. 输出部署信息
-clear
-green "=========================================================================================="
-green " NaiveProxy (Caddy H2/H3) 纯净节点部署成功！"
-green "=========================================================================================="
-green " 域名: ${DOMAIN}"
-green " 端口: 443 (TCP H2 / UDP H3 原生支持)"
-green " 用户名: ${user}"
-green " 密码: ${pass}"
-green "=========================================================================================="
-cat ${work_dir}/url.txt
-green "\n=========================================================================================="
-green " 订阅地址: http://${raw_ip}:${sub_port}/${password}"
-green "==========================================================================================\n"
+    echo -e "${YELLOW}正在停止并禁用系统服务...${NC}"
+    systemctl stop sing-box 2>/dev/null
+    systemctl disable sing-box 2>/dev/null
+
+    echo -e "${YELLOW}正在删除核心文件和配置文件...${NC}"
+    rm -f /usr/local/bin/sing-box
+    rm -rf /etc/sing-box
+    rm -f /etc/systemd/system/sing-box.service
+
+    echo -e "${YELLOW}正在重载系统守护进程...${NC}"
+    systemctl daemon-reload
+
+    echo -e "${GREEN}==================================================${NC}"
+    echo -e "${GREEN}🗑️ 卸载完成！Sing-box 已从你的系统中彻底移除。${NC}"
+    echo -e "${GREEN}==================================================${NC}"
+}
+
+# ==================== 主菜单 ====================
+function main_menu() {
+    clear
+    echo -e "${GREEN}==================================================${NC}"
+    echo -e "${CYAN}      Sing-box (NaiveProxy 协议) 一键管理脚本     ${NC}"
+    echo -e "${GREEN}==================================================${NC}"
+    echo -e "  ${YELLOW}1.${NC} 安装 Sing-box (Naive 协议)"
+    echo -e "  ${YELLOW}2.${NC} 彻底卸载 Sing-box"
+    echo -e "  ${YELLOW}0.${NC} 退出脚本"
+    echo -e "${GREEN}==================================================${NC}"
+    read -p "请输入数字选择 [0-2]: " choice
+
+    case "$choice" in
+        1)
+            install_singbox
+            ;;
+        2)
+            uninstall_singbox
+            ;;
+        0)
+            echo -e "${GREEN}感谢使用，再见！${NC}"
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}输入错误，请输入正确的数字！${NC}"
+            sleep 2
+            main_menu
+            ;;
+    esac
+}
+
+# 运行主菜单
+main_menu
