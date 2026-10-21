@@ -232,17 +232,14 @@ fi
 isp=$(curl -sm 3 "https://api.ip.sb/geoip" | grep -o '"country_code":"[^"]*"' | cut -d'"' -f4 || echo "Node")
 
 > "${work_dir}/url.txt"
-[ -n "$h3_port" ] && echo "vless://${uuid}@${server_ip}:${h3_port}?encryption=none&security=tls&sni=bing.com&alpn=h3&type=xhttp&path=/${h3_path}&allowInsecure=1#${isp}-XHTTP-H3" >> "${work_dir}/url.txt"
-[ -n "$h2_port" ] && echo "vless://${uuid}@${server_ip}:${h2_port}?encryption=none&security=tls&sni=bing.com&alpn=h2&type=xhttp&path=/${h2_path}&allowInsecure=1#${isp}-XHTTP-H2" >> "${work_dir}/url.txt"
+[ -n "$h3_port" ] && echo "vless://${uuid}@${server_ip}:${h3_port}?encryption=none&security=tls&sni=bing.com&alpn=h3&type=xhttp&path=/${h3_path}&allowInsecure=1#${isp}H3-XHTTP_easyshare" >> "${work_dir}/url.txt"
+[ -n "$h2_port" ] && echo "vless://${uuid}@${server_ip}:${h2_port}?encryption=none&security=tls&sni=bing.com&alpn=h2&type=xhttp&path=/${h2_path}&allowInsecure=1#${isp}H2-XHTTP_easyshare" >> "${work_dir}/url.txt"
 
 base64_str=$(cat "${work_dir}/url.txt" | base64 | tr -d '\n' | tr -d '\r')
 
 clear
 green "=========================================================================================="
-green " Xray XHTTP 纯净直连节点部署成功（严格按参、无订阅逻辑）！"
+green " Xray XHTTP 纯净直连节点部署成功（Base64）！"
 green "=========================================================================================="
-cat "${work_dir}/url.txt"
-green "------------------------------------------------------------------------------------------"
-yellow "Base64 编码链接（可直接用于客户端批量导入）："
-green "$base64_str"
+green "$base64_str"                # <--- 删除了明文打印和多余提示，直接输出纯净 Base64
 green "=========================================================================================="
