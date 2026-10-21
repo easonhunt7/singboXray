@@ -125,6 +125,11 @@ EOF
 systemctl daemon-reload
 systemctl enable --now xray
 
+ufw allow ${xhttp_port}/tcp 2>/dev/null
+ufw allow ${xhttp_port}/udp 2>/dev/null
+iptables -I INPUT -p tcp --dport ${xhttp_port} -j ACCEPT 2>/dev/null
+iptables -I INPUT -p udp --dport ${xhttp_port} -j ACCEPT 2>/dev/null
+
 # 6. 获取 IP 并智能处理 IPv6 格式与 v2rayN 兼容的 xhttp 链接格式
 raw_ip=$(curl -4 -sm 2 ip.sb || curl -6 -sm 2 ip.sb)
 if [[ "$raw_ip" =~ : ]]; then
