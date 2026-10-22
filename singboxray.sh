@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =========================================================================
-# Xray XHTTP 纯净直连安装脚本 (singboxray.sh) - H3 + REALITY 融合版
+# Xray XHTTP 纯净直连安装脚本 (singboxray.sh) - H3 + REALITY 纯正 XHTTP 版
 # 协议: 支持 VLESS-XHTTP-H3 与 VLESS-XHTTP-REALITY
 # 用法: bash singboxray.sh h3"[参数]" reality"[参数]"
 # 参数说明: "y"/"Y"(随机端口), "数字"(指定端口), "n"/"N"/留空(放弃部署)
@@ -153,7 +153,7 @@ EOF
     first_inbound=false
 fi
 
-# 如果配置了 REALITY 端口
+# 如果配置了 REALITY 端口 (网络必须明确指定为 xhttp)
 if [ -n "$reality_port" ]; then
     if [ "$first_inbound" = false ]; then
         sed -i '$s/$/,/' "${work_dir}/config.json"
@@ -259,7 +259,7 @@ isp=$(curl -sm 3 "https://api.ip.sb/geoip" | grep -o '"country_code":"[^"]*"' | 
 
 > "${work_dir}/url.txt"
 [ -n "$h3_port" ] && echo "vless://${uuid}@${server_ip}:${h3_port}?encryption=none&security=tls&sni=bing.com&alpn=h3&type=xhttp&path=/${h3_path}&allowInsecure=1#${isp}H3-XHTTP_easyshare" >> "${work_dir}/url.txt"
-[ -n "$reality_port" ] && echo "vless://${uuid}@${server_ip}:${reality_port}?encryption=none&security=reality&sni=microsoft.com&fp=chrome&pbk=${public_key}&sid=${short_id}&type=xhttp&path=/${reality_path}#${isp}Reality-XHTTP_easyshare" >> "${work_dir}/url.txt"
+[ -n "$reality_port" ] && echo "vless://${uuid}@${server_ip}:${reality_port}?encryption=none&security=reality&sni=microsoft.com&fp=chrome&pbk=${public_key}&sid=${short_sid}&type=xhttp&path=/${reality_path}#${isp}Reality-XHTTP_easyshare" >> "${work_dir}/url.txt"
 
 base64_str=$(cat "${work_dir}/url.txt" | base64 | tr -d '\n' | tr -d '\r')
 
