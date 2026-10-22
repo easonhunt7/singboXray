@@ -1,8 +1,11 @@
 #!/bin/bash
 
 # =========================================================================
-# Xray XHTTP 纯净直连安装脚本 (singboxray.sh) - 交互与传参双模版
+# Xray XHTTP 纯净直连安装脚本 (singboxray.sh) - H3 + REALITY 融合版
 # 协议: 支持 VLESS-XHTTP-H3 与 VLESS-XHTTP-REALITY
+# 用法: bash singboxray.sh h3"[参数]" reality"[参数]"
+# 参数说明: "y"/"Y"(随机端口), "数字"(指定端口), "n"/"N"/留空(放弃部署)
+# 示例: bash singboxray.sh h3"y" reality"y"  或者  bash singboxray.sh h3"443" reality"n"
 # =========================================================================
 
 export LANG=en_US.UTF-8
@@ -10,19 +13,27 @@ green() { echo -e "\e[1;32m$1\033[0m"; }
 yellow() { echo -e "\e[1;33m$1\033[0m"; }
 red() { echo -e "\e[1;91m$1\033[0m"; }
 
-ARG_H3="$1"
-ARG_REALITY="$2"
+ARG_H3=""
+ARG_REALITY=""
 
-# 如果没有传参，或者传参不够，启动交互式友好的输入引导
-if [ -z "$ARG_H3" ] && [ -z "$ARG_REALITY" ]; then
-    yellow "===================================================="
-    yellow " 欢迎使用 Xray XHTTP 部署脚本 (H3 + REALITY)"
-    yellow "===================================================="
-    read -p "请选择 H3 部署模式 [y: 随机端口 / 数字: 指定端口 / n: 不部署]: " input_h3
-    read -p "请选择 REALITY 部署模式 [y: 随机端口 / 数字: 指定端口 / n: 不部署]: " input_reality
-    ARG_H3="$input_h3"
-    ARG_REALITY="$input_reality"
-fi
+# 智能识别粘合参数（完美适配 h3"y" -> h3y、reality"443" 等写法）
+for arg in "$@"; do
+    clean_arg="${arg//\"/}"
+    clean_arg="${clean_arg//\'/}"
+    
+    if [[ "$clean_arg" =~ ^[hH]3(.*)$ ]]; then
+        ARG_H3="${BASH_REMATCH[1]}"
+    elif [[ "$clean_arg" =~ ^[rR][eE][aA][lL][iI][tT][yY](.*)$ ]]; then
+        ARG_REALITY="${BASH_REMATCH[1]}"
+    elif [[ "$clean_arg" =~ ^[0-9]+$ ]] || [[ "$clean_arg" =~ ^[yYnN]$ ]]; then
+        # 兼容纯位置参数兜底
+        if [ -z "$ARG_H3" ]; then
+            ARG_H3="$clean_arg"
+        elif [ -z "$ARG_REALITY" ]; then
+            ARG_REALITY="$clean_arg"
+        fi
+    fi
+done
 
 parse_port() {
     local input="$1"
@@ -40,8 +51,10 @@ parse_port() {
 h3_port=$(parse_port "$ARG_H3")
 reality_port=$(parse_port "$ARG_REALITY")
 
+# 如果两个参数解析出来都为空，说明用户未指定或选择放弃，直接安全退出
 if [ -z "$h3_port" ] && [ -z "$reality_port" ]; then
-    red "错误：H3 和 REALITY 均未启用或均选择不部署。脚本已安全退出。"
+    yellow "提示：未检测到有效的部署参数（H3和REALITY均未启用或均选择为n）。"
+    yellow "正确用法示例: bash singboxray.sh h3\"y\" reality\"y\""
     exit 0
 fi
 
@@ -69,7 +82,7 @@ chmod +x ${work_dir}/xray
 # 3. 生成通用变量、自签证书与 REALITY 密钥对
 uuid=$(cat /proc/sys/kernel/random/uuid)
 h3_path="${uuid}-xu" 
-reality_path="${uuid}-xr"
+reality_path="${uuid}-xr" 
 
 # 自签证书（供 H3 使用）
 openssl ecparam -genkey -name prime256v1 -out "${work_dir}/private.key"
@@ -81,7 +94,7 @@ private_key=$(echo "$gen_keys" | grep "Private" | awk '{print $3}')
 public_key=$(echo "$gen_keys" | grep "Public" | awk '{print $3}')
 short_id=$(openssl rand -hex 8)
 
-# 4. 动态构建 Xray 核心配置 (支持 H3 与 REALITY 多 Inbound)
+# 4. 动态构建多 Inbound 的 Xray 核心配置
 cat > "${work_dir}/config.json" << EOF
 {
   "log": {
