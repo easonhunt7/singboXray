@@ -1,11 +1,8 @@
 #!/bin/bash
 
 # =========================================================================
-# Xray XHTTP 纯净直连安装脚本 (singboxray.sh) - H3 + REALITY 增强版
+# Xray XHTTP 纯净直连安装脚本 (singboxray.sh) - 交互与传参双模版
 # 协议: 支持 VLESS-XHTTP-H3 与 VLESS-XHTTP-REALITY
-# 用法: bash singboxray.sh h3"[参数]" reality"[参数]"
-# 参数说明: "y"/"Y"(随机端口), "数字"(指定端口), "n"/"N"/留空(放弃部署)
-# 示例: bash singboxray.sh h3"y" reality"y"  或者  bash singboxray.sh h3"443" reality"n"
 # =========================================================================
 
 export LANG=en_US.UTF-8
@@ -13,23 +10,19 @@ green() { echo -e "\e[1;32m$1\033[0m"; }
 yellow() { echo -e "\e[1;33m$1\033[0m"; }
 red() { echo -e "\e[1;91m$1\033[0m"; }
 
-ARG_H3=""
-ARG_REALITY=""
+ARG_H3="$1"
+ARG_REALITY="$2"
 
-# 智能识别粘合参数（完美适配 h3"y" -> h3y、reality"443" -> reality443 等无等号写法）
-for arg in "$@"; do
-    # 移除所有引号
-    clean_arg="${arg//\"/}"
-    clean_arg="${clean_arg//\'/}"
-    
-    # 匹配 h3 前缀
-    if [[ "$clean_arg" =~ ^[hH]3(.*)$ ]]; then
-        ARG_H3="${BASH_REMATCH[1]}"
-    # 匹配 reality 前缀
-    elif [[ "$clean_arg" =~ ^[rR][eE][aA][lL][iI][tT][yY](.*)$ ]]; then
-        ARG_REALITY="${BASH_REMATCH[1]}"
-    fi
-done
+# 如果没有传参，或者传参不够，启动交互式友好的输入引导
+if [ -z "$ARG_H3" ] && [ -z "$ARG_REALITY" ]; then
+    yellow "===================================================="
+    yellow " 欢迎使用 Xray XHTTP 部署脚本 (H3 + REALITY)"
+    yellow "===================================================="
+    read -p "请选择 H3 部署模式 [y: 随机端口 / 数字: 指定端口 / n: 不部署]: " input_h3
+    read -p "请选择 REALITY 部署模式 [y: 随机端口 / 数字: 指定端口 / n: 不部署]: " input_reality
+    ARG_H3="$input_h3"
+    ARG_REALITY="$input_reality"
+fi
 
 parse_port() {
     local input="$1"
@@ -48,8 +41,7 @@ h3_port=$(parse_port "$ARG_H3")
 reality_port=$(parse_port "$ARG_REALITY")
 
 if [ -z "$h3_port" ] && [ -z "$reality_port" ]; then
-    yellow "提示：未检测到任何有效的部署参数（H3和REALITY均未启用或均选择为n）。"
-    yellow "正确用法示例: bash singboxray.sh h3\"y\" reality\"y\""
+    red "错误：H3 和 REALITY 均未启用或均选择不部署。脚本已安全退出。"
     exit 0
 fi
 
