@@ -5,7 +5,7 @@
 # 协议: 支持 VLESS-XHTTP-H3 与 VLESS-XHTTP-REALITY
 # 用法: bash singboxray.sh h3"[参数]" reality"[参数]"
 # 参数说明: "y"/"Y"(随机端口), "数字"(指定端口), "n"/"N"/留空(放弃部署)
-# 示例: bash singboxray.sh h3"443" reality"y"
+# 示例: bash singboxray.sh h3"y" reality"y"  或者  bash singboxray.sh h3"443" reality"n"
 # =========================================================================
 
 export LANG=en_US.UTF-8
@@ -13,21 +13,23 @@ green() { echo -e "\e[1;32m$1\033[0m"; }
 yellow() { echo -e "\e[1;33m$1\033[0m"; }
 red() { echo -e "\e[1;91m$1\033[0m"; }
 
-# 智能提取参数中的双引号内容
-extract_port() {
-    local input="$1"
-    if [[ "$input" == *'"'* ]]; then
-        input=$(echo "$input" | sed -n 's/.*"\([^"]*\)".*/\1/p')
+ARG_H3=""
+ARG_REALITY=""
+
+# 智能识别粘合参数（完美适配 h3"y" -> h3y、reality"443" -> reality443 等无等号写法）
+for arg in "$@"; do
+    # 移除所有引号
+    clean_arg="${arg//\"/}"
+    clean_arg="${clean_arg//\'/}"
+    
+    # 匹配 h3 前缀
+    if [[ "$clean_arg" =~ ^[hH]3(.*)$ ]]; then
+        ARG_H3="${BASH_REMATCH[1]}"
+    # 匹配 reality 前缀
+    elif [[ "$clean_arg" =~ ^[rR][eE][aA][lL][iI][tT][yY](.*)$ ]]; then
+        ARG_REALITY="${BASH_REMATCH[1]}"
     fi
-    echo "$input"
-}
-
-# 接收并解析命令行双参数
-RAW_H3="$1"
-RAW_REALITY="$2"
-
-ARG_H3=$(extract_port "$RAW_H3")
-ARG_REALITY=$(extract_port "$RAW_REALITY")
+done
 
 parse_port() {
     local input="$1"
@@ -47,7 +49,7 @@ reality_port=$(parse_port "$ARG_REALITY")
 
 if [ -z "$h3_port" ] && [ -z "$reality_port" ]; then
     yellow "提示：未检测到任何有效的部署参数（H3和REALITY均未启用或均选择为n）。"
-    yellow "正确用法示例: bash singboxray.sh h3\"443\" reality\"y\""
+    yellow "正确用法示例: bash singboxray.sh h3\"y\" reality\"y\""
     exit 0
 fi
 
