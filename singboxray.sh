@@ -73,16 +73,6 @@ cat > "${work_dir}/config.json" << EOF
     "error": "${work_dir}/xray.log"
   },
   "inbounds": [
-EOF
-
-first_inbound=true
-
-# 如果配置了 H3 端口
-if [ -n "$h3_port" ]; then
-    if [ "$first_inbound" = false ]; then
-        sed -i '$s/$/,/' "${work_dir}/config.json"
-    fi
-    cat >> "${work_dir}/config.json" << EOF
     {
       "tag": "xhttp-h3",
       "listen": "::",
@@ -123,10 +113,6 @@ if [ -n "$h3_port" ]; then
         "metadataOnly": false
       }
     }
-EOF
-fi
-
-cat >> "${work_dir}/config.json" << EOF
   ],
   "outbounds": [
     {
