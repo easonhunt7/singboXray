@@ -13,8 +13,7 @@ yellow() { echo -e "\e[1;33m$1\033[0m"; }
 red() { echo -e "\e[1;91m$1\033[0m"; }
 
 # 接收并解析命令行双参数
-ARG_H2="$1"
-ARG_H3="$2"
+ARG_H3="$1"
 
 parse_port() {
     local input="$1"
@@ -30,11 +29,10 @@ parse_port() {
     fi
 }
 
-h2_port=$(parse_port "$ARG_H2")
 h3_port=$(parse_port "$ARG_H3")
 
 # 如果两个参数解析出来都为空，说明用户未指定或选择放弃，直接安全退出
-if [ -z "$h2_port" ] && [ -z "$h3_port" ]; then
+if [ -z "$h3_port" ]; then
     yellow "提示：未检测到有效的部署参数（H2和H3均未启用）。脚本已安全退出。"
     exit 0
 fi
@@ -63,7 +61,6 @@ chmod +x ${work_dir}/xray
 # 3. 生成通用变量与自签证书
 uuid=$(cat /proc/sys/kernel/random/uuid)
 h3_path="${uuid}-xu" 
-h2_path="${uuid}-xc" 
 
 openssl ecparam -genkey -name prime256v1 -out "${work_dir}/private.key"
 openssl req -new -x509 -days 3650 -key "${work_dir}/private.key" -out "${work_dir}/cert.pem" -subj "/CN=bing.com"
@@ -79,54 +76,6 @@ cat > "${work_dir}/config.json" << EOF
 EOF
 
 first_inbound=true
-
-# 如果配置了 H2 端口
-if [ -n "$h2_port" ]; then
-    cat >> "${work_dir}/config.json" << EOF
-    {
-      "tag": "xhttp-h2",
-      "listen": "::",
-      "port": $h2_port,
-      "protocol": "vless",
-      "settings": {
-        "clients": [
-          {
-            "id": "$uuid",
-            "flow": ""
-          }
-        ],
-        "decryption": "none"
-      },
-      "streamSettings": {
-        "network": "xhttp",
-        "security": "tls",
-        "xhttpSettings": {
-          "mode": "auto",
-          "path": "/${h2_path}"
-        },
-        "tlsSettings": {
-          "serverName": "bing.com",
-          "alpn": [
-            "h2",
-            "http/1.1"
-          ],
-          "certificates": [
-            {
-              "certificateFile": "${work_dir}/cert.pem",
-              "keyFile": "${work_dir}/private.key"
-            }
-          ]
-        }
-      },
-      "sniffing": {
-        "enabled": true,
-        "destOverride": ["http", "tls", "quic"],
-        "metadataOnly": false
-      }
-    }
-EOF
-    first_inbound=false
-fi
 
 # 如果配置了 H3 端口
 if [ -n "$h3_port" ]; then
@@ -211,7 +160,7 @@ systemctl daemon-reload
 systemctl enable --now xray
 
 # 6. 放行对应的防火墙端口
-for p in "$h2_port" "$h3_port"; do
+for p in "$h3_port"; do
     [ -z "$p" ] && continue
     if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
         ufw allow $p/tcp >/dev/null 2>&1
@@ -233,7 +182,6 @@ isp=$(curl -sm 3 "https://api.ip.sb/geoip" | grep -o '"country_code":"[^"]*"' | 
 
 > "${work_dir}/url.txt"
 [ -n "$h3_port" ] && echo "vless://${uuid}@${server_ip}:${h3_port}?encryption=none&security=tls&sni=bing.com&alpn=h3&type=xhttp&path=/${h3_path}&allowInsecure=1#${isp}H3-XHTTP_easyshare" >> "${work_dir}/url.txt"
-[ -n "$h2_port" ] && echo "vless://${uuid}@${server_ip}:${h2_port}?encryption=none&security=tls&sni=bing.com&alpn=h2&type=xhttp&path=/${h2_path}&allowInsecure=1#${isp}H2-XHTTP_easyshare" >> "${work_dir}/url.txt"
 
 base64_str=$(cat "${work_dir}/url.txt" | base64 | tr -d '\n' | tr -d '\r')
 
