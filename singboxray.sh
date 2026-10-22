@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # =========================================================================
-# Xray XHTTP 纯净直连安装脚本 (singboxray.sh) - H3 + REALITY 纯正 XHTTP 版
+# Xray XHTTP 纯净直连安装脚本 (singboxray.sh) - H3 + REALITY 完美融合版
 # 协议: 支持 VLESS-XHTTP-H3 与 VLESS-XHTTP-REALITY
 # 用法: bash singboxray.sh h3"[参数]" reality"[参数]"
 # 参数说明: "y"/"Y"(随机端口), "数字"(指定端口), "n"/"N"/留空(放弃部署)
-# 示例: bash singboxray.sh h3"y" reality"y"  或者  bash singboxray.sh h3"443" reality"n"
+# 示例: bash singboxray.sh h3"y" reality"y"
 # =========================================================================
 
 export LANG=en_US.UTF-8
@@ -16,7 +16,7 @@ red() { echo -e "\e[1;91m$1\033[0m"; }
 ARG_H3=""
 ARG_REALITY=""
 
-# 智能识别粘合参数（完美适配 h3"y" -> h3y、reality"443" 等写法）
+# 智能识别参数（完美适配 h3"y" -> h3y、reality"443" 等写法）
 for arg in "$@"; do
     clean_arg="${arg//\"/}"
     clean_arg="${clean_arg//\'/}"
@@ -26,7 +26,6 @@ for arg in "$@"; do
     elif [[ "$clean_arg" =~ ^[rR][eE][aA][lL][iI][tT][yY](.*)$ ]]; then
         ARG_REALITY="${BASH_REMATCH[1]}"
     elif [[ "$clean_arg" =~ ^[0-9]+$ ]] || [[ "$clean_arg" =~ ^[yYnN]$ ]]; then
-        # 兼容纯位置参数兜底
         if [ -z "$ARG_H3" ]; then
             ARG_H3="$clean_arg"
         elif [ -z "$ARG_REALITY" ]; then
@@ -51,7 +50,6 @@ parse_port() {
 h3_port=$(parse_port "$ARG_H3")
 reality_port=$(parse_port "$ARG_REALITY")
 
-# 如果两个参数解析出来都为空，说明用户未指定或选择放弃，直接安全退出
 if [ -z "$h3_port" ] && [ -z "$reality_port" ]; then
     yellow "提示：未检测到有效的部署参数（H3和REALITY均未启用或均选择为n）。"
     yellow "正确用法示例: bash singboxray.sh h3\"y\" reality\"y\""
@@ -153,7 +151,7 @@ EOF
     first_inbound=false
 fi
 
-# 如果配置了 REALITY 端口 (网络必须明确指定为 xhttp)
+# 如果配置了 REALITY 端口 (严格使用 xhttp 网络，并嵌入 reality 安全层)
 if [ -n "$reality_port" ]; then
     if [ "$first_inbound" = false ]; then
         sed -i '$s/$/,/' "${work_dir}/config.json"
@@ -259,7 +257,7 @@ isp=$(curl -sm 3 "https://api.ip.sb/geoip" | grep -o '"country_code":"[^"]*"' | 
 
 > "${work_dir}/url.txt"
 [ -n "$h3_port" ] && echo "vless://${uuid}@${server_ip}:${h3_port}?encryption=none&security=tls&sni=bing.com&alpn=h3&type=xhttp&path=/${h3_path}&allowInsecure=1#${isp}H3-XHTTP_easyshare" >> "${work_dir}/url.txt"
-[ -n "$reality_port" ] && echo "vless://${uuid}@${server_ip}:${reality_port}?encryption=none&security=reality&sni=microsoft.com&fp=chrome&pbk=${public_key}&sid=${short_sid}&type=xhttp&path=/${reality_path}#${isp}Reality-XHTTP_easyshare" >> "${work_dir}/url.txt"
+[ -n "$reality_port" ] && echo "vless://${uuid}@${server_ip}:${reality_port}?encryption=none&security=reality&sni=microsoft.com&fp=chrome&pbk=${public_key}&sid=${short_id}&type=xhttp&path=/${reality_path}#${isp}Reality-XHTTP_easyshare" >> "${work_dir}/url.txt"
 
 base64_str=$(cat "${work_dir}/url.txt" | base64 | tr -d '\n' | tr -d '\r')
 
