@@ -3,9 +3,9 @@
 # =========================================================================
 # Xray XHTTP 纯净直连安装脚本 (singboxray.sh) - H3 + REALITY 增强版
 # 协议: 支持 VLESS-XHTTP-H3 与 VLESS-XHTTP-REALITY
-# 用法: bash singboxray.sh [h3端口] [reality端口]
-# 示例: bash singboxray.sh h3"443" reality"8443"  或者直接传数字: bash singboxray.sh 443 8443
-# 参数说明: y/Y(随机端口), 数字(指定端口), 留空/n/N(放弃部署)
+# 用法: bash singboxray.sh h3"[参数]" reality"[参数]"
+# 参数说明: "y"/"Y"(随机端口), "数字"(指定端口), "n"/"N"/留空(放弃部署)
+# 示例: bash singboxray.sh h3"443" reality"y"
 # =========================================================================
 
 export LANG=en_US.UTF-8
@@ -13,17 +13,16 @@ green() { echo -e "\e[1;32m$1\033[0m"; }
 yellow() { echo -e "\e[1;33m$1\033[0m"; }
 red() { echo -e "\e[1;91m$1\033[0m"; }
 
-# 智能提取参数中的端口号（兼容带标签的写法，如 h3"443" 或直接传 443）
+# 智能提取参数中的双引号内容
 extract_port() {
     local input="$1"
-    # 如果包含双引号，尝试提取引号内的内容
     if [[ "$input" == *'"'* ]]; then
         input=$(echo "$input" | sed -n 's/.*"\([^"]*\)".*/\1/p')
     fi
     echo "$input"
 }
 
-# 接收并解析命令行双参数（自动过滤掉可能附带的标签）
+# 接收并解析命令行双参数
 RAW_H3="$1"
 RAW_REALITY="$2"
 
@@ -47,8 +46,8 @@ h3_port=$(parse_port "$ARG_H3")
 reality_port=$(parse_port "$ARG_REALITY")
 
 if [ -z "$h3_port" ] && [ -z "$reality_port" ]; then
-    yellow "提示：未检测到任何有效的部署参数（H3和REALITY均未启用）。"
-    yellow "正确用法示例: bash singboxray.sh h3\"443\" reality\"8443\""
+    yellow "提示：未检测到任何有效的部署参数（H3和REALITY均未启用或均选择为n）。"
+    yellow "正确用法示例: bash singboxray.sh h3\"443\" reality\"y\""
     exit 0
 fi
 
