@@ -1,9 +1,10 @@
 #!/bin/bash
 
 # =========================================================================
-# Xray XHTTP 纯净直连安装脚本 (singboxray.sh)
-# 协议: 支持 VLESS-XHTTP-H3 与 VLESS-XHTTP-H2 (严格按参部署、无订阅逻辑)
-# 用法: bash singboxray.sh [h2参数] [h3参数]
+# Xray XHTTP 纯净直连安装脚本 (singboxray.sh) - H3 + REALITY 增强版
+# 协议: 支持 VLESS-XHTTP-H3 与 VLESS-XHTTP-REALITY
+# 用法: bash singboxray.sh [h3端口] [reality端口]
+# 示例: bash singboxray.sh h3"443" reality"8443"  或者直接传数字: bash singboxray.sh 443 8443
 # 参数说明: y/Y(随机端口), 数字(指定端口), 留空/n/N(放弃部署)
 # =========================================================================
 
@@ -12,12 +13,25 @@ green() { echo -e "\e[1;32m$1\033[0m"; }
 yellow() { echo -e "\e[1;33m$1\033[0m"; }
 red() { echo -e "\e[1;91m$1\033[0m"; }
 
-# 接收并解析命令行双参数
-ARG_H3="$1"
+# 智能提取参数中的端口号（兼容带标签的写法，如 h3"443" 或直接传 443）
+extract_port() {
+    local input="$1"
+    # 如果包含双引号，尝试提取引号内的内容
+    if [[ "$input" == *'"'* ]]; then
+        input=$(echo "$input" | sed -n 's/.*"\([^"]*\)".*/\1/p')
+    fi
+    echo "$input"
+}
+
+# 接收并解析命令行双参数（自动过滤掉可能附带的标签）
+RAW_H3="$1"
+RAW_REALITY="$2"
+
+ARG_H3=$(extract_port "$RAW_H3")
+ARG_REALITY=$(extract_port "$RAW_REALITY")
 
 parse_port() {
     local input="$1"
-    # 如果明确传了 n 或 N，或者为空，则返回空
     if [ "$input" = "n" ] || [ "$input" = "N" ] || [ -z "$input" ]; then
         echo ""
     elif [ "$input" = "y" ] || [ "$input" = "Y" ]; then
@@ -30,10 +44,11 @@ parse_port() {
 }
 
 h3_port=$(parse_port "$ARG_H3")
+reality_port=$(parse_port "$ARG_REALITY")
 
-# 如果两个参数解析出来都为空，说明用户未指定或选择放弃，直接安全退出
-if [ -z "$h3_port" ]; then
-    yellow "提示：未检测到有效的部署参数（H2和H3均未启用）。脚本已安全退出。"
+if [ -z "$h3_port" ] && [ -z "$reality_port" ]; then
+    yellow "提示：未检测到任何有效的部署参数（H3和REALITY均未启用）。"
+    yellow "正确用法示例: bash singboxray.sh h3\"443\" reality\"8443\""
     exit 0
 fi
 
@@ -58,14 +73,22 @@ curl -sLo "${work_dir}/xray.zip" "https://github.com/XTLS/Xray-core/releases/lat
 unzip -qo "${work_dir}/xray.zip" -d "${work_dir}/" && rm -f "${work_dir}/xray.zip"
 chmod +x ${work_dir}/xray
 
-# 3. 生成通用变量与自签证书
+# 3. 生成通用变量、自签证书与 REALITY 密钥对
 uuid=$(cat /proc/sys/kernel/random/uuid)
 h3_path="${uuid}-xu" 
+reality_path="${uuid}-xr"
 
+# 自签证书（供 H3 使用）
 openssl ecparam -genkey -name prime256v1 -out "${work_dir}/private.key"
 openssl req -new -x509 -days 3650 -key "${work_dir}/private.key" -out "${work_dir}/cert.pem" -subj "/CN=bing.com"
 
-# 4. 动态构建多 Inbound 的 Xray 核心配置
+# 生成 REALITY 密钥对
+gen_keys=$(${work_dir}/xray x25519)
+private_key=$(echo "$gen_keys" | grep "Private" | awk '{print $3}')
+public_key=$(echo "$gen_keys" | grep "Public" | awk '{print $3}')
+short_id=$(openssl rand -hex 8)
+
+# 4. 动态构建 Xray 核心配置 (支持 H3 与 REALITY 多 Inbound)
 cat > "${work_dir}/config.json" << EOF
 {
   "log": {
@@ -73,6 +96,13 @@ cat > "${work_dir}/config.json" << EOF
     "error": "${work_dir}/xray.log"
   },
   "inbounds": [
+EOF
+
+first_inbound=true
+
+# 如果配置了 H3 端口
+if [ -n "$h3_port" ]; then
+    cat >> "${work_dir}/config.json" << EOF
     {
       "tag": "xhttp-h3",
       "listen": "::",
@@ -113,6 +143,61 @@ cat > "${work_dir}/config.json" << EOF
         "metadataOnly": false
       }
     }
+EOF
+    first_inbound=false
+fi
+
+# 如果配置了 REALITY 端口
+if [ -n "$reality_port" ]; then
+    if [ "$first_inbound" = false ]; then
+        sed -i '$s/$/,/' "${work_dir}/config.json"
+    fi
+    cat >> "${work_dir}/config.json" << EOF
+    {
+      "tag": "xhttp-reality",
+      "listen": "::",
+      "port": $reality_port,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "$uuid",
+            "flow": ""
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "xver": 0,
+          "dest": "microsoft.com:443",
+          "serverNames": [
+            "microsoft.com",
+            "www.microsoft.com"
+          ],
+          "privateKey": "$private_key",
+          "shortIds": [
+            "$short_id"
+          ]
+        },
+        "xhttpSettings": {
+          "mode": "auto",
+          "path": "/${reality_path}"
+        }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls", "quic"],
+        "metadataOnly": false
+      }
+    }
+EOF
+fi
+
+cat >> "${work_dir}/config.json" << EOF
   ],
   "outbounds": [
     {
@@ -146,7 +231,7 @@ systemctl daemon-reload
 systemctl enable --now xray
 
 # 6. 放行对应的防火墙端口
-for p in "$h3_port"; do
+for p in "$h3_port" "$reality_port"; do
     [ -z "$p" ] && continue
     if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
         ufw allow $p/tcp >/dev/null 2>&1
@@ -168,12 +253,13 @@ isp=$(curl -sm 3 "https://api.ip.sb/geoip" | grep -o '"country_code":"[^"]*"' | 
 
 > "${work_dir}/url.txt"
 [ -n "$h3_port" ] && echo "vless://${uuid}@${server_ip}:${h3_port}?encryption=none&security=tls&sni=bing.com&alpn=h3&type=xhttp&path=/${h3_path}&allowInsecure=1#${isp}H3-XHTTP_easyshare" >> "${work_dir}/url.txt"
+[ -n "$reality_port" ] && echo "vless://${uuid}@${server_ip}:${reality_port}?encryption=none&security=reality&sni=microsoft.com&fp=chrome&pbk=${public_key}&sid=${short_id}&type=xhttp&path=/${reality_path}#${isp}Reality-XHTTP_easyshare" >> "${work_dir}/url.txt"
 
 base64_str=$(cat "${work_dir}/url.txt" | base64 | tr -d '\n' | tr -d '\r')
 
 clear
 green "=========================================================================================="
-green " Xray XHTTP 纯净直连节点部署成功（Base64）！"
+green " Xray XHTTP (H3 + REALITY) 节点部署成功（Base64）！"
 green "=========================================================================================="
-green "$base64_str"                # <--- 删除了明文打印和多余提示，直接输出纯净 Base64
+green "$base64_str"
 green "=========================================================================================="
