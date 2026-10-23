@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =========================================================================
-# Xray XHTTP 纯净直连安装脚本 (singboxray.sh) - 甬哥标准架构完美融合版
+# Xray XHTTP 纯净直连安装脚本 (singboxray.sh) - H3 + REALITY 纯净版
 # 协议: 支持 VLESS-XHTTP-H3 与 VLESS-XHTTP-REALITY
 # 用法: bash singboxray.sh h3"[参数]" reality"[参数]"
 # 参数说明: "y"/"Y"(随机端口), "数字"(指定端口), "n"/"N"/留空(放弃部署)
@@ -77,97 +77,35 @@ curl -sLo "${work_dir}/xray.zip" "https://github.com/XTLS/Xray-core/releases/lat
 unzip -qo "${work_dir}/xray.zip" -d "${work_dir}/" && rm -f "${work_dir}/xray.zip"
 chmod +x ${work_dir}/xray
 
-# 3. 生成通用变量、证书与 REALITY 密钥对
+# 3. 生成 UUID、自签证书（供 H3 使用）与 REALITY 密钥对
 uuid=$(cat /proc/sys/kernel/random/uuid)
 h3_path="${uuid}-xu" 
-reality_path="${uuid}-xh" 
-ym_vl_re="apple.com"
+reality_path="${uuid}-xr" 
 
-# 使用标准的本地证书路径（对标甬哥脚本逻辑）
-certificateHTA="${work_dir}/cert.pem"
-keyHTA="${work_dir}/private.key"
+# H3 自签证书
+openssl ecparam -genkey -name prime256v1 -out "${work_dir}/private.key"
+openssl req -new -x509 -days 3650 -key "${work_dir}/private.key" -out "${work_dir}/cert.pem" -subj "/CN=bing.com"
 
-openssl ecparam -genkey -name prime256v1 -out "$keyHTA"
-openssl req -new -x509 -days 3650 -key "$keyHTA" -out "$certificateHTA" -subj "/CN=$ym_vl_re"
+# Reality 密钥对生成
+gen_keys=$(${work_dir}/xray x25519)
+private_key=$(echo "$gen_keys" | grep "Private" | awk '{print $3}')
+public_key=$(echo "$gen_keys" | grep "Public" | awk '{print $3}')
+short_id=$(openssl rand -hex 8)
 
-# 生成 REALITY 密钥对（使用标准的 xray x25519 格式）
-key_pair=$("${work_dir}/xray" x25519)
-private_key_x=$(echo "$key_pair" | awk -F':' '/PrivateKey/ {print $2}' | xargs)
-public_key_x=$(echo "$key_pair" | awk -F':' '/Password/ {print $2}' | xargs)
-short_id_x=$(date +%s%N | sha256sum | cut -c 1-8)
+# 4. 构建多 Inbound 配置（使用干净的变量拼接，杜绝 JSON 语法损坏）
+inbounds_json=""
 
-# 4. 动态构建多 Inbound 的 Xray 核心配置
-cat > "${work_dir}/config.json" << EOF
-{
-  "log": {
-    "loglevel": "warning",
-    "error": "${work_dir}/xray.log"
-  },
-  "inbounds": [
-EOF
-
-first_inbound=true
-
-# 如果配置了 REALITY 端口 (严格对齐甬哥 argosbx 源码规范)
-if [ -n "$reality_port" ]; then
-    cat >> "${work_dir}/config.json" << EOF
-    {
-      "tag": "xhttp-reality",
-      "listen": "::",
-      "port": ${reality_port},
-      "protocol": "vless",
-      "settings": {
-        "clients": [
-          {
-            "id": "${uuid}",
-            "flow": ""
-          }
-        ],
-        "decryption": "none"
-      },
-      "streamSettings": {
-        "network": "xhttp",
-        "security": "reality",
-        "realitySettings": {
-          "fingerprint": "chrome",
-          "target": "${ym_vl_re}:443",
-          "serverNames": [
-            "${ym_vl_re}"
-          ],
-          "privateKey": "$private_key_x",
-          "shortIds": ["$short_id_x"]
-        },
-        "xhttpSettings": {
-          "host": "",
-          "path": "${reality_path}",
-          "mode": "auto"
-        }
-      },
-      "sniffing": {
-        "enabled": true,
-        "destOverride": ["http", "tls", "quic"],
-        "metadataOnly": false
-      }
-    }
-EOF
-    first_inbound=false
-fi
-
-# 如果配置了 H3 端口 (严格对齐甬哥源码规范)
+# 如果配置了 H3
 if [ -n "$h3_port" ]; then
-    if [ "$first_inbound" = false ]; then
-        sed -i '$s/$/,/' "${work_dir}/config.json"
-    fi
-    cat >> "${work_dir}/config.json" << EOF
-    {
+    inbounds_json+='{
       "tag": "xhttp-h3",
       "listen": "::",
-      "port": ${h3_port},
+      "port": '"$h3_port"',
       "protocol": "vless",
       "settings": {
         "clients": [
           {
-            "id": "${uuid}",
+            "id": "'"$uuid"'",
             "flow": ""
           }
         ],
@@ -178,16 +116,17 @@ if [ -n "$h3_port" ]; then
         "security": "tls",
         "xhttpSettings": {
           "mode": "auto",
-          "path": "${h3_path}"
+          "path": "/'"$h3_path"'"
         },
         "tlsSettings": {
+          "serverName": "bing.com",
           "alpn": [
             "h3"
           ],
           "certificates": [
             {
-              "certificateFile": "$certificateHTA",
-              "keyFile": "$keyHTA"
+              "certificateFile": "'"$work_dir"'/cert.pem",
+              "keyFile": "'"$work_dir"'/private.key"
             }
           ]
         }
@@ -197,11 +136,63 @@ if [ -n "$h3_port" ]; then
         "destOverride": ["http", "tls", "quic"],
         "metadataOnly": false
       }
-    }
-EOF
+    }'
 fi
 
-cat >> "${work_dir}/config.json" << EOF
+# 如果配置了 REALITY
+if [ -n "$reality_port" ]; then
+    [ -n "$inbounds_json" ] && inbounds_json+=','
+    inbounds_json+='{
+      "tag": "xhttp-reality",
+      "listen": "::",
+      "port": '"$reality_port"',
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "'"$uuid"'",
+            "flow": ""
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "xver": 0,
+          "target": "apple.com:443",
+          "serverNames": [
+            "apple.com",
+            "www.apple.com"
+          ],
+          "privateKey": "'"$private_key"'",
+          "shortIds": [
+            "'"$short_id"'"
+          ]
+        },
+        "xhttpSettings": {
+          "mode": "auto",
+          "path": "/'"$reality_path"'"
+        }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls", "quic"],
+        "metadataOnly": false
+      }
+    }'
+fi
+
+cat > "${work_dir}/config.json" << EOF
+{
+  "log": {
+    "loglevel": "warning",
+    "error": "${work_dir}/xray.log"
+  },
+  "inbounds": [
+    $inbounds_json
   ],
   "outbounds": [
     {
@@ -256,8 +247,8 @@ fi
 isp=$(curl -sm 3 "https://api.ip.sb/geoip" | grep -o '"country_code":"[^"]*"' | cut -d'"' -f4 || echo "Node")
 
 > "${work_dir}/url.txt"
-[ -n "$h3_port" ] && echo "vless://${uuid}@${server_ip}:${h3_port}?encryption=none&security=tls&sni=apple.com&alpn=h3&type=xhttp&path=/${h3_path}&allowInsecure=1#${isp}H3-XHTTP_easyshare" >> "${work_dir}/url.txt"
-[ -n "$reality_port" ] && echo "vless://${uuid}@${server_ip}:${reality_port}?encryption=none&security=reality&sni=apple.com&fp=chrome&pbk=${public_key_x}&sid=${short_id_x}&type=xhttp&path=/${reality_path}#${isp}Reality-XHTTP_easyshare" >> "${work_dir}/url.txt"
+[ -n "$h3_port" ] && echo "vless://${uuid}@${server_ip}:${h3_port}?encryption=none&security=tls&sni=bing.com&alpn=h3&type=xhttp&path=/${h3_path}&allowInsecure=1#${isp}H3-XHTTP_easyshare" >> "${work_dir}/url.txt"
+[ -n "$reality_port" ] && echo "vless://${uuid}@${server_ip}:${reality_port}?encryption=none&security=reality&sni=apple.com&fp=chrome&pbk=${public_key}&sid=${short_id}&type=xhttp&path=/${reality_path}#${isp}Reality-XHTTP_easyshare" >> "${work_dir}/url.txt"
 
 base64_str=$(cat "${work_dir}/url.txt" | base64 | tr -d '\n' | tr -d '\r')
 
