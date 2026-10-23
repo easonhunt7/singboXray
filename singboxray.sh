@@ -74,11 +74,11 @@ fi
 work_dir="/etc/xray"
 [[ $EUID -ne 0 ]] && red "请在root用户下运行" && exit 1
 
-# ==================== 1. 清理旧服务并智能安装/补全必要组件 ====================
+# 1. 初始化
 systemctl stop xray 2>/dev/null || rc-service xray stop 2>/dev/null || true
 pkill -9 -f cloudflared 2>/dev/null || true
 
-yellow "正在检测系统环境并自动补全必要组件..."
+yellow "正在初始化系统环境..."
 if command -v apt >/dev/null 2>&1; then
     apt update -y >/dev/null 2>&1
     apt install -y curl wget unzip openssl iptables coreutils >/dev/null 2>&1
@@ -99,10 +99,9 @@ for cmd in curl unzip openssl; do
         exit 1
     fi
 done
-green "系统组件检测与补全完成。"
 
 # 2. 下载 Xray-core
-yellow "正在检测系统架构并下载 Xray-core 核心..."
+yellow "正在下载 Xray-core 核心..."
 mkdir -p "${work_dir}"
 ARCH_RAW=$(uname -m)
 case "${ARCH_RAW}" in
@@ -114,7 +113,6 @@ esac
 curl -sLo "${work_dir}/xray.zip" "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${ARCH}.zip"
 unzip -qo "${work_dir}/xray.zip" -d "${work_dir}/" && rm -f "${work_dir}/xray.zip"
 chmod +x ${work_dir}/xray
-green "Xray-core 核心下载与解压完成。"
 
 # 如果开启了 Argo，下载 cloudflared
 if [ "$enable_argo" = true ]; then
@@ -127,7 +125,6 @@ if [ "$enable_argo" = true ]; then
     esac
     curl -sLo "${work_dir}/cloudflared" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}"
     chmod +x "${work_dir}/cloudflared"
-    green "cloudflared 下载完成。"
 fi
 
 # 3. 生成变量、自签证书与密钥对
@@ -146,7 +143,6 @@ key_pair=$("${work_dir}/xray" x25519)
 private_key_x=$(echo "$key_pair" | awk -F':' '/PrivateKey/ {print $2}' | xargs)
 public_key_x=$(echo "$key_pair" | awk -F':' '/Password/ {print $2}' | xargs)
 short_id_x=$(date +%s%N | sha256sum | cut -c 1-8)
-green "证书与密钥生成完毕。"
 
 # 4. 构建多 Inbound 配置 (TCP-Reality-Vision + H3-XHTTP + Argo-XHTTP)
 yellow "正在动态构建 Xray 核心配置文件..."
@@ -245,11 +241,10 @@ cat > "${work_dir}/config.json" << EOF
   ]
 }
 EOF
-green "配置文件 config.json 生成成功。"
 
 # 5. 配置系统服务并启动
 if pidof systemd >/dev/null 2>&1 || [ -d /etc/systemd/system ]; then
-    yellow "正在注册 Systemd 系统服务并启动 Xray..."
+    yellow "正在启动 Xray..."
     cat > /etc/systemd/system/xray.service << EOF
 [Unit]
 Description=Xray Service
@@ -270,7 +265,7 @@ EOF
     systemctl daemon-reload
     systemctl enable --now xray
 else
-    yellow "正在注册 Alpine OpenRC 服务并启动 Xray..."
+    yellow "正在启动 Xray..."
     cat > /etc/init.d/xray << 'EOF'
 #!/sbin/openrc-run
 description="Xray Service"
@@ -287,7 +282,6 @@ EOF
     rc-update add xray default
     rc-service xray restart
 fi
-green "Xray 服务已成功启动。"
 
 # 根据协议自动分配连接数：quic 默认 1，http2 设为 4
 argo_connections="1"
@@ -298,7 +292,7 @@ fi
 
 # 如果开启了 Argo，启动 cloudflared 后台进程
 if [ "$enable_argo" = true ]; then
-    yellow "正在后台启动 Cloudflare Argo 固定隧道 (协议: ${argo_protocol}, 连接数: ${argo_connections})..."
+    yellow "正在启动 Cloudflare Argo 固定隧道 (协议: ${argo_protocol}, 连接数: ${argo_connections})..."
     nohup "${work_dir}/cloudflared" tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol "${argo_protocol}" --ha-connections "${argo_connections}" run --token "${argo_token}" > "${work_dir}/cloudflared.log" 2>&1 &
     green "Argo 固定隧道已启动。"
 fi
@@ -316,7 +310,6 @@ for p in "$h3_port" "$reality_port"; do
         iptables -A INPUT -p udp --dport $p -j ACCEPT 2>/dev/null
     fi
 done
-green "防火墙端口放行配置完成。"
 
 # 7. 获取 IP 并输出节点链接与 Base64 编码
 yellow "正在获取服务器公网 IP 及节点订阅..."
@@ -332,11 +325,11 @@ cfip="www.teamviewer.com"
 cfport="443"
 
 > "${work_dir}/url.txt"
-[ -n "$reality_port" ] && echo "vless://${uuid}@${server_ip}:${reality_port}?encryption=none&security=reality&sni=${ym_vl_re}&fp=chrome&pbk=${public_key_x}&sid=${short_id_x}&type=tcp&flow=xtls-rprx-vision#$Reality Vision_easyshare" >> "${work_dir}/url.txt"
-[ -n "$h3_port" ] && echo "vless://${uuid}@${server_ip}:${h3_port}?encryption=none&security=tls&sni=bing.com&alpn=h3&fp=chrome&type=xhttp&mode=auto&path=/${h3_path}&allowInsecure=1#$H3-XHTTP_easyshare" >> "${work_dir}/url.txt"
+[ -n "$reality_port" ] && echo "vless://${uuid}@${server_ip}:${reality_port}?encryption=none&security=reality&sni=${ym_vl_re}&fp=chrome&pbk=${public_key_x}&sid=${short_id_x}&type=tcp&flow=xtls-rprx-vision#Reality Vision_easyshare" >> "${work_dir}/url.txt"
+[ -n "$h3_port" ] && echo "vless://${uuid}@${server_ip}:${h3_port}?encryption=none&security=tls&sni=bing.com&alpn=h3&fp=chrome&type=xhttp&mode=auto&path=/${h3_path}&allowInsecure=1#H3-XHTTP_easyshare" >> "${work_dir}/url.txt"
 if [ "$enable_argo" = true ]; then
-    echo "vless://${uuid}@${cfip}:${cfport}?encryption=none&security=tls&alpn=h2&sni=${argo_domain}&fp=chrome&type=xhttp&mode=auto&host=${argo_domain}&path=/${argo_path}#$H2-Argo XHTTP_easyshare" >> "${work_dir}/url.txt"
-    echo "vless://${uuid}@${cfip}:${cfport}?encryption=none&security=tls&alpn=h3&sni=${argo_domain}&fp=chrome&type=xhttp&mode=auto&host=${argo_domain}&path=/${argo_path}#$H3-Argo XHTTP_easyshare" >> "${work_dir}/url.txt"
+    echo "vless://${uuid}@${cfip}:${cfport}?encryption=none&security=tls&alpn=h2&sni=${argo_domain}&fp=chrome&type=xhttp&mode=auto&host=${argo_domain}&path=/${argo_path}#H2-Argo XHTTP_easyshare" >> "${work_dir}/url.txt"
+    echo "vless://${uuid}@${cfip}:${cfport}?encryption=none&security=tls&alpn=h3&sni=${argo_domain}&fp=chrome&type=xhttp&mode=auto&host=${argo_domain}&path=/${argo_path}#H3-Argo XHTTP_easyshare" >> "${work_dir}/url.txt"
 fi
 
 base64_str=$(cat "${work_dir}/url.txt" | base64 | tr -d '\n' | tr -d '\r')
