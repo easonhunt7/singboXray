@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =========================================================================
-# Xray XHTTP (H3 + REALITY + ARGO) 跨平台纯净直连与隧道安装脚本
+# Xray XHTTP (REALITY + H3 + ARGO) 跨平台纯净直连与隧道安装脚本 
 # 用法示例: bash singboxray.sh h3"46789" reality"45178" argo protocol"quic" argo port"8001" domain"你的域名" token"你的token"
 # =========================================================================
 
@@ -139,7 +139,7 @@ public_key_x=$(echo "$key_pair" | awk -F':' '/Password/ {print $2}' | xargs)
 short_id_x=$(date +%s%N | sha256sum | cut -c 1-8)
 green "证书与密钥生成完毕。"
 
-# 4. 构建多 Inbound 配置 (采用安全数组拼装，彻底杜绝引号语法错误)
+# 4. 构建多 Inbound 配置
 yellow "正在动态构建 Xray 核心配置文件..."
 inbounds_arr=()
 
@@ -338,7 +338,7 @@ base64_str=$(cat "${work_dir}/url.txt" | base64 | tr -d '\n' | tr -d '\r')
 
 clear
 green "=========================================================================================="
-green " Xray XHTTP (H3 + REALITY + ARGO) 节点部署成功（Base64）！"
+green " Base64 链接 - Xray XHTTP (REALITY/H3/ARGO) "
 green "=========================================================================================="
 green "$base64_str"
 green "=========================================================================================="
