@@ -60,7 +60,7 @@ argo_protocol="${ARG_ARGO_PROTOCOL:-quic}"
 argo_domain="${ARG_ARGO_DOMAIN}"
 argo_token="${ARG_ARGO_TOKEN}"
 
-# Argo 4个变量校验：端口、域名、Token必须齐全，否则放弃Argo部署
+# Argo 4个变量校验：协议、端口、域名、Token必须齐全，否则放弃Argo部署
 enable_argo=false
 if [ -n "$argo_port" ] && [ -n "$argo_domain" ] && [ -n "$argo_token" ] && [ -n "$argo_protocol" ]; then
     enable_argo=true
@@ -332,18 +332,18 @@ cfip="www.teamviewer.com"
 cfport="443"
 
 > "${work_dir}/url.txt"
-[ -n "$reality_port" ] && echo "vless://${uuid}@${server_ip}:${reality_port}?encryption=none&security=reality&sni=${ym_vl_re}&fp=chrome&pbk=${public_key_x}&sid=${short_id_x}&type=tcp&flow=xtls-rprx-vision#${isp}TCP-Reality-Vision_easyshare" >> "${work_dir}/url.txt"
-[ -n "$h3_port" ] && echo "vless://${uuid}@${server_ip}:${h3_port}?encryption=none&security=tls&sni=bing.com&alpn=h3&fp=chrome&type=xhttp&mode=auto&path=/${h3_path}&allowInsecure=1#${isp}H3-XHTTP_easyshare" >> "${work_dir}/url.txt"
+[ -n "$reality_port" ] && echo "vless://${uuid}@${server_ip}:${reality_port}?encryption=none&security=reality&sni=${ym_vl_re}&fp=chrome&pbk=${public_key_x}&sid=${short_id_x}&type=tcp&flow=xtls-rprx-vision#$Reality Vision_easyshare" >> "${work_dir}/url.txt"
+[ -n "$h3_port" ] && echo "vless://${uuid}@${server_ip}:${h3_port}?encryption=none&security=tls&sni=bing.com&alpn=h3&fp=chrome&type=xhttp&mode=auto&path=/${h3_path}&allowInsecure=1#$H3-XHTTP_easyshare" >> "${work_dir}/url.txt"
 if [ "$enable_argo" = true ]; then
-    echo "vless://${uuid}@${cfip}:${cfport}?encryption=none&security=tls&alpn=h2&sni=${argo_domain}&fp=chrome&type=xhttp&mode=auto&host=${argo_domain}&path=/${argo_path}#${isp}H2-Argo-XHTTP_easyshare" >> "${work_dir}/url.txt"
-    echo "vless://${uuid}@${cfip}:${cfport}?encryption=none&security=tls&alpn=h3&sni=${argo_domain}&fp=chrome&type=xhttp&mode=auto&host=${argo_domain}&path=/${argo_path}#${isp}H3-Argo-XHTTP_easyshare" >> "${work_dir}/url.txt"
+    echo "vless://${uuid}@${cfip}:${cfport}?encryption=none&security=tls&alpn=h2&sni=${argo_domain}&fp=chrome&type=xhttp&mode=auto&host=${argo_domain}&path=/${argo_path}#$H2-Argo XHTTP_easyshare" >> "${work_dir}/url.txt"
+    echo "vless://${uuid}@${cfip}:${cfport}?encryption=none&security=tls&alpn=h3&sni=${argo_domain}&fp=chrome&type=xhttp&mode=auto&host=${argo_domain}&path=/${argo_path}#$H3-Argo XHTTP_easyshare" >> "${work_dir}/url.txt"
 fi
 
 base64_str=$(cat "${work_dir}/url.txt" | base64 | tr -d '\n' | tr -d '\r')
 
 clear
 green "=========================================================================================="
-green " Base64 链接 - Xray (TCP-REALITY-VISION / H3-XHTTP / ARGO-XHTTP) "
+green " Base64 节点链接-Xray (REALITY/XHTTP) "
 green "=========================================================================================="
 green "$base64_str"
 green "=========================================================================================="
