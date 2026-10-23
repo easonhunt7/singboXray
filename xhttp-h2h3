@@ -43,9 +43,15 @@ work_dir="/etc/xray"
 [[ $EUID -ne 0 ]] && red "请在root用户下运行" && exit 1
 
 # 1. 清理旧服务并安装依赖
-systemctl stop xray 2>/dev/null || true
+systemctl stop xray 2>/dev/null || rc-service xray stop 2>/dev/null || true
 yellow "正在更新系统并安装必要组件..."
-apt update && apt install -y curl wget jq unzip openssl iptables 2>/dev/null || yum install -y curl wget jq unzip openssl iptables 2>/dev/null
+if command -v apt >/dev/null 2>&1; then
+    apt update && apt install -y curl wget jq unzip openssl iptables 2>/dev/null
+elif command -v yum >/dev/null 2>&1; then
+    yum install -y curl wget jq unzip openssl iptables 2>/dev/null
+elif command -v apk >/dev/null 2>&1; then
+    apk update && apk add --no-cache curl wget jq unzip openssl iptables coreutils 2>/dev/null
+fi
 
 # 2. 下载 Xray-core
 mkdir -p "${work_dir}"
@@ -188,8 +194,10 @@ cat >> "${work_dir}/config.json" << EOF
 }
 EOF
 
-# 5. 配置 Systemd 服务
-cat > /etc/systemd/system/xray.service << EOF
+# 5. 配置并启动服务 (自动适配 Systemd 与 Alpine OpenRC)
+if pidof systemd >/dev/null 2>&1 || [ -d /etc/systemd/system ]; then
+    # 【原有逻辑保持不变】Ubuntu / Debian / CentOS 使用 Systemd
+    cat > /etc/systemd/system/xray.service << EOF
 [Unit]
 Description=Xray Service
 After=network.target nss-lookup.target
@@ -206,9 +214,26 @@ LimitNOFILE=infinity
 [Install]
 WantedBy=multi-user.target
 EOF
+    systemctl daemon-reload
+    systemctl enable --now xray
+else
+    # 【新增逻辑】Alpine Linux 使用 OpenRC 守护进程
+    cat > /etc/init.d/xray << 'EOF'
+#!/sbin/openrc-run
+description="Xray Service"
+command="/etc/xray/xray"
+command_args="run -config /etc/xray/config.json"
+pidfile="/run/xray.pid"
+command_background="yes"
 
-systemctl daemon-reload
-systemctl enable --now xray
+depend() {
+    need net
+}
+EOF
+    chmod +x /etc/init.d/xray
+    rc-update add xray default
+    rc-service xray restart
+fi
 
 # 6. 放行对应的防火墙端口
 for p in "$h2_port" "$h3_port"; do
