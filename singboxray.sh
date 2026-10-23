@@ -1,11 +1,8 @@
 #!/bin/bash
 
 # =========================================================================
-# Xray XHTTP 纯净直连安装脚本 (singboxray.sh) - 甬哥标准对齐版
-# 协议: 支持 VLESS-XHTTP-H3 与 VLESS-XHTTP-REALITY
-# 用法: bash singboxray.sh h3"[参数]" reality"[参数]"
-# 参数说明: "y"/"Y"(随机端口), "数字"(指定端口), "n"/"N"/留空(放弃部署)
-# 示例: bash singboxray.sh h3"y" reality"y"
+# Xray XHTTP (H3 + REALITY + ARGO) 跨平台纯净直连与隧道安装脚本
+# 用法示例: bash singboxray.sh h3"46789" reality"45178" argo protocol"quic" argo port"8001" domain"你的域名" token"你的token"
 # =========================================================================
 
 export LANG=en_US.UTF-8
@@ -15,8 +12,12 @@ red() { echo -e "\e[1;91m$1\033[0m"; }
 
 ARG_H3=""
 ARG_REALITY=""
+ARG_ARGO_PROTOCOL="quic"
+ARG_ARGO_PORT="8001"
+ARG_ARGO_DOMAIN=""
+ARG_ARGO_TOKEN=""
 
-# 智能识别粘合参数（完美适配 h3"y" -> h3y、reality"443" 等写法）
+# 智能解析复合与关键字参数
 for arg in "$@"; do
     clean_arg="${arg//\"/}"
     clean_arg="${clean_arg//\'/}"
@@ -25,6 +26,14 @@ for arg in "$@"; do
         ARG_H3="${BASH_REMATCH[1]}"
     elif [[ "$clean_arg" =~ ^[rR][eE][aA][lL][iI][tT][yY](.*)$ ]]; then
         ARG_REALITY="${BASH_REMATCH[1]}"
+    elif [[ "$clean_arg" =~ ^argo[pP][rR][oO][tT][oO][cC][oO][lL](.*)$ ]] || [[ "$clean_arg" =~ ^[pP][rR][oO][tT][oO][cC][oO][lL](.*)$ ]]; then
+        ARG_ARGO_PROTOCOL="${BASH_REMATCH[1]}"
+    elif [[ "$clean_arg" =~ ^argo[pP][oO][rR][tT](.*)$ ]] || [[ "$clean_arg" =~ ^[pP][oO][rR][tT](.*)$ ]]; then
+        ARG_ARGO_PORT="${BASH_REMATCH[1]}"
+    elif [[ "$clean_arg" =~ ^argo[dD][oO][mM][aA][iI][nN](.*)$ ]] || [[ "$clean_arg" =~ ^[dD][oO][mM][aA][iI][nN](.*)$ ]]; then
+        ARG_ARGO_DOMAIN="${BASH_REMATCH[1]}"
+    elif [[ "$clean_arg" =~ ^argo[tT][oO][kK][eE][nN](.*)$ ]] || [[ "$clean_arg" =~ ^[tT][oO][kK][eE][nN](.*)$ ]]; then
+        ARG_ARGO_TOKEN="${BASH_REMATCH[1]}"
     elif [[ "$clean_arg" =~ ^[0-9]+$ ]] || [[ "$clean_arg" =~ ^[yYnN]$ ]]; then
         if [ -z "$ARG_H3" ]; then
             ARG_H3="$clean_arg"
@@ -50,9 +59,19 @@ parse_port() {
 h3_port=$(parse_port "$ARG_H3")
 reality_port=$(parse_port "$ARG_REALITY")
 
-if [ -z "$h3_port" ] && [ -z "$reality_port" ]; then
-    yellow "提示：未检测到有效的部署参数（H3和REALITY均未启用或均选择为n）。"
-    yellow "正确用法示例: bash singboxray.sh h3\"y\" reality\"y\""
+argo_port="${ARG_ARGO_PORT:-8001}"
+argo_protocol="${ARG_ARGO_PROTOCOL:-quic}"
+argo_domain="${ARG_ARGO_DOMAIN}"
+argo_token="${ARG_ARGO_TOKEN}"
+
+# Argo 4个变量校验：端口、域名、Token必须齐全，否则放弃Argo部署
+enable_argo=false
+if [ -n "$argo_port" ] && [ -n "$argo_domain" ] && [ -n "$argo_token" ] && [ -n "$argo_protocol" ]; then
+    enable_argo=true
+fi
+
+if [ -z "$h3_port" ] && [ -z "$reality_port" ] && [ "$enable_argo" = false ]; then
+    yellow "提示：未检测到任何有效的部署参数（H3、REALITY及Argo隧道均未启用）。"
     exit 0
 fi
 
@@ -60,9 +79,16 @@ work_dir="/etc/xray"
 [[ $EUID -ne 0 ]] && red "请在root用户下运行" && exit 1
 
 # 1. 清理旧服务并安装依赖
-systemctl stop xray 2>/dev/null || true
-yellow "正在更新系统并安装必要组件（curl、wget、unzip、openssl、iptables），请耐心等待..."
-apt update && apt install -y curl wget unzip openssl iptables 2>/dev/null || yum install -y curl wget unzip openssl iptables 2>/dev/null
+systemctl stop xray 2>/dev/null || rc-service xray stop 2>/dev/null || true
+pkill -9 -f cloudflared 2>/dev/null || true
+yellow "正在更新系统并安装必要组件..."
+if command -v apt >/dev/null 2>&1; then
+    apt update && apt install -y curl wget unzip openssl iptables 2>/dev/null
+elif command -v yum >/dev/null 2>&1; then
+    yum install -y curl wget openssl iptables 2>/dev/null
+elif command -v apk >/dev/null 2>&1; then
+    apk update && apk add --no-cache curl wget unzip openssl iptables coreutils 2>/dev/null
+fi
 green "必要组件安装完成。"
 
 # 2. 下载 Xray-core
@@ -80,18 +106,33 @@ unzip -qo "${work_dir}/xray.zip" -d "${work_dir}/" && rm -f "${work_dir}/xray.zi
 chmod +x ${work_dir}/xray
 green "Xray-core 核心下载与解压完成。"
 
-# 3. 生成变量、自签证书与 REALITY 密钥对
-yellow "正在生成安全 UUID、H3 自签证书及 REALITY 密钥对..."
+# 如果开启了 Argo，下载 cloudflared
+if [ "$enable_argo" = true ]; then
+    yellow "正在下载 Cloudflare cloudflared 二进制文件..."
+    ARCH_CF=$(uname -m)
+    case "${ARCH_CF}" in
+        'x86_64' | 'amd64') CF_ARCH='amd64' ;;
+        'aarch64' | 'arm64') CF_ARCH='arm64' ;;
+        *) CF_ARCH='amd64' ;;
+    esac
+    curl -sLo "${work_dir}/cloudflared" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}"
+    chmod +x "${work_dir}/cloudflared"
+    green "cloudflared 下载完成。"
+fi
+
+# 3. 生成变量、自签证书与密钥对
+yellow "正在生成安全 UUID、自签证书及密钥对..."
 uuid=$(cat /proc/sys/kernel/random/uuid)
 h3_path="${uuid}-xu" 
 reality_path="${uuid}-xh" 
+argo_path="${uuid}-argo"
 ym_vl_re="apple.com"
 
 # H3 自签证书
 openssl ecparam -genkey -name prime256v1 -out "${work_dir}/private.key"
 openssl req -new -x509 -days 3650 -key "${work_dir}/private.key" -out "${work_dir}/cert.pem" -subj "/CN=bing.com"
 
-# Reality 密钥对生成
+# Reality 密钥对
 key_pair=$("${work_dir}/xray" x25519)
 private_key_x=$(echo "$key_pair" | awk -F':' '/PrivateKey/ {print $2}' | xargs)
 public_key_x=$(echo "$key_pair" | awk -F':' '/Password/ {print $2}' | xargs)
@@ -110,12 +151,7 @@ if [ -n "$reality_port" ]; then
       "port": '"$reality_port"',
       "protocol": "vless",
       "settings": {
-        "clients": [
-          {
-            "id": "'"$uuid"'",
-            "flow": ""
-          }
-        ],
+        "clients": [{"id": "'"$uuid"'", "flow": ""}],
         "decryption": "none"
       },
       "streamSettings": {
@@ -124,9 +160,7 @@ if [ -n "$reality_port" ]; then
         "realitySettings": {
           "fingerprint": "chrome",
           "target": "'"$ym_vl_re"':443",
-          "serverNames": [
-            "'"$ym_vl_re"'"
-          ],
+          "serverNames": ["'"$ym_vl_re"''"],
           "privateKey": "'"$private_key_x"'",
           "shortIds": ["'"$short_id_x"'"]
         },
@@ -136,11 +170,7 @@ if [ -n "$reality_port" ]; then
           "mode": "auto"
         }
       },
-      "sniffing": {
-        "enabled": true,
-        "destOverride": ["http", "tls", "quic"],
-        "metadataOnly": false
-      }
+      "sniffing": {"enabled": true, "destOverride": ["http", "tls", "quic"], "metadataOnly": false}
     }'
 fi
 
@@ -153,12 +183,7 @@ if [ -n "$h3_port" ]; then
       "port": '"$h3_port"',
       "protocol": "vless",
       "settings": {
-        "clients": [
-          {
-            "id": "'"$uuid"'",
-            "flow": ""
-          }
-        ],
+        "clients": [{"id": "'"$uuid"'", "flow": ""}],
         "decryption": "none"
       },
       "streamSettings": {
@@ -169,22 +194,36 @@ if [ -n "$h3_port" ]; then
           "path": "/'"$h3_path"'"
         },
         "tlsSettings": {
-          "alpn": [
-            "h3"
-          ],
-          "certificates": [
-            {
-              "certificateFile": "'"$work_dir"'/cert.pem",
-              "keyFile": "'"$work_dir"'/private.key"
-            }
-          ]
+          "alpn": ["h3"],
+          "certificates": [{"certificateFile": "'"$work_dir"'/cert.pem", "keyFile": "'"$work_dir"'/private.key"}]
         }
       },
-      "sniffing": {
-        "enabled": true,
-        "destOverride": ["http", "tls", "quic"],
-        "metadataOnly": false
-      }
+      "sniffing": {"enabled": true, "destOverride": ["http", "tls", "quic"], "metadataOnly": false}
+    }'
+fi
+
+# 如果配置了 ARGO 隧道
+if [ "$enable_argo" = true ]; then
+    [ -n "$inbounds_json" ] && inbounds_json+=','
+    inbounds_json+='{
+      "tag": "xhttp-argo",
+      "listen": "127.0.0.1",
+      "port": '"$argo_port"',
+      "protocol": "vless",
+      "settings": {
+        "clients": [{"id": "'"$uuid"'"}],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "none",
+        "xhttpSettings": {
+          "path": "/'"$argo_path"'",
+          "mode": "auto",
+          "scMaxConcurrentStreams": 16
+        }
+      },
+      "sniffing": {"enabled": true, "destOverride": ["http", "tls", "quic"], "metadataOnly": false}
     }'
 fi
 
@@ -207,19 +246,30 @@ cat > "${work_dir}/config.json" << EOF
 EOF
 green "配置文件 config.json 生成成功。"
 
-# 5. 配置 Systemd 服务并启动
-yellow "正在注册 Systemd 系统服务并启动 Xray..."
+# 5. 配置系统服务并启动
 if pidof systemd >/dev/null 2>&1 || [ -d /etc/systemd/system ]; then
+    yellow "正在注册 Systemd 系统服务并启动 Xray..."
     cat > /etc/systemd/system/xray.service << EOF
 [Unit]
 Description=Xray Service
-...
+After=network.target nss-lookup.target
+
+[Service]
+User=root
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+ExecStart=${work_dir}/xray run -config ${work_dir}/config.json
+Restart=on-failure
+RestartSec=10
+LimitNOFILE=infinity
+
 [Install]
 WantedBy=multi-user.target
 EOF
     systemctl daemon-reload
     systemctl enable --now xray
 else
+    yellow "正在注册 Alpine OpenRC 服务并启动 Xray..."
     cat > /etc/init.d/xray << 'EOF'
 #!/sbin/openrc-run
 description="Xray Service"
@@ -236,9 +286,16 @@ EOF
     rc-update add xray default
     rc-service xray restart
 fi
-green "Xray 服务已成功启动并设置为开机自启。"
+green "Xray 服务已成功启动。"
 
-# 6. 放行对应的防火墙端口
+# 如果开启了 Argo，启动 cloudflared 后台进程
+if [ "$enable_argo" = true ]; then
+    yellow "正在后台启动 Cloudflare Argo 固定隧道..."
+    nohup "${work_dir}/cloudflared" tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol "${argo_protocol}" --ha-connections 1 run --token "${argo_token}" > "${work_dir}/cloudflared.log" 2>&1 &
+    green "Argo 固定隧道已启动。"
+fi
+
+# 6. 放行对应的防火墙端口 (仅直连端口需要放行，Argo 不需要)
 yellow "正在配置防火墙端口放行规则..."
 for p in "$h3_port" "$reality_port"; do
     [ -z "$p" ] && continue
@@ -254,7 +311,7 @@ done
 green "防火墙端口放行配置完成。"
 
 # 7. 获取 IP 并输出节点链接与 Base64 编码
-yellow "正在获取服务器公网 IP 及地理位置信息..."
+yellow "正在获取服务器公网 IP 及节点订阅..."
 raw_ip=$(curl -4 -sm 2 ip.sb || curl -6 -sm 2 ip.sb)
 if [[ "$raw_ip" =~ : ]]; then
     server_ip="[$raw_ip]"
@@ -263,16 +320,22 @@ else
 fi
 
 isp=$(curl -sm 3 "https://api.ip.sb/geoip" | grep -o '"country_code":"[^"]*"' | cut -d'"' -f4 || echo "Node")
+cfip="www.teamviewer.com"
+cfport="443"
 
 > "${work_dir}/url.txt"
 [ -n "$reality_port" ] && echo "vless://${uuid}@${server_ip}:${reality_port}?encryption=none&security=reality&sni=${ym_vl_re}&fp=chrome&pbk=${public_key_x}&sid=${short_id_x}&type=xhttp&path=/${reality_path}#${isp}Reality-XHTTP_easyshare" >> "${work_dir}/url.txt"
 [ -n "$h3_port" ] && echo "vless://${uuid}@${server_ip}:${h3_port}?encryption=none&security=tls&sni=bing.com&alpn=h3&type=xhttp&path=/${h3_path}&allowInsecure=1#${isp}H3-XHTTP_easyshare" >> "${work_dir}/url.txt"
+if [ "$enable_argo" = true ]; then
+    echo "vless://${uuid}@${cfip}:${cfport}?encryption=none&security=tls&alpn=h2&sni=${argo_domain}&fp=chrome&type=xhttp&mode=auto&host=${argo_domain}&path=/${argo_path}#${isp}H2-Argo-XHTTP_easyshare" >> "${work_dir}/url.txt"
+    echo "vless://${uuid}@${cfip}:${cfport}?encryption=none&security=tls&alpn=h3&sni=${argo_domain}&fp=chrome&type=xhttp&mode=auto&host=${argo_domain}&path=/${argo_path}#${isp}H3-Argo-XHTTP_easyshare" >> "${work_dir}/url.txt"
+fi
 
 base64_str=$(cat "${work_dir}/url.txt" | base64 | tr -d '\n' | tr -d '\r')
 
 clear
 green "=========================================================================================="
-green " Xray XHTTP (H3 + REALITY) 节点部署成功（Base64）！"
+green " Xray XHTTP (H3 + REALITY + ARGO) 节点部署成功（Base64）！"
 green "=========================================================================================="
 green "$base64_str"
 green "=========================================================================================="
