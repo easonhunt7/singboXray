@@ -209,26 +209,33 @@ green "配置文件 config.json 生成成功。"
 
 # 5. 配置 Systemd 服务并启动
 yellow "正在注册 Systemd 系统服务并启动 Xray..."
-cat > /etc/systemd/system/xray.service << EOF
+if pidof systemd >/dev/null 2>&1 || [ -d /etc/systemd/system ]; then
+    cat > /etc/systemd/system/xray.service << EOF
 [Unit]
 Description=Xray Service
-After=network.target nss-lookup.target
-
-[Service]
-User=root
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
-ExecStart=${work_dir}/xray run -config ${work_dir}/config.json
-Restart=on-failure
-RestartSec=10
-LimitNOFILE=infinity
-
+...
 [Install]
 WantedBy=multi-user.target
 EOF
+    systemctl daemon-reload
+    systemctl enable --now xray
+else
+    cat > /etc/init.d/xray << 'EOF'
+#!/sbin/openrc-run
+description="Xray Service"
+command="/etc/xray/xray"
+command_args="run -config /etc/xray/config.json"
+pidfile="/run/xray.pid"
+command_background="yes"
 
-systemctl daemon-reload
-systemctl enable --now xray
+depend() {
+    need net
+}
+EOF
+    chmod +x /etc/init.d/xray
+    rc-update add xray default
+    rc-service xray restart
+fi
 green "Xray 服务已成功启动并设置为开机自启。"
 
 # 6. 放行对应的防火墙端口
