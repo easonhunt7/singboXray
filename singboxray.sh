@@ -139,93 +139,90 @@ public_key_x=$(echo "$key_pair" | awk -F':' '/Password/ {print $2}' | xargs)
 short_id_x=$(date +%s%N | sha256sum | cut -c 1-8)
 green "证书与密钥生成完毕。"
 
-# 4. 构建多 Inbound 配置
+# 4. 构建多 Inbound 配置 (采用安全数组拼装，彻底杜绝引号语法错误)
 yellow "正在动态构建 Xray 核心配置文件..."
-inbounds_json=""
+inbounds_arr=()
 
-# 如果配置了 REALITY（已修复 serverNames 单引号拼写）
 if [ -n "$reality_port" ]; then
-    inbounds_json+='{
-      "tag": "xhttp-reality",
-      "listen": "::",
-      "port": '"$reality_port"',
-      "protocol": "vless",
-      "settings": {
-        "clients": [{"id": "'"$uuid"'", "flow": ""}],
-        "decryption": "none"
+    inbounds_arr+=( "{
+      \"tag\": \"xhttp-reality\",
+      \"listen\": \"::\",
+      \"port\": $reality_port,
+      \"protocol\": \"vless\",
+      \"settings\": {
+        \"clients\": [{\"id\": \"$uuid\", \"flow\": \"\"}],
+        \"decryption\": \"none\"
       },
-      "streamSettings": {
-        "network": "xhttp",
-        "security": "reality",
-        "realitySettings": {
-          "fingerprint": "chrome",
-          "target": "'"$ym_vl_re"':443",
-          "serverNames": ["'"$ym_vl_re"''"],
-          "privateKey": "'"$private_key_x"'",
-          "shortIds": ["'"$short_id_x"'"]
+      \"streamSettings\": {
+        \"network\": \"xhttp\",
+        \"security\": \"reality\",
+        \"realitySettings\": {
+          \"fingerprint\": \"chrome\",
+          \"target\": \"$ym_vl_re:443\",
+          \"serverNames\": [\"$ym_vl_re\"],
+          \"privateKey\": \"$private_key_x\",
+          \"shortIds\": [\"$short_id_x\"]
         },
-        "xhttpSettings": {
-          "host": "",
-          "path": "/'"$reality_path"'",
-          "mode": "auto"
+        \"xhttpSettings\": {
+          \"host\": \"\",
+          \"path\": \"/$reality_path\",
+          \"mode\": \"auto\"
         }
       },
-      "sniffing": {"enabled": true, "destOverride": ["http", "tls", "quic"], "metadataOnly": false}
-    }'
+      \"sniffing\": {\"enabled\": true, \"destOverride\": [\"http\", \"tls\", \"quic\"], \"metadataOnly\": false}
+    }" )
 fi
 
-# 如果配置了 H3
 if [ -n "$h3_port" ]; then
-    [ -n "$inbounds_json" ] && inbounds_json+=','
-    inbounds_json+='{
-      "tag": "xhttp-h3",
-      "listen": "::",
-      "port": '"$h3_port"',
-      "protocol": "vless",
-      "settings": {
-        "clients": [{"id": "'"$uuid"'", "flow": ""}],
-        "decryption": "none"
+    inbounds_arr+=( "{
+      \"tag\": \"xhttp-h3\",
+      \"listen\": \"::\",
+      \"port\": $h3_port,
+      \"protocol\": \"vless\",
+      \"settings\": {
+        \"clients\": [{\"id\": \"$uuid\", \"flow\": \"\"}],
+        \"decryption\": \"none\"
       },
-      "streamSettings": {
-        "network": "xhttp",
-        "security": "tls",
-        "xhttpSettings": {
-          "mode": "auto",
-          "path": "/'"$h3_path"'"
+      \"streamSettings\": {
+        \"network\": \"xhttp\",
+        \"security\": \"tls\",
+        \"xhttpSettings\": {
+          \"mode\": \"auto\",
+          \"path\": \"/$h3_path\"
         },
-        "tlsSettings": {
-          "alpn": ["h3"],
-          "certificates": [{"certificateFile": "'"$work_dir"'/cert.pem", "keyFile": "'"$work_dir"'/private.key"}]
+        \"tlsSettings\": {
+          \"alpn\": [\"h3\"],
+          \"certificates\": [{\"certificateFile\": \"$work_dir/cert.pem\", \"keyFile\": \"$work_dir/private.key\"}]
         }
       },
-      "sniffing": {"enabled": true, "destOverride": ["http", "tls", "quic"], "metadataOnly": false}
-    }'
+      \"sniffing\": {\"enabled\": true, \"destOverride\": [\"http\", \"tls\", \"quic\"], \"metadataOnly\": false}
+    }" )
 fi
 
-# 如果配置了 ARGO 隧道
 if [ "$enable_argo" = true ]; then
-    [ -n "$inbounds_json" ] && inbounds_json+=','
-    inbounds_json+='{
-      "tag": "xhttp-argo",
-      "listen": "127.0.0.1",
-      "port": '"$argo_port"',
-      "protocol": "vless",
-      "settings": {
-        "clients": [{"id": "'"$uuid"'"}],
-        "decryption": "none"
+    inbounds_arr+=( "{
+      \"tag\": \"xhttp-argo\",
+      \"listen\": \"127.0.0.1\",
+      \"port\": $argo_port,
+      \"protocol\": \"vless\",
+      \"settings\": {
+        \"clients\": [{\"id\": \"$uuid\"}],
+        \"decryption\": \"none\"
       },
-      "streamSettings": {
-        "network": "xhttp",
-        "security": "none",
-        "xhttpSettings": {
-          "path": "/'"$argo_path"'",
-          "mode": "auto",
-          "scMaxConcurrentStreams": 16
+      \"streamSettings\": {
+        \"network\": \"xhttp\",
+        \"security\": \"none\",
+        \"xhttpSettings\": {
+          \"path\": \"/$argo_path\",
+          \"mode\": \"auto\",
+          \"scMaxConcurrentStreams\": 16
         }
       },
-      "sniffing": {"enabled": true, "destOverride": ["http", "tls", "quic"], "metadataOnly": false}
-    }'
+      \"sniffing\": {\"enabled\": true, \"destOverride\": [\"http\", \"tls\", \"quic\"], \"metadataOnly\": false}
+    }" )
 fi
+
+inbounds_json=$(IFS=,; echo "${inbounds_arr[*]}")
 
 cat > "${work_dir}/config.json" << EOF
 {
