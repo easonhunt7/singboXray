@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =========================================================================
-# Xray XHTTP 纯净直连安装脚本 (singboxray.sh) - 甬哥标准对齐版
+# Xray XHTTP 纯净直连安装脚本 (singboxray.sh) 
 # 协议: 支持 VLESS-XHTTP-H3 与 VLESS-XHTTP-REALITY
 # 用法: bash singboxray.sh h3"[参数]" reality"[参数]"
 # 参数说明: "y"/"Y"(随机端口), "数字"(指定端口), "n"/"N"/留空(放弃部署)
