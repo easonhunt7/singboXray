@@ -61,8 +61,8 @@ work_dir="/etc/xray"
 
 # 1. 清理旧服务并安装依赖
 systemctl stop xray 2>/dev/null || true
-yellow "正在更新系统并安装必要组件..."
-apt update && apt install -y curl wget jq unzip openssl iptables 2>/dev/null || yum install -y curl wget jq unzip openssl iptables 2>/dev/null
+yellow "正在更新系统并安装必要组件，请耐心等待..."
+apt update && apt install -y curl wget unzip openssl iptables 2>/dev/null || yum install -y curl wget unzip openssl iptables 2>/dev/null
 
 # 2. 下载 Xray-core
 mkdir -p "${work_dir}"
@@ -87,7 +87,7 @@ ym_vl_re="apple.com"
 openssl ecparam -genkey -name prime256v1 -out "${work_dir}/private.key"
 openssl req -new -x509 -days 3650 -key "${work_dir}/private.key" -out "${work_dir}/cert.pem" -subj "/CN=bing.com"
 
-# Reality 密钥对生成（严格对齐甬哥原版逻辑）
+# Reality 密钥对生成
 key_pair=$("${work_dir}/xray" x25519)
 private_key_x=$(echo "$key_pair" | awk -F':' '/PrivateKey/ {print $2}' | xargs)
 public_key_x=$(echo "$key_pair" | awk -F':' '/Password/ {print $2}' | xargs)
@@ -96,7 +96,7 @@ short_id_x=$(date +%s%N | sha256sum | cut -c 1-8)
 # 4. 构建多 Inbound 配置
 inbounds_json=""
 
-# 如果配置了 REALITY（严格对齐甬哥源码的 realitySettings 与 xhttpSettings）
+# 如果配置了 REALITY
 if [ -n "$reality_port" ]; then
     inbounds_json+='{
       "tag": "xhttp-reality",
