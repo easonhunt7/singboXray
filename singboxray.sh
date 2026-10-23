@@ -229,8 +229,10 @@ for p in "$h3_port" "$reality_port"; do
         ufw allow $p/tcp >/dev/null 2>&1
         ufw allow $p/udp >/dev/null 2>&1
     fi
-    iptables -A INPUT -p tcp --dport $p -j ACCEPT 2>/dev/null
-    iptables -A INPUT -p udp --dport $p -j ACCEPT 2>/dev/null
+    if command -v iptables >/dev/null 2>&1; then
+        iptables -A INPUT -p tcp --dport $p -j ACCEPT 2>/dev/null
+        iptables -A INPUT -p udp --dport $p -j ACCEPT 2>/dev/null
+    fi
 done
 
 # 7. 获取 IP 并输出节点链接与 Base64 编码
