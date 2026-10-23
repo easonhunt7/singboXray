@@ -78,7 +78,7 @@ work_dir="/etc/xray"
 systemctl stop xray 2>/dev/null || rc-service xray stop 2>/dev/null || true
 pkill -9 -f cloudflared 2>/dev/null || true
 
-yellow "正在初始化系统环境..."
+yellow "正在初始化环境..."
 if command -v apt >/dev/null 2>&1; then
     apt update -y >/dev/null 2>&1
     apt install -y curl wget unzip openssl iptables coreutils >/dev/null 2>&1
@@ -101,7 +101,7 @@ for cmd in curl unzip openssl; do
 done
 
 # 2. 下载 Xray-core
-yellow "正在下载 Xray-core 核心..."
+yellow "正在下载 Xray-core..."
 mkdir -p "${work_dir}"
 ARCH_RAW=$(uname -m)
 case "${ARCH_RAW}" in
@@ -116,7 +116,7 @@ chmod +x ${work_dir}/xray
 
 # 如果开启了 Argo，下载 cloudflared
 if [ "$enable_argo" = true ]; then
-    yellow "正在下载 Cloudflare cloudflared 二进制文件..."
+    yellow "正在下载 Cloudflared..."
     ARCH_CF=$(uname -m)
     case "${ARCH_CF}" in
         'x86_64' | 'amd64') CF_ARCH='amd64' ;;
@@ -145,7 +145,7 @@ public_key_x=$(echo "$key_pair" | awk -F':' '/Password/ {print $2}' | xargs)
 short_id_x=$(date +%s%N | sha256sum | cut -c 1-8)
 
 # 4. 构建多 Inbound 配置 (TCP-Reality-Vision + H3-XHTTP + Argo-XHTTP)
-yellow "正在动态构建 Xray 核心配置文件..."
+
 inbounds_arr=()
 
 if [ -n "$reality_port" ]; then
@@ -244,7 +244,7 @@ EOF
 
 # 5. 配置系统服务并启动
 if pidof systemd >/dev/null 2>&1 || [ -d /etc/systemd/system ]; then
-    yellow "正在启动 Xray..."
+    yellow "正在启动 Xray-core..."
     cat > /etc/systemd/system/xray.service << EOF
 [Unit]
 Description=Xray Service
@@ -265,7 +265,7 @@ EOF
     systemctl daemon-reload
     systemctl enable --now xray
 else
-    yellow "正在启动 Xray..."
+    yellow "正在启动 Xray-core..."
     cat > /etc/init.d/xray << 'EOF'
 #!/sbin/openrc-run
 description="Xray Service"
@@ -298,7 +298,7 @@ if [ "$enable_argo" = true ]; then
 fi
 
 # 6. 放行对应的防火墙端口 (仅直连端口需要放行，Argo 不需要)
-yellow "正在配置防火墙端口放行规则..."
+
 for p in "$h3_port" "$reality_port"; do
     [ -z "$p" ] && continue
     if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
@@ -312,7 +312,7 @@ for p in "$h3_port" "$reality_port"; do
 done
 
 # 7. 获取 IP 并输出节点链接与 Base64 编码
-yellow "正在获取服务器公网 IP 及节点订阅..."
+yellow "正在生成 Base 64 节点链接..."
 raw_ip=$(curl -4 -sm 2 ip.sb || curl -6 -sm 2 ip.sb)
 if [[ "$raw_ip" =~ : ]]; then
     server_ip="[$raw_ip]"
@@ -336,7 +336,7 @@ base64_str=$(cat "${work_dir}/url.txt" | base64 | tr -d '\n' | tr -d '\r')
 
 clear
 green "=========================================================================================="
-green " Base64 节点链接-Xray (REALITY/XHTTP) "
+green " Base64 节点链接 Xray-core "
 green "=========================================================================================="
 green "$base64_str"
 green "=========================================================================================="
