@@ -143,7 +143,7 @@ green "证书与密钥生成完毕。"
 yellow "正在动态构建 Xray 核心配置文件..."
 inbounds_json=""
 
-# 如果配置了 REALITY
+# 如果配置了 REALITY（已修复 serverNames 单引号拼写）
 if [ -n "$reality_port" ]; then
     inbounds_json+='{
       "tag": "xhttp-reality",
