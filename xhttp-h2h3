@@ -48,7 +48,7 @@ yellow "正在更新系统并安装必要组件..."
 if command -v apt >/dev/null 2>&1; then
     apt update && apt install -y curl wget unzip openssl iptables 2>/dev/null
 elif command -v yum >/dev/null 2>&1; then
-    yum install -y curl wget unzip openssl iptables 2>/dev/null
+    yum install -y curl wget openssl iptables 2>/dev/null
 elif command -v apk >/dev/null 2>&1; then
     apk update && apk add --no-cache curl wget unzip openssl iptables coreutils 2>/dev/null
 fi
