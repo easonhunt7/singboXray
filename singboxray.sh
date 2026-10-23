@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =========================================================================
-# Xray XHTTP 纯净直连安装脚本 (singboxray.sh) 
+# Xray XHTTP 纯净直连安装脚本 (singboxray.sh) - 甬哥标准对齐版
 # 协议: 支持 VLESS-XHTTP-H3 与 VLESS-XHTTP-REALITY
 # 用法: bash singboxray.sh h3"[参数]" reality"[参数]"
 # 参数说明: "y"/"Y"(随机端口), "数字"(指定端口), "n"/"N"/留空(放弃部署)
@@ -61,10 +61,12 @@ work_dir="/etc/xray"
 
 # 1. 清理旧服务并安装依赖
 systemctl stop xray 2>/dev/null || true
-yellow "正在更新系统并安装必要组件，请耐心等待..."
+yellow "正在更新系统并安装必要组件（curl、wget、unzip、openssl、iptables），请耐心等待..."
 apt update && apt install -y curl wget unzip openssl iptables 2>/dev/null || yum install -y curl wget unzip openssl iptables 2>/dev/null
+green "必要组件安装完成。"
 
 # 2. 下载 Xray-core
+yellow "正在检测系统架构并下载 Xray-core 核心..."
 mkdir -p "${work_dir}"
 ARCH_RAW=$(uname -m)
 case "${ARCH_RAW}" in
@@ -76,8 +78,10 @@ esac
 curl -sLo "${work_dir}/xray.zip" "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${ARCH}.zip"
 unzip -qo "${work_dir}/xray.zip" -d "${work_dir}/" && rm -f "${work_dir}/xray.zip"
 chmod +x ${work_dir}/xray
+green "Xray-core 核心下载与解压完成。"
 
 # 3. 生成变量、自签证书与 REALITY 密钥对
+yellow "正在生成安全 UUID、H3 自签证书及 REALITY 密钥对..."
 uuid=$(cat /proc/sys/kernel/random/uuid)
 h3_path="${uuid}-xu" 
 reality_path="${uuid}-xh" 
@@ -92,8 +96,10 @@ key_pair=$("${work_dir}/xray" x25519)
 private_key_x=$(echo "$key_pair" | awk -F':' '/PrivateKey/ {print $2}' | xargs)
 public_key_x=$(echo "$key_pair" | awk -F':' '/Password/ {print $2}' | xargs)
 short_id_x=$(date +%s%N | sha256sum | cut -c 1-8)
+green "证书与密钥生成完毕。"
 
 # 4. 构建多 Inbound 配置
+yellow "正在动态构建 Xray 核心配置文件..."
 inbounds_json=""
 
 # 如果配置了 REALITY
@@ -199,8 +205,10 @@ cat > "${work_dir}/config.json" << EOF
   ]
 }
 EOF
+green "配置文件 config.json 生成成功。"
 
-# 5. 配置 Systemd 服务
+# 5. 配置 Systemd 服务并启动
+yellow "正在注册 Systemd 系统服务并启动 Xray..."
 cat > /etc/systemd/system/xray.service << EOF
 [Unit]
 Description=Xray Service
@@ -221,8 +229,10 @@ EOF
 
 systemctl daemon-reload
 systemctl enable --now xray
+green "Xray 服务已成功启动并设置为开机自启。"
 
 # 6. 放行对应的防火墙端口
+yellow "正在配置防火墙端口放行规则..."
 for p in "$h3_port" "$reality_port"; do
     [ -z "$p" ] && continue
     if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
@@ -234,8 +244,10 @@ for p in "$h3_port" "$reality_port"; do
         iptables -A INPUT -p udp --dport $p -j ACCEPT 2>/dev/null
     fi
 done
+green "防火墙端口放行配置完成。"
 
 # 7. 获取 IP 并输出节点链接与 Base64 编码
+yellow "正在获取服务器公网 IP 及地理位置信息..."
 raw_ip=$(curl -4 -sm 2 ip.sb || curl -6 -sm 2 ip.sb)
 if [[ "$raw_ip" =~ : ]]; then
     server_ip="[$raw_ip]"
