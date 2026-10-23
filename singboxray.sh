@@ -1,10 +1,5 @@
 #!/bin/bash
 
-# =========================================================================
-# Xray XHTTP (REALITY + H3 + ARGO) 跨平台纯净直连与隧道安装脚本 
-# 用法示例: bash singboxray.sh h3"46789" reality"45178" argo protocol"quic" argo port"8001" domain"你的域名" token"你的token"
-# =========================================================================
-
 export LANG=en_US.UTF-8
 green() { echo -e "\e[1;32m$1\033[0m"; }
 yellow() { echo -e "\e[1;33m$1\033[0m"; }
