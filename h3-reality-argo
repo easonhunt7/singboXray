@@ -1,10 +1,5 @@
 #!/bin/bash
 
-# =========================================================================
-# Xray XHTTP (REALITY + H3 + ARGO) 跨平台纯净直连与隧道安装脚本 
-# 用法示例: bash singboxray.sh h3"46789" reality"45178" argo protocol"quic" argo port"8001" domain"你的域名" token"你的token"
-# =========================================================================
-
 export LANG=en_US.UTF-8
 green() { echo -e "\e[1;32m$1\033[0m"; }
 yellow() { echo -e "\e[1;33m$1\033[0m"; }
@@ -78,18 +73,32 @@ fi
 work_dir="/etc/xray"
 [[ $EUID -ne 0 ]] && red "请在root用户下运行" && exit 1
 
-# 1. 清理旧服务并安装依赖
+# ==================== 1. 清理旧服务并智能安装/补全必要组件 ====================
 systemctl stop xray 2>/dev/null || rc-service xray stop 2>/dev/null || true
 pkill -9 -f cloudflared 2>/dev/null || true
-yellow "正在更新系统并安装必要组件..."
+
+yellow "正在检测系统环境并自动补全必要组件..."
 if command -v apt >/dev/null 2>&1; then
-    apt update && apt install -y curl wget unzip openssl iptables 2>/dev/null
+    apt update -y >/dev/null 2>&1
+    apt install -y curl wget unzip openssl iptables coreutils >/dev/null 2>&1
 elif command -v yum >/dev/null 2>&1; then
-    yum install -y curl wget openssl iptables 2>/dev/null
+    yum install -y curl wget unzip openssl iptables coreutils >/dev/null 2>&1
 elif command -v apk >/dev/null 2>&1; then
-    apk update && apk add --no-cache curl wget unzip openssl iptables coreutils 2>/dev/null
+    apk update >/dev/null 2>&1
+    apk add --no-cache bash curl wget unzip openssl iptables coreutils >/dev/null 2>&1
+else
+    red "未识别的系统包管理器，无法自动安装依赖！"
+    exit 1
 fi
-green "必要组件安装完成。"
+
+# 保险校验：确保核心工具已就绪
+for cmd in curl unzip openssl; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        red "错误：系统缺少必要组件 [$cmd]，且自动安装失败，请手动安装后重试！"
+        exit 1
+    fi
+done
+green "系统组件检测与补全完成。"
 
 # 2. 下载 Xray-core
 yellow "正在检测系统架构并下载 Xray-core 核心..."
