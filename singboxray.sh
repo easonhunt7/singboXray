@@ -188,7 +188,8 @@ if [ -n "$h3_port" ]; then
         \"security\": \"tls\",
         \"xhttpSettings\": {
           \"mode\": \"auto\",
-          \"path\": \"/$h3_path\"
+          \"path\": \"/$h3_path\",
+          \"scMaxConcurrentStreams\": 16
         },
         \"tlsSettings\": {
           \"alpn\": [\"h3\"],
@@ -293,7 +294,7 @@ fi
 # 如果开启了 Argo，启动 cloudflared 后台进程
 if [ "$enable_argo" = true ]; then
     yellow "正在启动 Cloudflare Argo 固定隧道 (协议: ${argo_protocol}, 连接数: ${argo_connections})..."
-    nohup "${work_dir}/cloudflared" tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol "${argo_protocol}" --ha-connections "${argo_connections}" run --token "${argo_token}" > "${work_dir}/cloudflared.log" 2>&1 &
+    nohup GODEBUG="madvdontneed=1,netdns=go" "${work_dir}/cloudflared" tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol "${argo_protocol}" --ha-connections "${argo_connections}" run --token "${argo_token}" > "${work_dir}/cloudflared.log" 2>&1 &
     green "Argo 固定隧道已启动。"
 fi
 
