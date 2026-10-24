@@ -110,7 +110,8 @@ case "${ARCH_RAW}" in
     *) ARCH='64' ;;
 esac
 
-curl -sSLo "${work_dir}/xray.zip" "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${ARCH}.zip"
+curl -sSLo "${work_dir}/xray.zip" "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${ARCH}.zip" || \
+curl -sSLo "${work_dir}/xray.zip" "https://ghproxy.net/https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${ARCH}.zip"
 unzip -qo "${work_dir}/xray.zip" -d "${work_dir}/" && rm -f "${work_dir}/xray.zip"
 chmod +x ${work_dir}/xray
 
@@ -123,7 +124,8 @@ if [ "$enable_argo" = true ]; then
         'aarch64' | 'arm64') CF_ARCH='arm64' ;;
         *) CF_ARCH='amd64' ;;
     esac
-    curl -sSLo "${work_dir}/cloudflared" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}"
+    curl -sSLo "${work_dir}/cloudflared" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}" || \
+    curl -sSLo "${work_dir}/cloudflared" "https://ghproxy.net/https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}"
     chmod +x "${work_dir}/cloudflared"
 fi
 
