@@ -1,6 +1,12 @@
 #!/bin/bash
 
 export LANG=en_US.UTF-8
+# 智能增强系统 DNS（支持双栈，防止纯 IPv6 环境解析失败）
+if [ -f /etc/resolv.conf ]; then
+    grep -q "2001:4860:4860::8888" /etc/resolv.conf || {
+        echo -e "nameserver 2001:4860:4860::8888\nnameserver 2606:4700:4700::1111\nnameserver 8.8.8.8" >> /etc/resolv.conf
+    }
+fi
 green() { echo -e "\e[1;32m$1\033[0m"; }
 yellow() { echo -e "\e[1;33m$1\033[0m"; }
 red() { echo -e "\e[1;91m$1\033[0m"; }
@@ -120,7 +126,7 @@ xray_urls=(
 xray_downloaded=false
 for url in "${xray_urls[@]}"; do
     rm -f "${work_dir}/xray.zip"
-    if curl -sSLo "${work_dir}/xray.zip" "$url" && [ -f "${work_dir}/xray.zip" ]; then
+    if curl -sSL --connect-timeout 3 -o "${work_dir}/xray.zip" "$url" && [ -f "${work_dir}/xray.zip" ]; then
         # 校验文件大小是否大于 1MB（排除 HTML 错误页或空文件）
         file_size=$(wc -c < "${work_dir}/xray.zip" 2>/dev/null || echo 0)
         if [ "$file_size" -gt 1048576 ]; then
@@ -156,7 +162,7 @@ if [ "$enable_argo" = true ]; then
     cf_downloaded=false
     for url in "${cf_urls[@]}"; do
         rm -f "${work_dir}/cloudflared"
-        if curl -sSLo "${work_dir}/cloudflared" "$url" && [ -f "${work_dir}/cloudflared" ]; then
+        if curl -sSL --connect-timeout 3 -o "${work_dir}/cloudflared" "$url" && [ -f "${work_dir}/cloudflared" ]; then
             # Cloudflared 体积较大，校验是否大于 5MB
             file_size=$(wc -c < "${work_dir}/cloudflared" 2>/dev/null || echo 0)
             if [ "$file_size" -gt 5242880 ]; then
