@@ -1,12 +1,6 @@
 #!/bin/bash
 
 export LANG=en_US.UTF-8
-# 智能增强系统 DNS（支持双栈，防止纯 IPv6 环境解析失败）
-if [ -f /etc/resolv.conf ]; then
-    grep -q "2001:4860:4860::8888" /etc/resolv.conf || {
-        echo -e "nameserver 2001:4860:4860::8888\nnameserver 2606:4700:4700::1111\nnameserver 8.8.8.8" >> /etc/resolv.conf
-    }
-fi
 green() { echo -e "\e[1;32m$1\033[0m"; }
 yellow() { echo -e "\e[1;33m$1\033[0m"; }
 red() { echo -e "\e[1;91m$1\033[0m"; }
@@ -116,30 +110,10 @@ case "${ARCH_RAW}" in
     *) ARCH='64' ;;
 esac
 
-xray_urls=(
-    "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${ARCH}.zip"
-    "https://kkgithub.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${ARCH}.zip"
-    "https://ghfast.top/https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${ARCH}.zip"
-    "https://github.moeyy.xyz/https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${ARCH}.zip"
-)
+url_xray="https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${ARCH}.zip"
+(command -v curl >/dev/null 2>&1 && curl -Lo "${work_dir}/xray.zip" -s --retry 2 "$url_xray") || \
+(command -v wget >/dev/null 2>&1 && timeout 5 wget -O "${work_dir}/xray.zip" --tries=2 "$url_xray")
 
-xray_downloaded=false
-for url in "${xray_urls[@]}"; do
-    rm -f "${work_dir}/xray.zip"
-    if curl -sSL --connect-timeout 3 -o "${work_dir}/xray.zip" "$url" && [ -f "${work_dir}/xray.zip" ]; then
-        # 校验文件大小是否大于 1MB（排除 HTML 错误页或空文件）
-        file_size=$(wc -c < "${work_dir}/xray.zip" 2>/dev/null || echo 0)
-        if [ "$file_size" -gt 1048576 ]; then
-            xray_downloaded=true
-            break
-        fi
-    fi
-done
-
-if [ "$xray_downloaded" = false ]; then
-    red "错误：Xray-core 所有下载源均失败，请检查网络！"
-    exit 1
-fi
 unzip -qo "${work_dir}/xray.zip" -d "${work_dir}/" && rm -f "${work_dir}/xray.zip"
 chmod +x ${work_dir}/xray
 
@@ -152,30 +126,10 @@ if [ "$enable_argo" = true ]; then
         'aarch64' | 'arm64') CF_ARCH='arm64' ;;
         *) CF_ARCH='amd64' ;;
     esac
-    cf_urls=(
-        "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}"
-        "https://kkgithub.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}"
-        "https://ghfast.top/https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}"
-        "https://github.moeyy.xyz/https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}"
-    )
+    url_cf="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}"
+    (command -v curl >/dev/null 2>&1 && curl -Lo "${work_dir}/cloudflared" -s --retry 2 "$url_cf") || \
+    (command -v wget >/dev/null 2>&1 && timeout 5 wget -O "${work_dir}/cloudflared" --tries=2 "$url_cf")
 
-    cf_downloaded=false
-    for url in "${cf_urls[@]}"; do
-        rm -f "${work_dir}/cloudflared"
-        if curl -sSL --connect-timeout 3 -o "${work_dir}/cloudflared" "$url" && [ -f "${work_dir}/cloudflared" ]; then
-            # Cloudflared 体积较大，校验是否大于 5MB
-            file_size=$(wc -c < "${work_dir}/cloudflared" 2>/dev/null || echo 0)
-            if [ "$file_size" -gt 5242880 ]; then
-                cf_downloaded=true
-                break
-            fi
-        fi
-    done
-
-    if [ "$cf_downloaded" = false ]; then
-        red "错误：Cloudflared 所有下载源均失败，请检查网络！"
-        exit 1
-    fi
     chmod +x "${work_dir}/cloudflared"
 fi
 
