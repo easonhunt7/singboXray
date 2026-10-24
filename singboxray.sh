@@ -110,8 +110,13 @@ case "${ARCH_RAW}" in
     *) ARCH='64' ;;
 esac
 
-curl -sSLo "${work_dir}/xray.zip" "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${ARCH}.zip" || \
-curl -sSLo "${work_dir}/xray.zip" "https://ghproxy.net/https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${ARCH}.zip"
+if ! curl -sSLo "${work_dir}/xray.zip" "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${ARCH}.zip"; then
+    yellow "直连 GitHub 失败，正在切换至加速镜像下载..."
+    curl -sSLo "${work_dir}/xray.zip" "https://ghproxy.net/https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${ARCH}.zip" || {
+        red "错误：Xray-core 下载失败，请检查网络！"
+        exit 1
+    }
+fi
 unzip -qo "${work_dir}/xray.zip" -d "${work_dir}/" && rm -f "${work_dir}/xray.zip"
 chmod +x ${work_dir}/xray
 
@@ -124,8 +129,13 @@ if [ "$enable_argo" = true ]; then
         'aarch64' | 'arm64') CF_ARCH='arm64' ;;
         *) CF_ARCH='amd64' ;;
     esac
-    curl -sSLo "${work_dir}/cloudflared" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}" || \
-    curl -sSLo "${work_dir}/cloudflared" "https://ghproxy.net/https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}"
+    if ! curl -sSLo "${work_dir}/cloudflared" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}"; then
+        yellow "直连 GitHub 失败，正在切换至加速镜像下载..."
+        curl -sSLo "${work_dir}/cloudflared" "https://ghproxy.net/https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}" || {
+            red "错误：Cloudflared 下载失败，请检查网络！"
+            exit 1
+        }
+    fi
     chmod +x "${work_dir}/cloudflared"
 fi
 
