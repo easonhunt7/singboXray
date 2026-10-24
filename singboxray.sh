@@ -74,6 +74,12 @@ fi
 work_dir="/etc/xray"
 [[ $EUID -ne 0 ]] && red "请在root用户下运行" && exit 1
 
+yellow "正在配置 DNS64 确保 IPv6 环境下的外网连通性..."
+cat > /etc/resolv.conf << EOF
+nameserver 2606:4700:4700::64
+nameserver 2606:4700:4700::6400
+EOF
+
 # 1. 初始化
 systemctl stop xray 2>/dev/null || rc-service xray stop 2>/dev/null || true
 pkill -9 -f cloudflared 2>/dev/null || true
