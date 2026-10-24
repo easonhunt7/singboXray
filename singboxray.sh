@@ -110,13 +110,29 @@ case "${ARCH_RAW}" in
     *) ARCH='64' ;;
 esac
 
-url_xray="https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${ARCH}.zip"
-rm -f "${work_dir}/xray.zip" "${work_dir}/xray"
+XRAY_URL="https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${ARCH}.zip"
 
-(command -v curl >/dev/null 2>&1 && curl -Lo "${work_dir}/xray.zip" -# --retry 3 "$url_xray") || \
-(command -v wget >/dev/null 2>&1 && wget -O "${work_dir}/xray.zip" --tries=3 "$url_xray")
+yellow "正在通过 IPv4/IPv6 自动尝试下载 Xray-core..."
 
-unzip -qo "${work_dir}/xray.zip" -d "${work_dir}/" && rm -f "${work_dir}/xray.zip"
+if ! curl -fL --retry 2 --connect-timeout 10 --max-time 180 \
+    -o "${work_dir}/xray.zip" "$XRAY_URL"; then
+    red "GitHub 下载失败，请检查 IPv6 路由、DNS 或 GitHub 跳转地址。"
+    rm -f "${work_dir}/xray.zip"
+    exit 1
+fi
+
+if ! unzip -tq "${work_dir}/xray.zip" >/dev/null 2>&1; then
+    red "下载文件不是有效的 ZIP 压缩包。"
+    rm -f "${work_dir}/xray.zip"
+    exit 1
+fi
+
+if ! unzip -oq "${work_dir}/xray.zip" -d "${work_dir}/"; then
+    red "Xray-core 解压失败。"
+    exit 1
+fi
+
+rm -f "${work_dir}/xray.zip"
 chmod +x "${work_dir}/xray"
 
 # 如果开启了 Argo，下载 cloudflared
@@ -128,12 +144,22 @@ if [ "$enable_argo" = true ]; then
         'aarch64' | 'arm64') CF_ARCH='arm64' ;;
         *) CF_ARCH='amd64' ;;
     esac
-    url_cf="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}"
-    rm -f "${work_dir}/cloudflared"
+    CF_URL="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}"
 
-    (command -v curl >/dev/null 2>&1 && curl -Lo "${work_dir}/cloudflared" -# --retry 3 "$url_cf") || \
-    (command -v wget >/dev/null 2>&1 && wget -O "${work_dir}/cloudflared" --tries=3 "$url_cf")
-    chmod +x "${work_dir}/cloudflared"
+if ! curl -6 -fL --retry 2 --connect-timeout 10 --max-time 180 \
+    -o "${work_dir}/cloudflared" "$CF_URL"; then
+    red "Cloudflared 下载失败，请检查 IPv6 网络和 GitHub Release 下载链路。"
+    rm -f "${work_dir}/cloudflared"
+    exit 1
+fi
+
+if ! file "${work_dir}/cloudflared" | grep -q 'ELF'; then
+    red "Cloudflared 下载文件无效。"
+    rm -f "${work_dir}/cloudflared"
+    exit 1
+fi
+
+chmod +x "${work_dir}/cloudflared"
 fi
 
 # 3. 生成变量、自签证书与密钥对
