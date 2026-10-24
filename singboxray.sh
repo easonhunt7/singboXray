@@ -13,19 +13,18 @@ download_file() {
     local official_url="$2"
     
     # 1. 尝试直连官方地址
-    yellow "正在尝试直连官方地址下载..."
+    yellow "正在从Github官方地址下载..."
     if curl -sL --connect-timeout 5 --max-time 60 -o "$output_path" "$official_url"; then
         if [ -s "$output_path" ]; then
-            green "官方直连下载成功！"
+            green "下载成功！"
             return 0
         fi
     fi
     
     # 2. 直连失败，轮询切换镜像代理
-    yellow "官方直连失败，正在切换镜像加速代理下载..."
+    yellow "Github官方地址下载失败，切换镜像加速代理下载..."
     for proxy in "${GITHUB_PROXY[@]}"; do
         local proxy_url="${proxy}${official_url}"
-        yellow "尝试通过代理下载: $proxy"
         if curl -sL --connect-timeout 5 --max-time 60 -o "$output_path" "$proxy_url"; then
             if [ -s "$output_path" ]; then
                 green "通过代理镜像下载成功！"
@@ -327,7 +326,7 @@ fi
 # 如果开启了 Argo，启动 cloudflared 后台进程
 if [ "$enable_argo" = true ]; then
     yellow "正在启动 Cloudflare Argo 固定隧道 (协议: ${argo_protocol}, 连接数: ${argo_connections})..."
-    nohup GODEBUG="madvdontneed=1,netdns=go" "${work_dir}/cloudflared" tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol "${argo_protocol}" --ha-connections "${argo_connections}" run --token "${argo_token}" > "${work_dir}/cloudflared.log" 2>&1 &
+    GODEBUG="madvdontneed=1,netdns=go" nohup "${work_dir}/cloudflared" tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol "${argo_protocol}" --ha-connections "${argo_connections}" run --token "${argo_token}" > "${work_dir}/cloudflared.log" 2>&1 &
     green "Argo 固定隧道已启动。"
 fi
 
