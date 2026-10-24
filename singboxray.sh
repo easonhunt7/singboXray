@@ -220,8 +220,7 @@ if [ -n "$h3_port" ]; then
         \"security\": \"tls\",
         \"xhttpSettings\": {
           \"mode\": \"auto\",
-          \"path\": \"/$h3_path\",
-          \"scMaxConcurrentStreams\": 16
+          \"path\": \"/$h3_path\"
         },
         \"tlsSettings\": {
           \"alpn\": [\"h3\"],
