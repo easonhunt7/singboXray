@@ -111,10 +111,16 @@ case "${ARCH_RAW}" in
 esac
 
 url_xray="https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${ARCH}.zip"
+rm -f "${work_dir}/xray.zip"
 (command -v curl >/dev/null 2>&1 && curl -Lo "${work_dir}/xray.zip" -s --retry 2 "$url_xray") || \
-(command -v wget >/dev/null 2>&1 && timeout 5 wget -O "${work_dir}/xray.zip" --tries=2 "$url_xray")
+(command -v wget >/dev/null 2>&1 && wget -O "${work_dir}/xray.zip" --tries=2 "$url_xray")
 
-unzip -qo "${work_dir}/xray.zip" -d "${work_dir}/" && rm -f "${work_dir}/xray.zip"
+if [ -f "${work_dir}/xray.zip" ] && [ "$(wc -c < "${work_dir}/xray.zip")" -gt 1048576 ]; then
+    unzip -qo "${work_dir}/xray.zip" -d "${work_dir}/" && rm -f "${work_dir}/xray.zip"
+else
+    red "错误：Xray-core 下载失败或文件无效！"
+    exit 1
+fi
 chmod +x ${work_dir}/xray
 
 # 如果开启了 Argo，下载 cloudflared
@@ -127,11 +133,16 @@ if [ "$enable_argo" = true ]; then
         *) CF_ARCH='amd64' ;;
     esac
     url_cf="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}"
+    rm -f "${work_dir}/cloudflared"
     (command -v curl >/dev/null 2>&1 && curl -Lo "${work_dir}/cloudflared" -s --retry 2 "$url_cf") || \
-    (command -v wget >/dev/null 2>&1 && timeout 5 wget -O "${work_dir}/cloudflared" --tries=2 "$url_cf")
+    (command -v wget >/dev/null 2>&1 && wget -O "${work_dir}/cloudflared" --tries=2 "$url_cf")
 
-    chmod +x "${work_dir}/cloudflared"
-fi
+    if [ -f "${work_dir}/cloudflared" ] && [ "$(wc -c < "${work_dir}/cloudflared")" -gt 5242880 ]; then
+        chmod +x "${work_dir}/cloudflared"
+    else
+        red "错误：Cloudflared 下载失败或文件无效！"
+        exit 1
+    fi
 
 # 3. 生成变量、自签证书与密钥对
 yellow "正在生成安全 UUID、自签证书及密钥对..."
