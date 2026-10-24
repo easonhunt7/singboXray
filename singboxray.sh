@@ -5,6 +5,39 @@ green() { echo -e "\e[1;32m$1\033[0m"; }
 yellow() { echo -e "\e[1;33m$1\033[0m"; }
 red() { echo -e "\e[1;91m$1\033[0m"; }
 
+# Github 反代加速代理备用列表
+GITHUB_PROXY=('https://ghproxy.lvedong.eu.org/' 'https://accel.cloudflare.nyc.mn/')
+# 通用下载函数：优先直连官方，失败后依次尝试镜像代理
+download_file() {
+    local output_path="$1"
+    local official_url="$2"
+    
+    # 1. 尝试直连官方地址
+    yellow "正在尝试直连官方地址下载..."
+    if curl -sL --connect-timeout 5 --max-time 60 -o "$output_path" "$official_url"; then
+        if [ -s "$output_path" ]; then
+            green "官方直连下载成功！"
+            return 0
+        fi
+    fi
+    
+    # 2. 直连失败，轮询切换镜像代理
+    yellow "官方直连失败，正在切换镜像加速代理下载..."
+    for proxy in "${GITHUB_PROXY[@]}"; do
+        local proxy_url="${proxy}${official_url}"
+        yellow "尝试通过代理下载: $proxy"
+        if curl -sL --connect-timeout 5 --max-time 60 -o "$output_path" "$proxy_url"; then
+            if [ -s "$output_path" ]; then
+                green "通过代理镜像下载成功！"
+                return 0
+            fi
+        fi
+    done
+    
+    red "错误：官方源及所有镜像代理下载均告失败！"
+    return 1
+}
+
 ARG_H3=""
 ARG_REALITY=""
 ARG_ARGO_PROTOCOL="quic"
@@ -74,12 +107,6 @@ fi
 work_dir="/etc/xray"
 [[ $EUID -ne 0 ]] && red "请在root用户下运行" && exit 1
 
-yellow "正在配置 DNS64 确保 IPv6 环境下的外网连通性..."
-cat > /etc/resolv.conf << EOF
-nameserver 2606:4700:4700::64
-nameserver 2606:4700:4700::6400
-EOF
-
 # 1. 初始化
 systemctl stop xray 2>/dev/null || rc-service xray stop 2>/dev/null || true
 pkill -9 -f cloudflared 2>/dev/null || true
@@ -116,30 +143,9 @@ case "${ARCH_RAW}" in
     *) ARCH='64' ;;
 esac
 
-XRAY_URL="https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${ARCH}.zip"
-
-yellow "正在通过 IPv4/IPv6 自动尝试下载 Xray-core..."
-
-if ! curl -fL --retry 2 --connect-timeout 10 --max-time 180 \
-    -o "${work_dir}/xray.zip" "$XRAY_URL"; then
-    red "GitHub 下载失败，请检查 IPv6 路由、DNS 或 GitHub 跳转地址。"
-    rm -f "${work_dir}/xray.zip"
-    exit 1
-fi
-
-if ! unzip -tq "${work_dir}/xray.zip" >/dev/null 2>&1; then
-    red "下载文件不是有效的 ZIP 压缩包。"
-    rm -f "${work_dir}/xray.zip"
-    exit 1
-fi
-
-if ! unzip -oq "${work_dir}/xray.zip" -d "${work_dir}/"; then
-    red "Xray-core 解压失败。"
-    exit 1
-fi
-
-rm -f "${work_dir}/xray.zip"
-chmod +x "${work_dir}/xray"
+download_file "${work_dir}/xray.zip" "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${ARCH}.zip" || exit 1
+unzip -qo "${work_dir}/xray.zip" -d "${work_dir}/" && rm -f "${work_dir}/xray.zip"
+chmod +x ${work_dir}/xray
 
 # 如果开启了 Argo，下载 cloudflared
 if [ "$enable_argo" = true ]; then
@@ -150,22 +156,8 @@ if [ "$enable_argo" = true ]; then
         'aarch64' | 'arm64') CF_ARCH='arm64' ;;
         *) CF_ARCH='amd64' ;;
     esac
-    CF_URL="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}"
-
-if ! curl -6 -fL --retry 2 --connect-timeout 10 --max-time 180 \
-    -o "${work_dir}/cloudflared" "$CF_URL"; then
-    red "Cloudflared 下载失败，请检查 IPv6 网络和 GitHub Release 下载链路。"
-    rm -f "${work_dir}/cloudflared"
-    exit 1
-fi
-
-if ! file "${work_dir}/cloudflared" | grep -q 'ELF'; then
-    red "Cloudflared 下载文件无效。"
-    rm -f "${work_dir}/cloudflared"
-    exit 1
-fi
-
-chmod +x "${work_dir}/cloudflared"
+    download_file "${work_dir}/cloudflared" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}" || exit 1
+    chmod +x "${work_dir}/cloudflared"
 fi
 
 # 3. 生成变量、自签证书与密钥对
