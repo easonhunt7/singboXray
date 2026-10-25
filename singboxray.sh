@@ -5,15 +5,15 @@ green() { echo -e "\e[1;32m$1\033[0m"; }
 yellow() { echo -e "\e[1;33m$1\033[0m"; }
 red() { echo -e "\e[1;91m$1\033[0m"; }
 
-# Github 镜像代理备用列表
-GITHUB_PROXY=('https://ghproxy.lvedong.eu.org/' 'https://accel.cloudflare.nyc.mn/')
-# 优先直连官方，失败后依次尝试镜像代理
+# Github 自建安全镜像代理
+GITHUB_PROXY=('https://ess.ieshare.workers.dev/')
+# 优先直连官方，失败后尝试镜像代理
 download_file() {
     local output_path="$1"
     local official_url="$2"
     
     # 1. 尝试直连官方地址
-    echo "正在从Github官方地址下载..."
+    echo "正在从Github官方源下载..."
     if curl -sL --connect-timeout 5 --max-time 60 -o "$output_path" "$official_url"; then
         if [ -s "$output_path" ]; then
             green "下载成功！"
@@ -22,18 +22,18 @@ download_file() {
     fi
     
     # 2. 直连失败，轮询切换镜像代理
-    yellow "Github官方地址下载失败，切换至镜像代理..."
+    yellow "Github连接失败，转向自建安全代理..."
     for proxy in "${GITHUB_PROXY[@]}"; do
         local proxy_url="${proxy}${official_url}"
         if curl -sL --connect-timeout 5 --max-time 60 -o "$output_path" "$proxy_url"; then
             if [ -s "$output_path" ]; then
-                green "通过镜像代理下载成功！"
+                green "通过安全镜像下载成功！"
                 return 0
             fi
         fi
     done
     
-    red "错误：官方源及所有镜像代理下载均告失败！"
+    red "错误：官方源及镜像代理下载均告失败！"
     return 1
 }
 
@@ -99,7 +99,7 @@ if [ -n "$argo_port" ] && [ -n "$argo_domain" ] && [ -n "$argo_token" ] && [ -n 
 fi
 
 if [ -z "$h3_port" ] && [ -z "$reality_port" ] && [ "$enable_argo" = false ]; then
-    yellow "提示：未检测到任何有效的部署参数（H3、REALITY及Argo隧道均未启用）。"
+    yellow "提示：未检测到任何有效变量（H3、REALITY及Argo隧道均未启用）。"
     exit 0
 fi
 
@@ -110,7 +110,7 @@ work_dir="/etc/xray"
 systemctl stop xray 2>/dev/null || rc-service xray stop 2>/dev/null || true
 pkill -9 -f cloudflared 2>/dev/null || true
 
-green "正在初始化环境..."
+green "正在初始化环境，请耐心等待..."
 if command -v apt >/dev/null 2>&1; then
     apt update -y >/dev/null 2>&1
     apt install -y curl wget unzip openssl iptables coreutils >/dev/null 2>&1
@@ -159,7 +159,7 @@ chmod +x ${work_dir}/xray
 
 # 如果开启了 Argo，下载 cloudflared
 if [ "$enable_argo" = true ]; then
-    yellow "正在下载 Cloudflared..."
+    echo "正在下载 Cloudflared..."
     ARCH_CF=$(uname -m)
     case "${ARCH_CF}" in
         'x86_64' | 'amd64') CF_ARCH='amd64' ;;
@@ -171,7 +171,7 @@ if [ "$enable_argo" = true ]; then
 fi
 
 # 3. 生成变量、自签证书与密钥对
-echo "正在生成安全 UUID、自签证书及密钥对..."
+echo "生成安全 UUID、自签证书及密钥对..."
 uuid=$(cat /proc/sys/kernel/random/uuid)
 h3_path="${uuid}-xu" 
 argo_path="${uuid}-argo"
