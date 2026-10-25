@@ -5,9 +5,9 @@ green() { echo -e "\e[1;32m$1\033[0m"; }
 yellow() { echo -e "\e[1;33m$1\033[0m"; }
 red() { echo -e "\e[1;91m$1\033[0m"; }
 
-# Github 反代加速代理备用列表
+# Github 镜像代理备用列表
 GITHUB_PROXY=('https://ghproxy.lvedong.eu.org/' 'https://accel.cloudflare.nyc.mn/')
-# 通用下载函数：优先直连官方，失败后依次尝试镜像代理
+# 优先直连官方，失败后依次尝试镜像代理
 download_file() {
     local output_path="$1"
     local official_url="$2"
@@ -22,12 +22,12 @@ download_file() {
     fi
     
     # 2. 直连失败，轮询切换镜像代理
-    yellow "Github官方地址下载失败，切换镜像加速代理下载..."
+    yellow "Github官方地址下载失败，切换至镜像代理..."
     for proxy in "${GITHUB_PROXY[@]}"; do
         local proxy_url="${proxy}${official_url}"
         if curl -sL --connect-timeout 5 --max-time 60 -o "$output_path" "$proxy_url"; then
             if [ -s "$output_path" ]; then
-                green "通过代理镜像下载成功！"
+                green "通过镜像代理下载成功！"
                 return 0
             fi
         fi
@@ -131,6 +131,17 @@ for cmd in curl unzip openssl; do
         exit 1
     fi
 done
+
+# 优化系统内核 UDP 缓冲区（针对 H3 / QUIC 极致性能）
+yellow "正在优化系统内核 UDP 缓冲区..."
+cat > /etc/sysctl.d/99-xray-h3.conf << EOF
+net.core.rmem_max = 268435456
+net.core.wmem_max = 268435456
+net.core.rmem_default = 67108864
+net.core.wmem_default = 67108864
+net.core.netdev_max_backlog = 100000
+EOF
+sysctl --system >/dev/null 2>&1 || sysctl -p /etc/sysctl.d/99-xray-h3.conf >/dev/null 2>&1
 
 # 2. 下载 Xray-core
 yellow "正在下载 Xray-core..."
