@@ -5,7 +5,7 @@ green() { echo -e "\e[1;32m$1\033[0m"; }
 yellow() { echo -e "\e[1;33m$1\033[0m"; }
 red() { echo -e "\e[1;91m$1\033[0m"; }
 
-# Github 自建安全镜像代理
+# Github Cloudflare安全镜像代理
 GITHUB_PROXY=('https://ess.ieshare.workers.dev/')
 # 优先直连官方，失败后尝试镜像代理
 download_file() {
@@ -22,12 +22,12 @@ download_file() {
     fi
     
     # 2. 直连失败，轮询切换镜像代理
-    yellow "Github连接失败，转向自建安全代理..."
+    yellow "Github连接失败，转向Cloudflare安全代理..."
     for proxy in "${GITHUB_PROXY[@]}"; do
         local proxy_url="${proxy}${official_url}"
         if curl -sL --connect-timeout 5 --max-time 60 -o "$output_path" "$proxy_url"; then
             if [ -s "$output_path" ]; then
-                green "通过安全镜像下载成功！"
+                green "通过Cloudflare代理下载成功！"
                 return 0
             fi
         fi
@@ -335,9 +335,8 @@ fi
 
 # 如果开启了 Argo，启动 cloudflared 后台进程
 if [ "$enable_argo" = true ]; then
-    echo "正在启动 Cloudflare Argo 固定隧道 (协议: ${argo_protocol}, 连接数: ${argo_connections})..."
-    GODEBUG="madvdontneed=1,netdns=go" nohup "${work_dir}/cloudflared" tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol "${argo_protocol}" --ha-connections "${argo_connections}" run --token "${argo_token}" > "${work_dir}/cloudflared.log" 2>&1 &
-    green "Argo 固定隧道已启动。"
+    green "正在启动 Cloudflare Argo 固定隧道 (协议: ${argo_protocol}, 连接数: ${argo_connections})..."
+    GODEBUG="madvdontneed=1,netdns=go" nohup "${work_dir}/cloudflared" tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol "${argo_protocol}" --ha-connections "${argo_connections}" run --token "${argo_token}" > "${work_dir}/cloudflared.log" 2>&1 &    
 fi
 
 # 6. 放行对应的防火墙端口 (仅直连端口需要放行，Argo 不需要)
@@ -355,7 +354,7 @@ for p in "$h3_port" "$reality_port"; do
 done
 
 # 7. 获取 IP 并输出节点链接与 Base64 编码
-echo "正在生成 Base 64 节点链接..."
+echo "获取 Base 64 节点链接中..."
 raw_ip=$(curl -4 -sm 2 ip.sb || curl -6 -sm 2 ip.sb)
 if [[ "$raw_ip" =~ : ]]; then
     server_ip="[$raw_ip]"
@@ -363,18 +362,25 @@ else
     server_ip="$raw_ip"
 fi
 
-isp=$(curl -sm 3 "https://api.ip.sb/geoip" | grep -o '"country_code":"[^"]*"' | cut -d'"' -f4 || echo "Node")
-isp=$(echo "$isp" | tr '[:upper:]' '[:lower:]')
+# 定义小型大写字母映射表
+declare -A sc=([A]=ᴀ [B]=ʙ [C]=ᴄ [D]=ᴅ [E]=ᴇ [F]=ꜰ [G]=ɢ [H]=ʜ [I]=ɪ [J]=ᴊ [K]=ᴋ [L]=ʟ [M]=ᴍ [N]=ɴ [O]=ᴏ [P]=ᴘ [Q]=ꞯ [R]=ʀ [S]=ꜱ [T]=ᴛ [U]=ᴜ [V]=ᴠ [W]=ᴡ [X]=x [Y]=ʏ [Z]=ᴢ)
+
+# 获取国家代码并转为大写，然后通过数组直接拼出缩小版字母
+uc=$(curl -sm 3 "https://api.ip.sb/geoip" | grep -o '"country_code":"[^"]*"' | cut -d'"' -f4 | tr '[:lower:]' '[:upper:]')
+isp="${sc[${uc:0:1}]}${sc[${uc:1:1}]}"
+[[ -z "$isp" ]] && isp="nd"
+
 ESS="ᴇꜱꜱ"
-cfip="www.teamviewer.com"
+cfip_h2="www.visa.com.hk"
+cfip_h3="www.teamviewer.com"
 cfport="443"
 
 > "${work_dir}/url.txt"
 [ -n "$reality_port" ] && echo "vless://${uuid}@${server_ip}:${reality_port}?encryption=none&security=reality&sni=${ym_vl_re}&fp=chrome&pbk=${public_key_x}&sid=${short_id_x}&type=tcp&flow=xtls-rprx-vision#${isp}%20Reality Vision%20${ESS}" >> "${work_dir}/url.txt"
 [ -n "$h3_port" ] && echo "vless://${uuid}@${server_ip}:${h3_port}?encryption=none&security=tls&sni=bing.com&alpn=h3&fp=chrome&type=xhttp&mode=auto&path=/${h3_path}&allowInsecure=1#${isp}%20H3-XHTTP%20${ESS}" >> "${work_dir}/url.txt"
 if [ "$enable_argo" = true ]; then
-    echo "vless://${uuid}@${cfip}:${cfport}?encryption=none&security=tls&alpn=h2&sni=${argo_domain}&fp=chrome&type=xhttp&mode=auto&host=${argo_domain}&path=/${argo_path}#${isp}%20H2-Argo XHTTP%20${ESS}" >> "${work_dir}/url.txt"
-    echo "vless://${uuid}@${cfip}:${cfport}?encryption=none&security=tls&alpn=h3&sni=${argo_domain}&fp=chrome&type=xhttp&mode=auto&host=${argo_domain}&path=/${argo_path}#${isp}%20H3-Argo XHTTP%20${ESS}" >> "${work_dir}/url.txt"
+    echo "vless://${uuid}@${cfip_h2}:${cfport}?encryption=none&security=tls&alpn=h2&sni=${argo_domain}&fp=chrome&type=xhttp&mode=auto&host=${argo_domain}&path=/${argo_path}#${isp}%20H2-Argo XHTTP%20${ESS}" >> "${work_dir}/url.txt"
+    echo "vless://${uuid}@${cfip_h3}:${cfport}?encryption=none&security=tls&alpn=h3&sni=${argo_domain}&fp=chrome&type=xhttp&mode=auto&host=${argo_domain}&path=/${argo_path}#${isp}%20H3-Argo XHTTP%20${ESS}" >> "${work_dir}/url.txt"
 fi
 
 base64_str=$(cat "${work_dir}/url.txt" | base64 | tr -d '\n' | tr -d '\r')
@@ -385,3 +391,6 @@ green " Base64 节点链接 Xray-core "
 green "=========================================================================================="
 green "$base64_str"
 green "=========================================================================================="
+
+green " 一键卸载指令 (如需移除请输入以下)："
+yellow " bash <(curl -Ls https://raw.githubusercontent.com/easonhunt7/singboXray/main/uninstall.sh)"
