@@ -16,7 +16,7 @@ download_file() {
     echo "连接Github官方源中..."
     if curl -sL --connect-timeout 5 --max-time 60 -o "$output_path" "$official_url"; then
         if [ -s "$output_path" ]; then
-            green "通过Cloudflare安全代理下载成功！"
+            green "下载成功！"
             return 0
         fi
     fi
@@ -353,10 +353,14 @@ fi
 # 定义小型大写字母映射表
 declare -A sc=([A]=ᴀ [B]=ʙ [C]=ᴄ [D]=ᴅ [E]=ᴇ [F]=ꜰ [G]=ɢ [H]=ʜ [I]=ɪ [J]=ᴊ [K]=ᴋ [L]=ʟ [M]=ᴍ [N]=ɴ [O]=ᴏ [P]=ᴘ [Q]=ꞯ [R]=ʀ [S]=ꜱ [T]=ᴛ [U]=ᴜ [V]=ᴠ [W]=ᴡ [X]=x [Y]=ʏ [Z]=ᴢ)
 
-# 获取国家代码并转为大写，然后通过数组直接拼出缩小版字母
-uc=$(curl -sm 3 "https://api.ip.sb/geoip" | grep -o '"country_code":"[^"]*"' | cut -d'"' -f4 | tr '[:lower:]' '[:upper:]')
+# 多源 GeoIP 获取：优先 ipinfo，失败后回退 ip.sb
+uc=$(curl -sm 3 "https://ipinfo.io/country" | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')
+if [ -z "$uc" ] || [ ${#uc} -ne 2 ]; then
+    uc=$(curl -sm 3 "https://api.ip.sb/geoip" | grep -o '"country_code":"[^"]*"' | cut -d'"' -f4 | tr '[:lower:]' '[:upper:]')
+fi
+
 isp="${sc[${uc:0:1}]}${sc[${uc:1:1}]}"
-[[ -z "$isp" ]] && isp="nd"
+[[ -z "$isp" ]] && isp="ɴᴅ"
 
 ESS="ᴇꜱꜱ"
 cfip_h2="www.visa.com.hk"
