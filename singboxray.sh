@@ -5,29 +5,29 @@ green() { echo -e "\e[1;32m$1\033[0m"; }
 yellow() { echo -e "\e[1;33m$1\033[0m"; }
 red() { echo -e "\e[1;91m$1\033[0m"; }
 
-# Github Cloudflare安全镜像代理
+# Github Cloudflare安全代理
 GITHUB_PROXY=('https://ess.ieshare.workers.dev/')
-# 优先直连官方，失败后尝试镜像代理
+# 优先直连官方，失败后尝试代理
 download_file() {
     local output_path="$1"
     local official_url="$2"
     
     # 1. 尝试直连官方地址
-    echo "正在从Github官方源下载..."
+    echo "连接Github官方源中..."
     if curl -sL --connect-timeout 5 --max-time 60 -o "$output_path" "$official_url"; then
         if [ -s "$output_path" ]; then
-            green "下载成功！"
+            green "通过Cloudflare安全代理下载成功！"
             return 0
         fi
     fi
     
-    # 2. 直连失败，轮询切换镜像代理
+    # 2. 直连失败，轮询切换代理
     yellow "Github连接失败，转向Cloudflare安全代理..."
     for proxy in "${GITHUB_PROXY[@]}"; do
         local proxy_url="${proxy}${official_url}"
         if curl -sL --connect-timeout 5 --max-time 60 -o "$output_path" "$proxy_url"; then
             if [ -s "$output_path" ]; then
-                green "通过Cloudflare代理下载成功！"
+                green "下载成功！"
                 return 0
             fi
         fi
@@ -392,5 +392,6 @@ green "=========================================================================
 green "$base64_str"
 green "=========================================================================================="
 
-green " 一键卸载指令 (如需移除请输入以下)："
+
+echo " 一键卸载指令 (如需移除请输入以下)："
 yellow " bash <(curl -Ls https://raw.githubusercontent.com/easonhunt7/singboXray/main/uninstall.sh)"
