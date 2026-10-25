@@ -13,7 +13,7 @@ download_file() {
     local official_url="$2"
     
     # 1. 尝试直连官方地址
-    yellow "正在从Github官方地址下载..."
+    echo "正在从Github官方地址下载..."
     if curl -sL --connect-timeout 5 --max-time 60 -o "$output_path" "$official_url"; then
         if [ -s "$output_path" ]; then
             green "下载成功！"
@@ -110,7 +110,7 @@ work_dir="/etc/xray"
 systemctl stop xray 2>/dev/null || rc-service xray stop 2>/dev/null || true
 pkill -9 -f cloudflared 2>/dev/null || true
 
-yellow "正在初始化环境..."
+green "正在初始化环境..."
 if command -v apt >/dev/null 2>&1; then
     apt update -y >/dev/null 2>&1
     apt install -y curl wget unzip openssl iptables coreutils >/dev/null 2>&1
@@ -133,7 +133,7 @@ for cmd in curl unzip openssl; do
 done
 
 # 优化系统内核 UDP 缓冲区（针对 H3 / QUIC 极致性能）
-yellow "正在优化系统内核 UDP 缓冲区..."
+green "正在优化系统内核 UDP 缓冲区..."
 cat > /etc/sysctl.d/99-xray-h3.conf << EOF
 net.core.rmem_max = 268435456
 net.core.wmem_max = 268435456
@@ -144,7 +144,7 @@ EOF
 sysctl --system >/dev/null 2>&1 || sysctl -p /etc/sysctl.d/99-xray-h3.conf >/dev/null 2>&1
 
 # 2. 下载 Xray-core
-yellow "正在下载 Xray-core..."
+echo "正在下载 Xray-core..."
 mkdir -p "${work_dir}"
 ARCH_RAW=$(uname -m)
 case "${ARCH_RAW}" in
@@ -171,7 +171,7 @@ if [ "$enable_argo" = true ]; then
 fi
 
 # 3. 生成变量、自签证书与密钥对
-yellow "正在生成安全 UUID、自签证书及密钥对..."
+echo "正在生成安全 UUID、自签证书及密钥对..."
 uuid=$(cat /proc/sys/kernel/random/uuid)
 h3_path="${uuid}-xu" 
 argo_path="${uuid}-argo"
@@ -287,7 +287,7 @@ EOF
 
 # 5. 配置系统服务并启动
 if pidof systemd >/dev/null 2>&1 || [ -d /etc/systemd/system ]; then
-    yellow "正在启动 Xray-core..."
+    green "正在启动 Xray-core..."
     cat > /etc/systemd/system/xray.service << EOF
 [Unit]
 Description=Xray Service
@@ -308,7 +308,7 @@ EOF
     systemctl daemon-reload
     systemctl enable --now xray
 else
-    yellow "正在启动 Xray-core..."
+    green "正在启动 Xray-core..."
     cat > /etc/init.d/xray << 'EOF'
 #!/sbin/openrc-run
 description="Xray Service"
@@ -335,7 +335,7 @@ fi
 
 # 如果开启了 Argo，启动 cloudflared 后台进程
 if [ "$enable_argo" = true ]; then
-    yellow "正在启动 Cloudflare Argo 固定隧道 (协议: ${argo_protocol}, 连接数: ${argo_connections})..."
+    echo "正在启动 Cloudflare Argo 固定隧道 (协议: ${argo_protocol}, 连接数: ${argo_connections})..."
     GODEBUG="madvdontneed=1,netdns=go" nohup "${work_dir}/cloudflared" tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol "${argo_protocol}" --ha-connections "${argo_connections}" run --token "${argo_token}" > "${work_dir}/cloudflared.log" 2>&1 &
     green "Argo 固定隧道已启动。"
 fi
@@ -355,7 +355,7 @@ for p in "$h3_port" "$reality_port"; do
 done
 
 # 7. 获取 IP 并输出节点链接与 Base64 编码
-yellow "正在生成 Base 64 节点链接..."
+echo "正在生成 Base 64 节点链接..."
 raw_ip=$(curl -4 -sm 2 ip.sb || curl -6 -sm 2 ip.sb)
 if [[ "$raw_ip" =~ : ]]; then
     server_ip="[$raw_ip]"
@@ -368,11 +368,11 @@ cfip="www.teamviewer.com"
 cfport="443"
 
 > "${work_dir}/url.txt"
-[ -n "$reality_port" ] && echo "vless://${uuid}@${server_ip}:${reality_port}?encryption=none&security=reality&sni=${ym_vl_re}&fp=chrome&pbk=${public_key_x}&sid=${short_id_x}&type=tcp&flow=xtls-rprx-vision#Reality Vision_easyshare" >> "${work_dir}/url.txt"
-[ -n "$h3_port" ] && echo "vless://${uuid}@${server_ip}:${h3_port}?encryption=none&security=tls&sni=bing.com&alpn=h3&fp=chrome&type=xhttp&mode=auto&path=/${h3_path}&allowInsecure=1#H3-XHTTP_easyshare" >> "${work_dir}/url.txt"
+[ -n "$reality_port" ] && echo "vless://${uuid}@${server_ip}:${reality_port}?encryption=none&security=reality&sni=${ym_vl_re}&fp=chrome&pbk=${public_key_x}&sid=${short_id_x}&type=tcp&flow=xtls-rprx-vision#[${isp}]%20Reality Vision%20[${ESS}]" >> "${work_dir}/url.txt"
+[ -n "$h3_port" ] && echo "vless://${uuid}@${server_ip}:${h3_port}?encryption=none&security=tls&sni=bing.com&alpn=h3&fp=chrome&type=xhttp&mode=auto&path=/${h3_path}&allowInsecure=1#[${isp}]%20H3-XHTTP%20[${ESS}]" >> "${work_dir}/url.txt"
 if [ "$enable_argo" = true ]; then
-    echo "vless://${uuid}@${cfip}:${cfport}?encryption=none&security=tls&alpn=h2&sni=${argo_domain}&fp=chrome&type=xhttp&mode=auto&host=${argo_domain}&path=/${argo_path}#H2-Argo XHTTP_easyshare" >> "${work_dir}/url.txt"
-    echo "vless://${uuid}@${cfip}:${cfport}?encryption=none&security=tls&alpn=h3&sni=${argo_domain}&fp=chrome&type=xhttp&mode=auto&host=${argo_domain}&path=/${argo_path}#H3-Argo XHTTP_easyshare" >> "${work_dir}/url.txt"
+    echo "vless://${uuid}@${cfip}:${cfport}?encryption=none&security=tls&alpn=h2&sni=${argo_domain}&fp=chrome&type=xhttp&mode=auto&host=${argo_domain}&path=/${argo_path}#[${isp}]%20H2-Argo XHTTP%20[${ESS}]" >> "${work_dir}/url.txt"
+    echo "vless://${uuid}@${cfip}:${cfport}?encryption=none&security=tls&alpn=h3&sni=${argo_domain}&fp=chrome&type=xhttp&mode=auto&host=${argo_domain}&path=/${argo_path}#[${isp}]%20H3-Argo XHTTP%20[${ESS}]" >> "${work_dir}/url.txt"
 fi
 
 base64_str=$(cat "${work_dir}/url.txt" | base64 | tr -d '\n' | tr -d '\r')
