@@ -385,5 +385,5 @@ green "$base64_str"
 green "=========================================================================================="
 
 
-echo " 一键卸载指令 (如需移除请输入以下)："
+echo " 一键卸载 (如需移除，请执行以下指令)："
 yellow " bash <(curl -Ls https://raw.githubusercontent.com/easonhunt7/singboXray/main/uninstall.sh)"
