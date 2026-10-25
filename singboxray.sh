@@ -132,17 +132,6 @@ for cmd in curl unzip openssl; do
     fi
 done
 
-# 优化系统内核 UDP 缓冲区（针对 H3 / QUIC 极致性能）
-green "正在优化系统内核 UDP 缓冲区..."
-cat > /etc/sysctl.d/99-xray-h3.conf << EOF
-net.core.rmem_max = 268435456
-net.core.wmem_max = 268435456
-net.core.rmem_default = 67108864
-net.core.wmem_default = 67108864
-net.core.netdev_max_backlog = 100000
-EOF
-sysctl --system >/dev/null 2>&1 || sysctl -p /etc/sysctl.d/99-xray-h3.conf >/dev/null 2>&1
-
 # 2. 下载 Xray-core
 echo "正在下载 Xray-core..."
 mkdir -p "${work_dir}"
@@ -257,8 +246,7 @@ if [ "$enable_argo" = true ]; then
         \"security\": \"none\",
         \"xhttpSettings\": {
           \"path\": \"/$argo_path\",
-          \"mode\": \"auto\",
-          \"scMaxConcurrentStreams\": 16
+          \"mode\": \"auto\"
         }
       },
       \"sniffing\": {\"enabled\": true, \"destOverride\": [\"http\", \"tls\", \"quic\"], \"metadataOnly\": false}
