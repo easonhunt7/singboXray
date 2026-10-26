@@ -16,4 +16,4 @@ pkill -9 -f cloudflared 2>/dev/null
 # 3. 删除安装目录与所有文件
 rm -rf /etc/xray
 
-echo -e "\033[1;32mXray 及相关组件已全部卸载清理干净！\033[0m"
+echo -e "\033[1;32mXray 及相关组件已卸载完成！\033[0m"
