@@ -219,7 +219,7 @@ if [ -n "$h3_port" ]; then
         \"network\": \"xhttp\",
         \"security\": \"tls\",
         \"xhttpSettings\": {
-          \"mode\": \"auto\",
+          \"mode\": \"packet-up\",
           \"path\": \"/$h3_path\"
         },
         \"tlsSettings\": {
