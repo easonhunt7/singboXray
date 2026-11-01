@@ -315,10 +315,10 @@ EOF
 fi
 
 # 根据协议自动分配连接数：quic 默认 1，http2 设为 4
-argo_connections="1"
+argo_connections="2"
 argo_proto_lower=$(echo "$argo_protocol" | tr '[:upper:]' '[:lower:]')
 if [ "$argo_proto_lower" = "http2" ]; then
-    argo_connections="4"
+    argo_connections="8"
 fi
 
 # 如果开启了 Argo，启动 cloudflared 后台进程
