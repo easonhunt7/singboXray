@@ -42,7 +42,7 @@ ARG_ARGO_PORT="8001"
 ARG_ARGO_DOMAIN=""
 ARG_ARGO_TOKEN=""
 
-# 参数解析（恢复兼容带引号及灵活写法的匹配逻辑）
+# 参数解析
 for arg in "$@"; do
     clean_arg="${arg//\"/}"
     clean_arg="${clean_arg//\'/}"
@@ -67,6 +67,7 @@ done
 parse_port() {
     local input="$1"
     [ -z "$input" ] && echo "" && return
+    # 加上双引号防止多参数展开报错
     if [ "$input" = "n" ] || [ "$input" = "N" ]; then
         echo ""
     elif [ "$input" = "y" ] || [ "$input" = "Y" ]; then
