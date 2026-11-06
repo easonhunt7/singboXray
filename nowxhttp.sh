@@ -109,18 +109,18 @@ pkill -9 -f cloudflared 2>/dev/null || true
 green "正在初始化环境，请耐心等待..."
 if command -v apt >/dev/null 2>&1; then
     apt update -y >/dev/null 2>&1
-    apt install -y curl wget unzip openssl iptables coreutils >/dev/null 2>&1
+    apt install -y curl wget unzip tar openssl iptables coreutils >/dev/null 2>&1
 elif command -v yum >/dev/null 2>&1; then
-    yum install -y curl wget unzip openssl iptables coreutils >/dev/null 2>&1
+    yum install -y curl wget unzip tar openssl iptables coreutils >/dev/null 2>&1
 elif command -v apk >/dev/null 2>&1; then
     apk update >/dev/null 2>&1
-    apk add --no-cache bash curl wget unzip openssl iptables coreutils >/dev/null 2>&1
+    apk add --no-cache bash curl wget unzip tar openssl iptables coreutils >/dev/null 2>&1
 else
     red "未识别的系统包管理器，无法自动安装依赖！"
     exit 1
 fi
 
-for cmd in curl unzip openssl; do
+for cmd in curl unzip tar openssl; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
         red "错误：系统缺少必要组件 [$cmd]，请手动安装后重试！"
         exit 1
@@ -153,12 +153,20 @@ if [ -n "$nowhere_port" ]; then
     mkdir -p "${nowhere_dir}"
     ARCH_RAW=$(uname -m)
     case "${ARCH_RAW}" in
-        'x86_64' | 'amd64') NW_ARCH='amd64' ;;
-        'aarch64' | 'arm64') NW_ARCH='arm64' ;;
-        *) NW_ARCH='amd64' ;;
+        'x86_64' | 'amd64') NW_FILE="nowhere-amd64-unknown-linux-gnu.tar.gz" ;;
+        'aarch64' | 'arm64') NW_FILE="nowhere-aarch64-unknown-linux-gnu.tar.gz" ;;
+        *) NW_FILE="nowhere-amd64-unknown-linux-gnu.tar.gz" ;;
     esac
-    download_file "${nowhere_dir}/nowhere" "https://github.com/NodePassProject/nowhere/releases/latest/download/nowhere-linux-${NW_ARCH}" || exit 1
-    chmod +x "${nowhere_dir}/nowhere"
+    download_file "${nowhere_dir}/nowhere.tar.gz" "https://github.com/NodePassProject/nowhere/releases/latest/download/${NW_FILE}" || exit 1
+    tar -zxvf "${nowhere_dir}/nowhere.tar.gz" -C "${nowhere_dir}/" && rm -f "${nowhere_dir}/nowhere.tar.gz"
+    # 适配解压后的实际文件名或统一重命名
+    if [ -f "${nowhere_dir}/nowhere" ]; then
+        chmod +x "${nowhere_dir}/nowhere"
+    else
+        # 兼容可能带架构后缀的解压文件名
+        mv "${nowhere_dir}"/nowhere-* "${nowhere_dir}/nowhere" 2>/dev/null || true
+        chmod +x "${nowhere_dir}/nowhere"
+    fi
 fi
 
 if [ "$enable_argo" = true ]; then
@@ -402,7 +410,6 @@ if [ "$needs_xray" = true ]; then
     fi
 fi
 
-# 独立呈现 Nowhere 节点的 SOCKS5 链接
 if [ -n "$nowhere_port" ]; then
     echo "socks5://127.0.0.1:1080?encryption=none#${isp}%20Nowhere-SOCKS5%20${ESS}" >> "${work_dir}/url.txt"
 fi
@@ -411,8 +418,8 @@ base64_str=$(cat "${work_dir}/url.txt" | base64 | tr -d '\n' | tr -d '\r')
 
 clear
 green "=========================================================================================="
-green " Base64 节点链接 (Nowhere 已独立隔离为 SOCKS5 链路) "
+green " Base64 节点链接 (Nowhere 压缩包解压版) "
 green "=========================================================================================="
 green "$base64_str"
-[ -n "$nowhere_port" ] && yellow "提示：Nowhere 已成功独立部署，运行端口: $nowhere_port (本地配合 nowhere.exe 转换)"
+[ -n "$nowhere_port" ] && yellow "提示：Nowhere 已成功解压并部署，运行端口: $nowhere_port"
 green "=========================================================================================="
