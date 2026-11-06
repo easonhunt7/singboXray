@@ -168,8 +168,11 @@ if [ "$enable_argo" = true ]; then
 fi
 
 # 3. 生成变量、自签证书与密钥对
-echo "生成安全 UUID、自签证书及密钥对..."
+echo "生成安全密钥及配置..."
 uuid=$(cat /proc/sys/kernel/random/uuid)
+# 生成 32 位小写 hex 密钥，适配 Nowhere v3.3.0 要求
+nowhere_key=$(${nowhere_dir}/nowhere generate-key 2>/dev/null || openssl rand -hex 16)
+
 h3_path="${uuid}-xu" 
 argo_path="${uuid}-argo"
 ym_vl_re="www.apple.com"
@@ -282,15 +285,6 @@ if [ "$needs_xray" = true ]; then
 EOF
 fi
 
-if [ -n "$nowhere_port" ]; then
-    cat > "${nowhere_dir}/config.toml" << EOF
-[server]
-listen = "0.0.0.0:${nowhere_port}"
-secret = "${uuid}"
-morph = 1
-EOF
-fi
-
 # 5. 配置系统服务并启动
 if pidof systemd >/dev/null 2>&1 || [ -d /etc/systemd/system ]; then
     if [ "$needs_xray" = true ]; then
@@ -317,7 +311,8 @@ EOF
     fi
 
     if [ -n "$nowhere_port" ]; then
-        green "正在启动 Nowhere 协议服务..."
+        green "正在启动 Nowhere 协议服务 (v3.3.0 URL 传参模式)..."
+        # 使用 v3.3.0 规范的 URL 启动格式：nowhere <portal-url>
         cat > /etc/systemd/system/nowhere.service << EOF
 [Unit]
 Description=Nowhere Proxy Service
@@ -327,7 +322,7 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=${nowhere_dir}
-ExecStart=${nowhere_dir}/nowhere -c ${nowhere_dir}/config.toml
+ExecStart=${nowhere_dir}/nowhere nowhere://${nowhere_key}@0.0.0.0:${nowhere_port}?morph=1
 Restart=on-failure
 RestartSec=5
 
@@ -349,15 +344,16 @@ fi
 
 > "${work_dir}/url.txt"
 if [ -n "$nowhere_port" ]; then
-    echo "socks5://127.0.0.1:1080?encryption=none#Nowhere-SOCKS5" >> "${work_dir}/url.txt"
+    # 直接生成标准可导入的 socks5 链接 (格式: socks5://user:pass@ip:port 或 socks5://ip:port)
+    echo "socks5://${server_ip}:${nowhere_port}?encryption=none#Nowhere-SOCKS5" >> "${work_dir}/url.txt"
 fi
 
 base64_str=$(cat "${work_dir}/url.txt" | base64 | tr -d '\n' | tr -d '\r')
 
 clear
 green "=========================================================================================="
-green " Base64 节点链接 (Nowhere 修正版) "
+green " Base64 节点链接 (Nowhere v3.3.0 完整支持版) "
 green "=========================================================================================="
 green "$base64_str"
-[ -n "$nowhere_port" ] && yellow "提示：Nowhere 已成功部署，运行端口: $nowhere_port"
+[ -n "$nowhere_port" ] && yellow "提示：Nowhere 服务已成功启动！运行端口: $nowhere_port，SOCKS5 链接已就绪。"
 green "=========================================================================================="
