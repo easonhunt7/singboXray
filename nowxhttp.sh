@@ -67,9 +67,9 @@ done
 parse_port() {
     local input="$1"
     [ -z "$input" ] && echo "" && return
-    if [ "$input" = "n" ] || [ "$input" = "N" ]; then
+    if [ "$input" = "n" ] \vert{}\vert{} [ "$input" = "N" ]; then
         echo ""
-    elif [ "$input" = "y" ] || [ "$input" = "Y" ]; then
+    elif [ "$input" = "y" ] \vert{}\vert{} [ "$input" = "Y" ]; then
         shuf -i 1000-65000 -n 1
     elif [[ "$input" =~ ^[0-9]+$ ]]; then
         echo "$input"
@@ -132,57 +132,7 @@ if [ -n "$nowhere_port" ]; then
     chmod +x "${nowhere_dir}/nowhere"
 fi
 
-# 3. 创建 Nowhere 启动包装脚本 (适配 v3.3.0 URL 参数形式)
+# 3. 创建 Nowhere 启动包装脚本 (已修正为 v3.3.0 要求的 portal:// 协议头)
 if [ -n "$nowhere_port" ]; then
     echo "生成 Nowhere 启动引导脚本..."
-    nowhere_key=$(${nowhere_dir}/nowhere generate-key)
-    
-    cat > "${nowhere_dir}/start.sh" << EOF
-#!/bin/bash
-exec ${nowhere_dir}/nowhere nowhere://${nowhere_key}@0.0.0.0:${nowhere_port}?morph=1
-EOF
-    chmod +x "${nowhere_dir}/start.sh"
-
-    # 配置 systemd 服务
-    cat > /etc/systemd/system/nowhere.service << EOF
-[Unit]
-Description=Nowhere Proxy Service
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=${nowhere_dir}
-ExecStart=${nowhere_dir}/start.sh
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    systemctl daemon-reload
-    systemctl enable --now nowhere
-fi
-
-# 4. 获取服务器 IP 并生成直连链接
-raw_ip=$(curl -4 -sm 2 ip.sb || curl -6 -sm 2 ip.sb)
-if [[ "$raw_ip" =~ : ]]; then
-    server_ip="[$raw_ip]"
-else
-    server_ip="$raw_ip"
-fi
-
-socks_link="socks5://${server_ip}:${nowhere_port}?encryption=none#Nowhere-SOCKS5"
-base64_str=$(echo -n "$socks_link" | base64 | tr -d '\n' | tr -d '\r')
-
-clear
-green "=========================================================================================="
-green " Nowhere v3.3.0 部署成功！"
-green "=========================================================================================="
-green "【SOCKS5 明文链接】:"
-yellow "$socks_link"
-green ""
-green "【Base64 编码链接】:"
-yellow "$base64_str"
-green "=========================================================================================="
+    nowhere
