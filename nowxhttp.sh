@@ -7,12 +7,10 @@ red() { echo -e "\e[1;91m$1\033[0m"; }
 
 # Github Cloudflare安全代理
 GITHUB_PROXY=('https://ess.ieshare.workers.dev/')
-# 优先直连官方，失败后尝试代理
 download_file() {
     local output_path="$1"
     local official_url="$2"
     
-    # 1. 尝试直连官方地址
     echo "连接Github官方源中..."
     if curl -sL --connect-timeout 5 --max-time 60 -o "$output_path" "$official_url"; then
         if [ -s "$output_path" ]; then
@@ -21,7 +19,6 @@ download_file() {
         fi
     fi
     
-    # 2. 直连失败，轮询切换代理
     yellow "Github连接失败，转向Cloudflare安全代理..."
     for proxy in "${GITHUB_PROXY[@]}"; do
         local proxy_url="${proxy}${official_url}"
@@ -54,7 +51,7 @@ for arg in "$@"; do
         ARG_H3="${BASH_REMATCH[1]}"
     elif [[ "$clean_arg" =~ ^[rR][eE][aA][lL][iI][tT][yY](.*)$ ]]; then
         ARG_REALITY="${BASH_REMATCH[1]}"
-    elif [[ "$clean_arg" =~ ^now(.*)$ ]]; then
+    elif [[ "$clean_arg" =~ ^[nN][oO][wW](.*)$ ]]; then
         ARG_NOWHERE="${BASH_REMATCH[1]}"
     elif [[ "$clean_arg" =~ ^argo[pP][rR][oO][tT][oO][cC][oO][lI](.*)$ ]] || [[ "$clean_arg" =~ ^[pP][rR][oO][tT][oO][cC][oO][lL](.*)$ ]]; then
         ARG_ARGO_PROTOCOL="${BASH_REMATCH[1]}"
@@ -64,14 +61,6 @@ for arg in "$@"; do
         ARG_ARGO_DOMAIN="${BASH_REMATCH[1]}"
     elif [[ "$clean_arg" =~ ^argo[tT][oO][kK][eE][nN](.*)$ ]] || [[ "$clean_arg" =~ ^[tT][oO][kK][eE][nN](.*)$ ]]; then
         ARG_ARGO_TOKEN="${BASH_REMATCH[1]}"
-    elif [[ "$clean_arg" =~ ^[0-9]+$ ]] || [[ "$clean_arg" =~ ^[yYnN]$ ]]; then
-        if [ -z "$ARG_H3" ]; then
-            ARG_H3="$clean_arg"
-        elif [ -z "$ARG_REALITY" ]; then
-            ARG_REALITY="$clean_arg"
-        elif [ -z "$ARG_NOWHERE" ]; then
-            ARG_NOWHERE="$clean_arg"
-        fi
     fi
 done
 
@@ -98,7 +87,6 @@ argo_protocol="${ARG_ARGO_PROTOCOL:-quic}"
 argo_domain="${ARG_ARGO_DOMAIN}"
 argo_token="${ARG_ARGO_TOKEN}"
 
-# Argo 4个变量校验：协议, 端口, 域名, Token必须齐全，否则放弃Argo部署
 enable_argo=false
 if [ -n "$argo_port" ] && [ -n "$argo_domain" ] && [ -n "$argo_token" ] && [ -n "$argo_protocol" ]; then
     enable_argo=true
@@ -132,10 +120,9 @@ else
     exit 1
 fi
 
-# 保险校验：确保核心工具已就绪
 for cmd in curl unzip openssl; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
-        red "错误：系统缺少必要组件 [$cmd]，且自动安装失败，请手动安装后重试！"
+        red "错误：系统缺少必要组件 [$cmd]，请手动安装后重试！"
         exit 1
     fi
 done
@@ -187,11 +174,9 @@ h3_path="${uuid}-xu"
 argo_path="${uuid}-argo"
 ym_vl_re="www.apple.com"
 
-# H3 / Nowhere 自签证书
 openssl ecparam -genkey -name prime256v1 -out "${work_dir}/private.key"
 openssl req -new -x509 -days 3650 -key "${work_dir}/private.key" -out "${work_dir}/cert.pem" -subj "/CN=bing.com"
 
-# Reality 密钥对
 key_pair=$("${work_dir}/xray" x25519)
 private_key_x=$(echo "$key_pair" | awk -F':' '/PrivateKey/ {print $2}' | xargs)
 public_key_x=$(echo "$key_pair" | awk -F':' '/Password/ {print $2}' | xargs)
@@ -293,7 +278,6 @@ cat > "${work_dir}/config.json" << EOF
 }
 EOF
 
-# 如果开启了 Nowhere，写入其 config.toml 配置文件
 if [ -n "$nowhere_port" ]; then
     cat > "${nowhere_dir}/config.toml" << EOF
 [server]
@@ -366,7 +350,6 @@ EOF
     rc-service xray restart
 fi
 
-# Argo 相关配置
 argo_connections="1"
 argo_proto_lower=$(echo "$argo_protocol" | tr '[:upper:]' '[:lower:]')
 if [ "$argo_proto_lower" = "http2" ]; then
@@ -378,7 +361,7 @@ if [ "$enable_argo" = true ]; then
   nohup "${work_dir}/cloudflared" tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol "${argo_protocol}" --ha-connections "${argo_connections}" run --token "${argo_token}" > "${work_dir}/cloudflared.log" 2>&1 &
 fi
 
-# 6. 放行对应的防火墙端口 (直连端口需要同时放行 TCP 和 UDP)
+# 6. 放行防火墙端口
 for p in "$h3_port" "$reality_port" "$nowhere_port"; do
     [ -z "$p" ] && continue
     if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
@@ -422,12 +405,17 @@ if [ "$enable_argo" = true ]; then
     echo "vless://${uuid}@${cfip_h3}:${cfport}?encryption=none&security=tls&alpn=h3&sni=${argo_domain}&fp=chrome&type=xhttp&mode=auto&host=${argo_domain}&path=/${argo_path}#${isp}%20H3-Argo XHTTP%20${ESS}" >> "${work_dir}/url.txt"
 fi
 
+# 将 Nowhere 包装成标准 SOCKS5 链接加入订阅列表
+if [ -n "$nowhere_port" ]; then
+    echo "socks5://127.0.0.1:1080?encryption=none#${isp}%20Nowhere-SOCKS5%20${ESS}" >> "${work_dir}/url.txt"
+fi
+
 base64_str=$(cat "${work_dir}/url.txt" | base64 | tr -d '\n' | tr -d '\r')
 
 clear
 green "=========================================================================================="
-green " Base64 节点链接 (Xray-core & Nowhere) "
+green " Base64 节点链接 (包含 Xray 与 Nowhere-SOCKS5 转换映射) "
 green "=========================================================================================="
 green "$base64_str"
-[ -n "$nowhere_port" ] && green "Nowhere 运行端口: $nowhere_port (Secret: $uuid)"
+[ -n "$nowhere_port" ] && yellow "提示：Nowhere 已映射为本地 SOCKS5 (127.0.0.1:1080)，请确保在客户端本地运行 nowhere.exe 引导！"
 green "=========================================================================================="
