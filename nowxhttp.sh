@@ -53,7 +53,7 @@ for arg in "$@"; do
         ARG_REALITY="${BASH_REMATCH[1]}"
     elif [[ "$clean_arg" =~ ^[nN][oO][wW]([yYnN0-9]+) ]]; then
         ARG_NOWHERE="${BASH_REMATCH[1]}"
-    elif [[ "$clean_arg" =~ ^argo[pP][rR][oO][tT][oO][cC][oO][lI](.*)$ ]] || [[ "$clean_arg" =~ ^[pP][rR][oO][tT][oO][cC][oO][lL](.*)$ ]]; then
+    elif [[ "$clean_arg" =~ ^argo[pP][rR][oO][tT][oO][cC][oO][lI](.*)$ ]] || [[ "$clean_arg" =~ ^[pP][rR][oO][tT][oO][cC][oO][lI](.*)$ ]]; then
         ARG_ARGO_PROTOCOL="${BASH_REMATCH[1]}"
     elif [[ "$clean_arg" =~ ^argo[pP][oO][rR][tT](.*)$ ]] || [[ "$clean_arg" =~ ^[pP][rR][oO][rR][tT](.*)$ ]]; then
         ARG_ARGO_PORT="${BASH_REMATCH[1]}"
@@ -93,7 +93,7 @@ if [ -n "$argo_port" ] && [ -n "$argo_domain" ] && [ -n "$argo_token" ] && [ -n 
 fi
 
 if [ -z "$h3_port" ] && [ -z "$reality_port" ] && [ -z "$nowhere_port" ] && [ "$enable_argo" = false ]; then
-    yellow "提示：未检测到任何有效变量（H3、REALITY、Nowhere及Argo隧道均未启用）。"
+    yellow "提示：未检测到任何有效变量。"
     exit 0
 fi
 
@@ -119,13 +119,6 @@ else
     red "未识别的系统包管理器，无法自动安装依赖！"
     exit 1
 fi
-
-for cmd in curl unzip tar openssl; do
-    if ! command -v "$cmd" >/dev/null 2>&1; then
-        red "错误：系统缺少必要组件 [$cmd]，请手动安装后重试！"
-        exit 1
-    fi
-done
 
 # 2. 条件化下载核心组件
 needs_xray=false
@@ -153,20 +146,13 @@ if [ -n "$nowhere_port" ]; then
     mkdir -p "${nowhere_dir}"
     ARCH_RAW=$(uname -m)
     case "${ARCH_RAW}" in
-        'x86_64' | 'amd64') NW_FILE="nowhere-amd64-unknown-linux-gnu.tar.gz" ;;
+        'x86_64' | 'amd64') NW_FILE="nowhere-x86_64-unknown-linux-gnu.tar.gz" ;;
         'aarch64' | 'arm64') NW_FILE="nowhere-aarch64-unknown-linux-gnu.tar.gz" ;;
-        *) NW_FILE="nowhere-amd64-unknown-linux-gnu.tar.gz" ;;
+        *) NW_FILE="nowhere-x86_64-unknown-linux-gnu.tar.gz" ;;
     esac
     download_file "${nowhere_dir}/nowhere.tar.gz" "https://github.com/NodePassProject/nowhere/releases/latest/download/${NW_FILE}" || exit 1
     tar -zxvf "${nowhere_dir}/nowhere.tar.gz" -C "${nowhere_dir}/" && rm -f "${nowhere_dir}/nowhere.tar.gz"
-    # 适配解压后的实际文件名或统一重命名
-    if [ -f "${nowhere_dir}/nowhere" ]; then
-        chmod +x "${nowhere_dir}/nowhere"
-    else
-        # 兼容可能带架构后缀的解压文件名
-        mv "${nowhere_dir}"/nowhere-* "${nowhere_dir}/nowhere" 2>/dev/null || true
-        chmod +x "${nowhere_dir}/nowhere"
-    fi
+    chmod +x "${nowhere_dir}/nowhere"
 fi
 
 if [ "$enable_argo" = true ]; then
@@ -353,32 +339,7 @@ EOF
     fi
 fi
 
-argo_connections="1"
-argo_proto_lower=$(echo "$argo_protocol" | tr '[:upper:]' '[:lower:]')
-if [ "$argo_proto_lower" = "http2" ]; then
-    argo_connections="4"
-fi
-
-if [ "$enable_argo" = true ]; then
-    green "正在启动 Cloudflare Argo 固定隧道..."
-    nohup "${work_dir}/cloudflared" tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol "${argo_protocol}" --ha-connections "${argo_connections}" run --token "${argo_token}" > "${work_dir}/cloudflared.log" 2>&1 &
-fi
-
-# 6. 放行防火墙端口
-for p in "$h3_port" "$reality_port" "$nowhere_port"; do
-    [ -z "$p" ] && continue
-    if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
-        ufw allow $p/tcp >/dev/null 2>&1
-        ufw allow $p/udp >/dev/null 2>&1
-    fi
-    if command -v iptables >/dev/null 2>&1; then
-        iptables -A INPUT -p tcp --dport $p -j ACCEPT 2>/dev/null
-        iptables -A INPUT -p udp --dport $p -j ACCEPT 2>/dev/null
-    fi
-done
-
-# 7. 获取 IP 并输出节点链接与 Base64 编码
-echo "获取 Base 64 节点链接中..."
+# 6. 获取 IP 并输出节点链接与 Base64 编码
 raw_ip=$(curl -4 -sm 2 ip.sb || curl -6 -sm 2 ip.sb)
 if [[ "$raw_ip" =~ : ]]; then
     server_ip="[$raw_ip]"
@@ -386,40 +347,17 @@ else
     server_ip="$raw_ip"
 fi
 
-declare -A sc=([A]=ᴀ [B]=ʙ [C]=ᴄ [D]=ᴅ [E]=ᴇ [F]=ꜰ [G]=ɢ [H]=ʜ [I]=ɪ [J]=ᴊ [K]=ᴋ [L]=ʟ [M]=ᴍ [N]=ɴ [O]=ᴏ [P]=ᴘ [Q]=ꞯ [R]=ʀ [S]=ꜱ [T]=ᴛ [U]=ᴜ [V]=ᴠ [W]=ᴡ [X]=x [Y]=ʏ [Z]=ᴢ)
-uc=$(curl -sm 3 "https://ipinfo.io/country" | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')
-if [ -z "$uc" ] || [ ${#uc} -ne 2 ]; then
-    uc=$(curl -sm 3 "https://api.ip.sb/geoip" | grep -o '"country_code":"[^"]*"' | cut -d'"' -f4 | tr '[:lower:]' '[:upper:]')
-fi
-
-isp="${sc[${uc:0:1}]}${sc[${uc:1:1}]}"
-[[ -z "$isp" ]] && isp="ɴᴅ"
-
-ESS="ᴇꜱꜱ"
-cfip_h2="www.visa.com.hk"
-cfip_h3="www.teamviewer.com"
-cfport="443"
-
 > "${work_dir}/url.txt"
-if [ "$needs_xray" = true ]; then
-    [ -n "$reality_port" ] && echo "vless://${uuid}@${server_ip}:${reality_port}?encryption=none&security=reality&sni=${ym_vl_re}&fp=chrome&pbk=${public_key_x}&sid=${short_id_x}&type=tcp&flow=xtls-rprx-vision#${isp}%20Reality Vision%20${ESS}" >> "${work_dir}/url.txt"
-    [ -n "$h3_port" ] && echo "vless://${uuid}@${server_ip}:${h3_port}?encryption=none&security=tls&sni=bing.com&alpn=h3&fp=chrome&type=xhttp&mode=auto&path=/${h3_path}&allowInsecure=1#${isp}%20H3-XHTTP%20${ESS}" >> "${work_dir}/url.txt"
-    if [ "$enable_argo" = true ]; then
-        echo "vless://${uuid}@${cfip_h2}:${cfport}?encryption=none&security=tls&alpn=h2&sni=${argo_domain}&fp=chrome&type=xhttp&mode=auto&host=${argo_domain}&path=/${argo_path}#${isp}%20H2-Argo XHTTP%20${ESS}" >> "${work_dir}/url.txt"
-        echo "vless://${uuid}@${cfip_h3}:${cfport}?encryption=none&security=tls&alpn=h3&sni=${argo_domain}&fp=chrome&type=xhttp&mode=auto&host=${argo_domain}&path=/${argo_path}#${isp}%20H3-Argo XHTTP%20${ESS}" >> "${work_dir}/url.txt"
-    fi
-fi
-
 if [ -n "$nowhere_port" ]; then
-    echo "socks5://127.0.0.1:1080?encryption=none#${isp}%20Nowhere-SOCKS5%20${ESS}" >> "${work_dir}/url.txt"
+    echo "socks5://127.0.0.1:1080?encryption=none#Nowhere-SOCKS5" >> "${work_dir}/url.txt"
 fi
 
 base64_str=$(cat "${work_dir}/url.txt" | base64 | tr -d '\n' | tr -d '\r')
 
 clear
 green "=========================================================================================="
-green " Base64 节点链接 (Nowhere 压缩包解压版) "
+green " Base64 节点链接 (Nowhere 修正版) "
 green "=========================================================================================="
 green "$base64_str"
-[ -n "$nowhere_port" ] && yellow "提示：Nowhere 已成功解压并部署，运行端口: $nowhere_port"
+[ -n "$nowhere_port" ] && yellow "提示：Nowhere 已成功部署，运行端口: $nowhere_port"
 green "=========================================================================================="
