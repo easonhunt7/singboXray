@@ -1,52 +1,32 @@
 #!/usr/bin/env bash
 set -e
 
-ALL_ARGS="$*"
+# 接收固定参数：$1=开关(y/n), $2=端口(留空或数字), $3=域名
+DEPLOY_FLAG="${1:-n}"
+INPUT_PORT="$2"
+DOMAIN="$3"
 
-DEPLOY_FLAG="n"
-INPUT_PORT=""
-DOMAIN=""
-
-if [[ "$ALL_ARGS" =~ [yY] ]] && [[ ! "$ALL_ARGS" =~ naive\"n\" ]]; then
-    DEPLOY_FLAG="y"
-elif [[ "$ALL_ARGS" =~ naive\"y\" ]]; then
-    DEPLOY_FLAG="y"
-fi
-
-if [[ "$ALL_ARGS" =~ naivedomain[\"\x27]?([^[:space:]\"\x27]+)[\"\x27]? ]] || [[ "$ALL_ARGS" =~ domain[\"\x27]?([^[:space:]\"\x27]+)[\"\x27]? ]]; then
-    DOMAIN="${BASH_REMATCH[1]}"
-else
-    for arg in "$@"; do
-        if [[ "$arg" == *.* ]] && [[ "$arg" != *"/"* ]] && [[ "$arg" != *"http"* ]]; then
-            DOMAIN="$arg"
-            break
-        fi
-    done
-fi
-
-for arg in "$@"; do
-    if [[ "$arg" =~ ^naive\"([0-9]+)\"$ ]]; then
-        INPUT_PORT="${BASH_REMATCH[1]}"
-        break
-    elif [[ "$arg" =~ ^[0-9]+$ ]]; then
-        INPUT_PORT="$arg"
-        break
-    fi
-done
-
+# 如果开关不是 y，则直接退出
 if [[ "${DEPLOY_FLAG,,}" != "y" ]]; then
     echo "[!] 跳过 NaïveProxy 部署。"
     exit 0
 fi
 
+# 如果第二个参数传的是域名而不是端口（即没填端口、直接填了域名）
+if [[ "$INPUT_PORT" == *.* ]] && [ -z "$DOMAIN" ]; then
+    DOMAIN="$INPUT_PORT"
+    INPUT_PORT=""
+fi
+
 if [ -z "$DOMAIN" ]; then
-    echo "[Error] 域名不能为空！请检查传入的 naivedomain 参数。"
+    echo "[Error] 域名不能为空！请正确传入域名参数。"
     exit 1
 fi
 
-if [ -z "$INPUT_PORT" ]; then
+# 端口处理：未指定或为空则随机分配高位端口
+if [ -z "$INPUT_PORT" ] || ! [[ "$INPUT_PORT" =~ ^[0-9]+$ ]]; then
     PORT=$((RANDOM % 55536 + 10000))
-    echo "[+] 未指定端口，已随机分配高位端口: ${PORT}"
+    echo "[+] 未指定有效端口，已随机分配高位端口: ${PORT}"
 else
     PORT="$INPUT_PORT"
     echo "[+] 使用指定端口: ${PORT}"
@@ -63,6 +43,7 @@ echo " 用户: ${USER}"
 echo " 密码: ${PASS}"
 echo "================================================="
 
+# 系统环境检测
 OS_TYPE=""
 if [ -f /etc/alpine-release ]; then
     OS_TYPE="alpine"
@@ -83,6 +64,7 @@ if [ -z "$OS_TYPE" ]; then
     exit 1
 fi
 
+# 下载集成 forwardproxy 模块的 Caddy 引擎
 CADDY_BIN="/usr/local/bin/caddy"
 echo "[+] 正在获取集成 forwardproxy 模块的 Caddy 引擎..."
 
@@ -97,6 +79,7 @@ DOWNLOAD_URL="https://caddyserver.com/api/download?os=linux&arch=${CADDY_ARCH}&p
 curl -sSL "$DOWNLOAD_URL" -o "$CADDY_BIN"
 chmod +x "$CADDY_BIN"
 
+# 生成静态伪装网页
 WEB_ROOT="/var/www/naive_mask"
 mkdir -p "$WEB_ROOT"
 cat <<'EOF' > "${WEB_ROOT}/index.html"
@@ -122,6 +105,7 @@ cat <<'EOF' > "${WEB_ROOT}/index.html"
 </html>
 EOF
 
+# 动态构建 Caddyfile
 CADDY_DIR="/etc/caddy"
 mkdir -p "$CADDY_DIR"
 CADDYFILE="${CADDY_DIR}/Caddyfile"
@@ -146,8 +130,8 @@ cat <<EOF > "$CADDYFILE"
 }
 EOF
 
+# 配置后台守护服务
 echo "[+] 配置系统后台守护服务..."
-
 if [ "$OS_TYPE" == "alpine" ]; then
     cat <<'EOF' > /etc/init.d/caddy
 #!/sbin/openrc-run
