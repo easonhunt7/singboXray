@@ -1,26 +1,26 @@
 #!/usr/bin/env bash
 # =========================================================
-# NaïveProxy 一键部署脚本 (包含万能容错参数解析)
+# NaïveProxy 一键部署脚本 (完美支持 naivedomain"xxx" 格式)
 # =========================================================
 
 set -e
 
-# --- 1. 万能参数解析（合并所有传参为一整行字符串进行模糊匹配） ---
+# --- 1. 参数解析（兼容 naivedomain"..." 格式） ---
 ALL_ARGS="$*"
 
 DEPLOY_FLAG="n"
 INPUT_PORT=""
 DOMAIN=""
 
-# 只要整行参数里包含 y，就判定为部署
+# 1. 匹配部署开关：只要包含 y/Y 且没有明确指明 n
 if [[ "$ALL_ARGS" =~ [yY] ]] && [[ ! "$ALL_ARGS" =~ naive\"n\" ]] && [[ ! "$ALL_ARGS" =~ \ n\  ]]; then
     DEPLOY_FLAG="y"
 elif [[ "$ALL_ARGS" =~ naive\"y\" ]] \vert{}\vert{} [[ "$ALL_ARGS" =~ \ y\  ]]; then
     DEPLOY_FLAG="y"
 fi
 
-# 从参数中提取域名
-if [[ "$ALL_ARGS" =~ domain[\"\x27]?([^[:space:]\"\x27]+)[\"\x27]? ]]; then
+# 2. 精准提取 naivedomain"xxx" 或 domain"xxx" 中的域名
+if [[ "$ALL_ARGS" =~ naivedomain[\"\x27]?([^[:space:]\"\x27]+)[\"\x27]? ]] \vert{}\vert{} [[ "$ALL_ARGS" =~ domain[\"\x27]?([^[:space:]\"\x27]+)[\"\x27]? ]]; then
     DOMAIN="${BASH_REMATCH[1]}"
 else
     # 备用：从参数中直接抓取形如 xxx.xxx.xxx 的域名
@@ -32,7 +32,7 @@ else
     done
 fi
 
-# 提取端口：匹配 naive"数字" 或纯数字
+# 3. 提取端口：匹配 naive"数字" 或纯数字
 for arg in "$@"; do
     if [[ "$arg" =~ ^naive\"([0-9]+)\"$ ]]; then
         INPUT_PORT="${BASH_REMATCH[1]}"
@@ -51,7 +51,7 @@ fi
 
 # 检查域名是否为空
 if [ -z "$DOMAIN" ]; then
-    echo "[Error] 域名不能为空！请检查传入的 domain 参数。"
+    echo "[Error] 域名不能为空！请检查传入的 naivedomain 参数。"
     exit 1
 fi
 
@@ -138,4 +138,87 @@ cat <<'EOF' > "${WEB_ROOT}/index.html"
 </html>
 EOF
 
-# --- 5. 动态构建 Caddyfile
+# --- 5. 动态构建 Caddyfile ---
+CADDY_DIR="/etc/caddy"
+mkdir -p "$CADDY_DIR"
+CADDYFILE="${CADDY_DIR}/Caddyfile"
+
+cat <<EOF > "$CADDYFILE"
+{
+    admin off
+}
+
+:${PORT}, ${DOMAIN}:${PORT} {
+    tls admin@${DOMAIN}
+    
+    forwardproxy {
+        basic_auth ${USER}${PASS}
+        hide_ip
+        hide_via
+        probe_resistance
+    }
+    
+    root * ${WEB_ROOT}
+    file_server
+}
+EOF
+
+# --- 6. 配置后台守护服务与自启动 ---
+echo "[+] 配置系统后台守护服务..."
+
+if [ "$OS_TYPE" == "alpine" ]; then
+    cat <<'EOF' > /etc/init.d/caddy
+#!/sbin/openrc-run
+description="Caddy Web Server (NaïveProxy)"
+command="/usr/local/bin/caddy"
+command_args="run --config /etc/caddy/Caddyfile"
+pidfile="/run/caddy.pid"
+command_background="yes"
+
+depend() {
+    need net
+    after firewall
+}
+EOF
+    chmod +x /etc/init.d/caddy
+    rc-update add caddy default >/dev/null 2>&1 || true
+    rc-service caddy restart
+else
+    cat <<EOF > /etc/systemd/system/caddy.service
+[Unit]
+Description=Caddy Web Server with NaiveProxy
+After=network.target network-online.target
+Requires=network-online.target
+
+[Service]
+Type=notify
+User=root
+ExecStart=/usr/local/bin/caddy run --environ --config /etc/caddy/Caddyfile
+ExecReload=/usr/local/bin/caddy reload --config /etc/caddy/Caddyfile
+TimeoutStopSec=5s
+LimitNOFILE=1048576
+LimitNPROC=512
+PrivateTmp=true
+ProtectSystem=full
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload
+    systemctl enable caddy >/dev/null 2>&1
+    systemctl restart caddy
+fi
+
+# --- 7. 输出客户端配置参数 ---
+echo "================================================="
+echo " 🎉 NaïveProxy 部署成功！"
+echo "================================================="
+echo " 域名 (Domain)   : ${DOMAIN}"
+echo " 端口 (Port)     : ${PORT}"
+echo " 用户名 (Username): ${USER}"
+echo " 密码 (Password) : ${PASS}"
+echo "-------------------------------------------------"
+echo " 🔗 客户端连接 URL (支持 HTTP/2 & HTTP/3):"
+echo " naive+https://${USER}:${PASS}@${DOMAIN}:${PORT}"
+echo "================================================="
