@@ -103,7 +103,7 @@ case "$ARCH" in
     *) echo "[Error] 不支持的架构: $ARCH"; exit 1 ;;
 esac
 
-DOWNLOAD_URL="https://caddyserver.com/api/download?os=linux&arch=${CADDY_ARCH}&p=github.com%2Fcaddyserver%2Fforwardproxy"
+DOWNLOAD_URL="[https://caddyserver.com/api/download?os=linux&arch=$](https://caddyserver.com/api/download?os=linux&arch=$){CADDY_ARCH}&p=github.com%2Fcaddyserver%2Fforwardproxy"
 curl -sSL "$DOWNLOAD_URL" -o "$CADDY_BIN"
 chmod +x "$CADDY_BIN"
 
@@ -138,7 +138,7 @@ CADDY_DIR="/etc/caddy"
 mkdir -p "$CADDY_DIR"
 CADDYFILE="${CADDY_DIR}/Caddyfile"
 
-cat <<EOF > "$CADDYFILE"
+cat <<EOF> "$CADDYFILE"
 {
     admin off
 }
@@ -179,7 +179,7 @@ EOF
     rc-update add caddy default >/dev/null 2>&1 || true
     rc-service caddy restart
 else
-    cat <<EOF > /etc/systemd/system/caddy.service
+    cat <<EOF> /etc/systemd/system/caddy.service
 [Unit]
 Description=Caddy Web Server with NaiveProxy
 After=network.target network-online.target
