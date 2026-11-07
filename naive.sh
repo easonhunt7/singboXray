@@ -1,29 +1,28 @@
 #!/usr/bin/env bash
 # =========================================================
-# NaïveProxy 一键部署脚本 (完美支持 naivedomain"xxx" 格式)
+# NaïveProxy 一键部署脚本 (纯净标准语法版)
 # =========================================================
 
 set -e
 
-# --- 1. 参数解析（兼容 naivedomain"..." 格式） ---
+# --- 1. 参数解析 ---
 ALL_ARGS="$*"
 
 DEPLOY_FLAG="n"
 INPUT_PORT=""
 DOMAIN=""
 
-# 1. 匹配部署开关：只要包含 y/Y 且没有明确指明 n
-if [[ "$ALL_ARGS" =~ [yY] ]] && [[ ! "$ALL_ARGS" =~ naive\"n\" ]] && [[ ! "$ALL_ARGS" =~ \ n\  ]]; then
+# 匹配部署开关
+if [[ "$ALL_ARGS" =~ [yY] ]] && [[ ! "$ALL_ARGS" =~ naive\"n\" ]]; then
     DEPLOY_FLAG="y"
-elif [[ "$ALL_ARGS" =~ naive\"y\" ]] \vert{}\vert{} [[ "$ALL_ARGS" =~ \ y\  ]]; then
+elif [[ "$ALL_ARGS" =~ naive\"y\" ]]; then
     DEPLOY_FLAG="y"
 fi
 
-# 2. 精准提取 naivedomain"xxx" 或 domain"xxx" 中的域名
-if [[ "$ALL_ARGS" =~ naivedomain[\"\x27]?([^[:space:]\"\x27]+)[\"\x27]? ]] \vert{}\vert{} [[ "$ALL_ARGS" =~ domain[\"\x27]?([^[:space:]\"\x27]+)[\"\x27]? ]]; then
+# 提取域名
+if [[ "$ALL_ARGS" =~ naivedomain[\"\x27]?([^[:space:]\"\x27]+)[\"\x27]? ]] || [[ "$ALL_ARGS" =~ domain[\"\x27]?([^[:space:]\"\x27]+)[\"\x27]? ]]; then
     DOMAIN="${BASH_REMATCH[1]}"
 else
-    # 备用：从参数中直接抓取形如 xxx.xxx.xxx 的域名
     for arg in "$@"; do
         if [[ "$arg" == *.* ]] && [[ "$arg" != *"/"* ]] && [[ "$arg" != *"http"* ]]; then
             DOMAIN="$arg"
@@ -32,7 +31,7 @@ else
     done
 fi
 
-# 3. 提取端口：匹配 naive"数字" 或纯数字
+# 提取端口
 for arg in "$@"; do
     if [[ "$arg" =~ ^naive\"([0-9]+)\"$ ]]; then
         INPUT_PORT="${BASH_REMATCH[1]}"
@@ -43,19 +42,16 @@ for arg in "$@"; do
     fi
 done
 
-# 如果标志位不为 y，直接退出
 if [[ "${DEPLOY_FLAG,,}" != "y" ]]; then
     echo "[!] 跳过 NaïveProxy 部署。"
     exit 0
 fi
 
-# 检查域名是否为空
 if [ -z "$DOMAIN" ]; then
     echo "[Error] 域名不能为空！请检查传入的 naivedomain 参数。"
     exit 1
 fi
 
-# 端口处理：若未指定端口，随机分配 10000-65535 端口
 if [ -z "$INPUT_PORT" ]; then
     PORT=$((RANDOM % 55536 + 10000))
     echo "[+] 未指定端口，已随机分配高位端口: ${PORT}"
@@ -64,7 +60,6 @@ else
     echo "[+] 使用指定端口: ${PORT}"
 fi
 
-# 自动生成 12 位随机用户名和 16 位密码
 USER=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 12)
 PASS=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 16)
 
@@ -84,7 +79,7 @@ if [ -f /etc/alpine-release ]; then
     apk add --no-progress curl wget sudo tar bash jq openssl ca-certificates
 elif [ -f /etc/os-release ]; then
     source /etc/os-release
-    if [[ "$ID" == "ubuntu" || "$ID" == "debian" \vert{}\vert{} "$ID_LIKE" =~ "debian" ]]; then
+    if [[ "$ID" == "ubuntu" || "$ID" == "debian" || "$ID_LIKE" =~ "debian" ]]; then
         OS_TYPE="debian"
         export DEBIAN_FRONTEND=noninteractive
         apt-get update -y
@@ -152,7 +147,7 @@ cat <<EOF > "$CADDYFILE"
     tls admin@${DOMAIN}
     
     forwardproxy {
-        basic_auth ${USER}${PASS}
+        basic_auth ${USER} ${PASS}
         hide_ip
         hide_via
         probe_resistance
