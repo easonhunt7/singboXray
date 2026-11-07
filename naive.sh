@@ -1,41 +1,61 @@
 #!/usr/bin/env bash
 # =========================================================
-# NaïveProxy 一键部署脚本 (支持带前缀增强型参数解析)
+# NaïveProxy 一键部署脚本 (包含万能容错参数解析)
 # =========================================================
 
 set -e
 
-# --- 1. 智能参数解析 ---
+# --- 1. 万能参数解析（合并所有传参为一整行字符串进行模糊匹配） ---
+ALL_ARGS="$*"
+
 DEPLOY_FLAG="n"
 INPUT_PORT=""
 DOMAIN=""
 
+# 只要整行参数里包含 y，就判定为部署
+if [[ "$ALL_ARGS" =~ [yY] ]] && [[ ! "$ALL_ARGS" =~ naive\"n\" ]] && [[ ! "$ALL_ARGS" =~ \ n\  ]]; then
+    DEPLOY_FLAG="y"
+elif [[ "$ALL_ARGS" =~ naive\"y\" ]] \vert{}\vert{} [[ "$ALL_ARGS" =~ \ y\  ]]; then
+    DEPLOY_FLAG="y"
+fi
+
+# 从参数中提取域名
+if [[ "$ALL_ARGS" =~ domain[\"\x27]?([^[:space:]\"\x27]+)[\"\x27]? ]]; then
+    DOMAIN="${BASH_REMATCH[1]}"
+else
+    # 备用：从参数中直接抓取形如 xxx.xxx.xxx 的域名
+    for arg in "$@"; do
+        if [[ "$arg" == *.* ]] && [[ "$arg" != *"/"* ]] && [[ "$arg" != *"http"* ]]; then
+            DOMAIN="$arg"
+            break
+        fi
+    done
+fi
+
+# 提取端口：匹配 naive"数字" 或纯数字
 for arg in "$@"; do
-    if [[ "$arg" =~ ^naive\"[yY]\"$ ]] || [[ "$arg" =~ ^[yY]$ ]]; then
-        DEPLOY_FLAG="y"
-    elif [[ "$arg" =~ ^naive\"[nN]\"$ ]] || [[ "$arg" =~ ^[nN]$ ]]; then
-        DEPLOY_FLAG="n"
-    elif [[ "$arg" =~ ^naive\"([0-9]+)\"$ ]]; then
+    if [[ "$arg" =~ ^naive\"([0-9]+)\"$ ]]; then
         INPUT_PORT="${BASH_REMATCH[1]}"
+        break
     elif [[ "$arg" =~ ^[0-9]+$ ]]; then
         INPUT_PORT="$arg"
-    elif [[ "$arg" =~ domain ]]; then
-        DOMAIN=$(echo "$arg" | sed -E 's/.*domain["\x27]?([^"\x27]+)["\x27]?/\1/')
-    elif [[ "$arg" == *.* ]] && [[ "$arg" != *"/"* ]]; then
-        DOMAIN="$arg"
+        break
     fi
 done
 
+# 如果标志位不为 y，直接退出
 if [[ "${DEPLOY_FLAG,,}" != "y" ]]; then
     echo "[!] 跳过 NaïveProxy 部署。"
     exit 0
 fi
 
+# 检查域名是否为空
 if [ -z "$DOMAIN" ]; then
     echo "[Error] 域名不能为空！请检查传入的 domain 参数。"
     exit 1
 fi
 
+# 端口处理：若未指定端口，随机分配 10000-65535 端口
 if [ -z "$INPUT_PORT" ]; then
     PORT=$((RANDOM % 55536 + 10000))
     echo "[+] 未指定端口，已随机分配高位端口: ${PORT}"
@@ -44,6 +64,7 @@ else
     echo "[+] 使用指定端口: ${PORT}"
 fi
 
+# 自动生成 12 位随机用户名和 16 位密码
 USER=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 12)
 PASS=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 16)
 
@@ -63,7 +84,7 @@ if [ -f /etc/alpine-release ]; then
     apk add --no-progress curl wget sudo tar bash jq openssl ca-certificates
 elif [ -f /etc/os-release ]; then
     source /etc/os-release
-    if [[ "$ID" == "ubuntu" || "$ID" == "debian" || "$ID_LIKE" =~ "debian" ]]; then
+    if [[ "$ID" == "ubuntu" || "$ID" == "debian" \vert{}\vert{} "$ID_LIKE" =~ "debian" ]]; then
         OS_TYPE="debian"
         export DEBIAN_FRONTEND=noninteractive
         apt-get update -y
@@ -117,87 +138,4 @@ cat <<'EOF' > "${WEB_ROOT}/index.html"
 </html>
 EOF
 
-# --- 5. 动态构建 Caddyfile ---
-CADDY_DIR="/etc/caddy"
-mkdir -p "$CADDY_DIR"
-CADDYFILE="${CADDY_DIR}/Caddyfile"
-
-cat <<EOF > "$CADDYFILE"
-{
-    admin off
-}
-
-:${PORT}, ${DOMAIN}:${PORT} {
-    tls admin@${DOMAIN}
-    
-    forwardproxy {
-        basic_auth ${USER} ${PASS}
-        hide_ip
-        hide_via
-        probe_resistance
-    }
-    
-    root * ${WEB_ROOT}
-    file_server
-}
-EOF
-
-# --- 6. 配置后台守护服务与自启动 ---
-echo "[+] 配置系统后台守护服务..."
-
-if [ "$OS_TYPE" == "alpine" ]; then
-    cat <<'EOF' > /etc/init.d/caddy
-#!/sbin/openrc-run
-description="Caddy Web Server (NaïveProxy)"
-command="/usr/local/bin/caddy"
-command_args="run --config /etc/caddy/Caddyfile"
-pidfile="/run/caddy.pid"
-command_background="yes"
-
-depend() {
-    need net
-    after firewall
-}
-EOF
-    chmod +x /etc/init.d/caddy
-    rc-update add caddy default >/dev/null 2>&1 || true
-    rc-service caddy restart
-else
-    cat <<EOF > /etc/systemd/system/caddy.service
-[Unit]
-Description=Caddy Web Server with NaiveProxy
-After=network.target network-online.target
-Requires=network-online.target
-
-[Service]
-Type=notify
-User=root
-ExecStart=/usr/local/bin/caddy run --environ --config /etc/caddy/Caddyfile
-ExecReload=/usr/local/bin/caddy reload --config /etc/caddy/Caddyfile
-TimeoutStopSec=5s
-LimitNOFILE=1048576
-LimitNPROC=512
-PrivateTmp=true
-ProtectSystem=full
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    systemctl daemon-reload
-    systemctl enable caddy >/dev/null 2>&1
-    systemctl restart caddy
-fi
-
-# --- 7. 输出客户端配置参数 ---
-echo "================================================="
-echo " 🎉 NaïveProxy 部署成功！"
-echo "================================================="
-echo " 域名 (Domain)   : ${DOMAIN}"
-echo " 端口 (Port)     : ${PORT}"
-echo " 用户名 (Username): ${USER}"
-echo " 密码 (Password) : ${PASS}"
-echo "-------------------------------------------------"
-echo " 🔗 客户端连接 URL (支持 HTTP/2 & HTTP/3):"
-echo " naive+https://${USER}:${PASS}@${DOMAIN}:${PORT}"
-echo "================================================="
+# --- 5. 动态构建 Caddyfile
