@@ -1,20 +1,40 @@
 #!/usr/bin/env bash
 # =========================================================
-# NaïveProxy One-Click Installer for Ubuntu/Debian/Alpine
-# Support Position Arguments:
-#   $1: Deploy flag ('y' to enable, 'n' to skip)
-#   $2: Port (empty string "" for random 10000-65535, or specific port e.g., 443)
-#   $3: Domain name (e.g., "naive.yourdomain.com")
+# NaïveProxy 一键部署脚本 (支持增强型带前缀参数解析)
+# 用法示例：
+#   bash script.sh naive"y" naive"443" naive domain"naive.speedfast.dpdns.org"
+#   bash script.sh naive"y" naive domain"naive.speedfast.dpdns.org" (随机端口)
+#   bash script.sh naive"n"
 # =========================================================
 
 set -e
 
-# --- 1. 参数解析与检查 ---
-DEPLOY_FLAG="${1:-n}"
-INPUT_PORT="${2:-}"
-DOMAIN="${3:-}"
+# --- 1. 智能参数解析 ---
+DEPLOY_FLAG="n"
+INPUT_PORT=""
+DOMAIN=""
 
-# 如果标志位不为 y/Y，直接退出
+for arg in "$@"; do
+    # 匹配部署开关：naive"y", naive"Y", y, Y
+    if [[ "$arg" =~ ^naive\"[yY]\"$ ]] || [[ "$arg" =~ ^[yY]$ ]]; then
+        DEPLOY_FLAG="y"
+    # 匹配部署开关：naive"n", naive"N", n, N
+    elif [[ "$arg" =~ ^naive\"[nN]\"$ ]] || [[ "$arg" =~ ^[nN]$ ]]; then
+        DEPLOY_FLAG="n"
+    # 匹配指定端口：naive"12345" 或纯数字
+    elif [[ "$arg" =~ ^naive\"([0-9]+)\"$ ]]; then
+        INPUT_PORT="${BASH_REMATCH[1]}"
+    elif [[ "$arg" =~ ^[0-9]+$ ]]; then
+        INPUT_PORT="$arg"
+    # 匹配域名：naive domain"xxx" 或 domain"xxx" 或直接传域名
+    elif [[ "$arg" =~ domain ]]; then
+        DOMAIN=$(echo "$arg" | sed -E 's/.*domain["\x27]?([^"\x27]+)["\x27]?/\1/')
+    elif [[ "$arg" == *.* ]] && [[ "$arg" != *"/"* ]]; then
+        DOMAIN="$arg"
+    fi
+done
+
+# 如果标志位不为 y，直接退出
 if [[ "${DEPLOY_FLAG,,}" != "y" ]]; then
     echo "[!] 跳过 NaïveProxy 部署。"
     exit 0
@@ -22,20 +42,20 @@ fi
 
 # 检查域名是否为空
 if [ -z "$DOMAIN" ]; then
-    echo "[Error] 域名不能为空！参数格式: bash script.sh y [端口号|\"\"] [域名]"
+    echo "[Error] 域名不能为空！请检查传入的 domain 参数。"
     exit 1
 fi
 
-# 端口处理：空字符串则随机生成 10000-65535 端口，否则使用指定端口
+# 端口处理：若未指定端口，随机分配 10000-65535 端口
 if [ -z "$INPUT_PORT" ]; then
     PORT=$((RANDOM % 55536 + 10000))
-    echo "[+] 未指定端口，已随机分配端口: ${PORT}"
+    echo "[+] 未指定端口，已随机分配高位端口: ${PORT}"
 else
     PORT="$INPUT_PORT"
     echo "[+] 使用指定端口: ${PORT}"
 fi
 
-# 自动生成 12 位随机用户名和密码
+# 自动生成 12 位随机用户名和 16 位密码
 USER=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 12)
 PASS=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 16)
 
@@ -68,11 +88,10 @@ if [ -z "$OS_TYPE" ]; then
     exit 1
 fi
 
-# --- 3. 下载/编译安装带 forwardproxy 模块的 Caddy ---
+# --- 3. 下载集成 forwardproxy 模块的 Caddy 引擎 ---
 CADDY_BIN="/usr/local/bin/caddy"
 echo "[+] 正在获取集成 forwardproxy 模块的 Caddy 引擎..."
 
-# 从 Caddy 官方 Build API 下载包含 github.com/caddyserver/forwardproxy 插件的专版二进制文件
 ARCH=$(uname -m)
 case "$ARCH" in
     x86_64|amd64) CADDY_ARCH="amd64" ;;
@@ -81,7 +100,6 @@ case "$ARCH" in
 esac
 
 DOWNLOAD_URL="https://caddyserver.com/api/download?os=linux&arch=${CADDY_ARCH}&p=github.com%2Fcaddyserver%2Fforwardproxy"
-
 curl -sSL "$DOWNLOAD_URL" -o "$CADDY_BIN"
 chmod +x "$CADDY_BIN"
 
@@ -136,11 +154,10 @@ cat <<EOF > "$CADDYFILE"
 }
 EOF
 
-# --- 6. 配置后台服务与自启动 ---
+# --- 6. 配置后台守护服务与自启动 ---
 echo "[+] 配置系统后台守护服务..."
 
 if [ "$OS_TYPE" == "alpine" ]; then
-    # OpenRC (Alpine)
     cat <<'EOF' > /etc/init.d/caddy
 #!/sbin/openrc-run
 description="Caddy Web Server (NaïveProxy)"
@@ -158,7 +175,6 @@ EOF
     rc-update add caddy default >/dev/null 2>&1 || true
     rc-service caddy restart
 else
-    # Systemd (Ubuntu / Debian)
     cat <<EOF > /etc/systemd/system/caddy.service
 [Unit]
 Description=Caddy Web Server with NaiveProxy
@@ -194,6 +210,6 @@ echo " 端口 (Port)     : ${PORT}"
 echo " 用户名 (Username): ${USER}"
 echo " 密码 (Password) : ${PASS}"
 echo "-------------------------------------------------"
-echo " 🔗 NaïveProxy 客户端连接 URL:"
+echo " 🔗 客户端连接 URL (支持 HTTP/2 & HTTP/3):"
 echo " naive+https://${USER}:${PASS}@${DOMAIN}:${PORT}"
 echo "================================================="
