@@ -1,25 +1,18 @@
 #!/usr/bin/env bash
-# =========================================================
-# NaïveProxy 一键部署脚本 (纯净标准语法版)
-# =========================================================
-
 set -e
 
-# --- 1. 参数解析 ---
 ALL_ARGS="$*"
 
 DEPLOY_FLAG="n"
 INPUT_PORT=""
 DOMAIN=""
 
-# 匹配部署开关
 if [[ "$ALL_ARGS" =~ [yY] ]] && [[ ! "$ALL_ARGS" =~ naive\"n\" ]]; then
     DEPLOY_FLAG="y"
 elif [[ "$ALL_ARGS" =~ naive\"y\" ]]; then
     DEPLOY_FLAG="y"
 fi
 
-# 提取域名
 if [[ "$ALL_ARGS" =~ naivedomain[\"\x27]?([^[:space:]\"\x27]+)[\"\x27]? ]] || [[ "$ALL_ARGS" =~ domain[\"\x27]?([^[:space:]\"\x27]+)[\"\x27]? ]]; then
     DOMAIN="${BASH_REMATCH[1]}"
 else
@@ -31,7 +24,6 @@ else
     done
 fi
 
-# 提取端口
 for arg in "$@"; do
     if [[ "$arg" =~ ^naive\"([0-9]+)\"$ ]]; then
         INPUT_PORT="${BASH_REMATCH[1]}"
@@ -71,7 +63,6 @@ echo " 用户: ${USER}"
 echo " 密码: ${PASS}"
 echo "================================================="
 
-# --- 2. 系统环境检测与基础依赖安装 ---
 OS_TYPE=""
 if [ -f /etc/alpine-release ]; then
     OS_TYPE="alpine"
@@ -92,7 +83,6 @@ if [ -z "$OS_TYPE" ]; then
     exit 1
 fi
 
-# --- 3. 下载集成 forwardproxy 模块的 Caddy 引擎 ---
 CADDY_BIN="/usr/local/bin/caddy"
 echo "[+] 正在获取集成 forwardproxy 模块的 Caddy 引擎..."
 
@@ -103,11 +93,10 @@ case "$ARCH" in
     *) echo "[Error] 不支持的架构: $ARCH"; exit 1 ;;
 esac
 
-DOWNLOAD_URL="[https://caddyserver.com/api/download?os=linux&arch=$](https://caddyserver.com/api/download?os=linux&arch=$){CADDY_ARCH}&p=github.com%2Fcaddyserver%2Fforwardproxy"
+DOWNLOAD_URL="https://caddyserver.com/api/download?os=linux&arch=${CADDY_ARCH}&p=github.com%2Fcaddyserver%2Fforwardproxy"
 curl -sSL "$DOWNLOAD_URL" -o "$CADDY_BIN"
 chmod +x "$CADDY_BIN"
 
-# --- 4. 生成静态伪装网页 ---
 WEB_ROOT="/var/www/naive_mask"
 mkdir -p "$WEB_ROOT"
 cat <<'EOF' > "${WEB_ROOT}/index.html"
@@ -133,12 +122,11 @@ cat <<'EOF' > "${WEB_ROOT}/index.html"
 </html>
 EOF
 
-# --- 5. 动态构建 Caddyfile ---
 CADDY_DIR="/etc/caddy"
 mkdir -p "$CADDY_DIR"
 CADDYFILE="${CADDY_DIR}/Caddyfile"
 
-cat <<EOF> "$CADDYFILE"
+cat <<EOF > "$CADDYFILE"
 {
     admin off
 }
@@ -158,7 +146,6 @@ cat <<EOF> "$CADDYFILE"
 }
 EOF
 
-# --- 6. 配置后台守护服务与自启动 ---
 echo "[+] 配置系统后台守护服务..."
 
 if [ "$OS_TYPE" == "alpine" ]; then
@@ -179,7 +166,7 @@ EOF
     rc-update add caddy default >/dev/null 2>&1 || true
     rc-service caddy restart
 else
-    cat <<EOF> /etc/systemd/system/caddy.service
+    cat <<EOF > /etc/systemd/system/caddy.service
 [Unit]
 Description=Caddy Web Server with NaiveProxy
 After=network.target network-online.target
@@ -205,7 +192,6 @@ EOF
     systemctl restart caddy
 fi
 
-# --- 7. 输出客户端配置参数 ---
 echo "================================================="
 echo " 🎉 NaïveProxy 部署成功！"
 echo "================================================="
