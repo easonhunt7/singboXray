@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
 # =========================================================
-# NaïveProxy 一键部署脚本 (支持增强型带前缀参数解析)
-# 用法示例：
-#   bash script.sh naive"y" naive"443" naive domain"naive.speedfast.dpdns.org"
-#   bash script.sh naive"y" naive domain"naive.speedfast.dpdns.org" (随机端口)
-#   bash script.sh naive"n"
+# NaïveProxy 一键部署脚本 (支持带前缀增强型参数解析)
 # =========================================================
 
 set -e
@@ -15,18 +11,14 @@ INPUT_PORT=""
 DOMAIN=""
 
 for arg in "$@"; do
-    # 匹配部署开关：naive"y", naive"Y", y, Y
     if [[ "$arg" =~ ^naive\"[yY]\"$ ]] || [[ "$arg" =~ ^[yY]$ ]]; then
         DEPLOY_FLAG="y"
-    # 匹配部署开关：naive"n", naive"N", n, N
     elif [[ "$arg" =~ ^naive\"[nN]\"$ ]] || [[ "$arg" =~ ^[nN]$ ]]; then
         DEPLOY_FLAG="n"
-    # 匹配指定端口：naive"12345" 或纯数字
     elif [[ "$arg" =~ ^naive\"([0-9]+)\"$ ]]; then
         INPUT_PORT="${BASH_REMATCH[1]}"
     elif [[ "$arg" =~ ^[0-9]+$ ]]; then
         INPUT_PORT="$arg"
-    # 匹配域名：naive domain"xxx" 或 domain"xxx" 或直接传域名
     elif [[ "$arg" =~ domain ]]; then
         DOMAIN=$(echo "$arg" | sed -E 's/.*domain["\x27]?([^"\x27]+)["\x27]?/\1/')
     elif [[ "$arg" == *.* ]] && [[ "$arg" != *"/"* ]]; then
@@ -34,19 +26,16 @@ for arg in "$@"; do
     fi
 done
 
-# 如果标志位不为 y，直接退出
 if [[ "${DEPLOY_FLAG,,}" != "y" ]]; then
     echo "[!] 跳过 NaïveProxy 部署。"
     exit 0
 fi
 
-# 检查域名是否为空
 if [ -z "$DOMAIN" ]; then
     echo "[Error] 域名不能为空！请检查传入的 domain 参数。"
     exit 1
 fi
 
-# 端口处理：若未指定端口，随机分配 10000-65535 端口
 if [ -z "$INPUT_PORT" ]; then
     PORT=$((RANDOM % 55536 + 10000))
     echo "[+] 未指定端口，已随机分配高位端口: ${PORT}"
@@ -55,7 +44,6 @@ else
     echo "[+] 使用指定端口: ${PORT}"
 fi
 
-# 自动生成 12 位随机用户名和 16 位密码
 USER=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 12)
 PASS=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 16)
 
