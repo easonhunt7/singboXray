@@ -5,46 +5,47 @@ green() { echo -e "\e[1;32m$1\033[0m"; }
 yellow() { echo -e "\e[1;33m$1\033[0m"; }
 red() { echo -e "\e[1;91m$1\033[0m"; }
 
-# Cloudflare代理源
+# 安全镜像代理源（可配置多个，优先走第一个）
 GITHUB_PROXY=('https://ess.ieshare.workers.dev/')
 
 download_file() {
     local output_path="$1"
     local official_url="$2"
     
-    # 辅助校验函数：根据文件类型判断是否合法
+    # 智能文件校验：自动识别 .zip 压缩包或大体积二进制文件
     validate_file() {
         local path="$1"
         if [[ "$path" == *.zip ]]; then
             [ -s "$path" ] && head -c 2 "$path" | grep -q "PK"
         else
             local fsize=$(stat -c%s "$path" 2>/dev/null || stat -f%z "$path" 2>/dev/null || echo 0)
-            [ "$fsize" -gt 5000000 ]
+            [ "$fsize" -gt 5000000 ] # 大于 5MB 视为合法二进制
         fi
     }
 
-    # 1. 优先尝试通过 Cloudflare 镜像代理下载
-    echo "正在通过Cloudflare代理下载..."
+    # 1. 优先通过 Cloudflare 镜像加速下载（给予 15 秒连接超时，兼顾欧亚高延迟网络）
+    echo "正在通过安全镜像通道下载组件..."
     for proxy in "${GITHUB_PROXY[@]}"; do
         local proxy_url="${proxy}${official_url}"
-        if curl -sL --retry 2 --connect-timeout 10 --max-time 90 -o "$output_path" "$proxy_url"; then
+        if curl -sL --retry 2 --connect-timeout 15 --max-time 120 -o "$output_path" "$proxy_url"; then
             if validate_file "$output_path"; then
-                green "下载成功！"
+                green "通过镜像通道下载成功！"
                 return 0
             fi
         fi
+        yellow "当前镜像节点响应较慢，准备切换..."
     done
     
-    # 2. 代理下载失败或校验不通过，切换直连官方源作
-    yellow "Cloudflare代理未响应，尝试直连 Github 官方源..."
-    if curl -sL --retry 2 --connect-timeout 10 --max-time 90 -o "$output_path" "$official_url"; then
+    # 2. 镜像不通时，自动降级切换至 GitHub 官方源直连兜底（适合美线等直连较好的地区）
+    yellow "镜像通道未响应，自动切换直连 Github 官方源..."
+    if curl -sL --retry 2 --connect-timeout 15 --max-time 120 -o "$output_path" "$official_url"; then
         if validate_file "$output_path"; then
-            green "下载成功！"
+            green "直连官方源下载成功！"
             return 0
         fi
     fi
     
-    red "错误：Cloudflare代理及官方源下载均告失败！"
+    red "错误：镜像通道及官方源下载均告失败！"
     return 1
 }
 
