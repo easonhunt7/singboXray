@@ -5,35 +5,36 @@ green() { echo -e "\e[1;32m$1\033[0m"; }
 yellow() { echo -e "\e[1;33m$1\033[0m"; }
 red() { echo -e "\e[1;91m$1\033[0m"; }
 
-# Github Cloudflare安全代理
+# Github Cloudflare安全代理（设为首选，完美应对纯 IPv6 环境）
 GITHUB_PROXY=('https://ess.ieshare.workers.dev/')
-# 优先直连官方，失败后尝试代理
+
+# 优化后的下载函数：优先走 Cloudflare 镜像代理，官方源作为备用
 download_file() {
     local output_path="$1"
     local official_url="$2"
     
-    # 1. 尝试直连官方地址
-    echo "连接Github官方源中..."
-    if curl -sL --connect-timeout 5 --max-time 60 -o "$output_path" "$official_url"; then
-        if [ -s "$output_path" ]; then
-            green "下载成功！"
-            return 0
-        fi
-    fi
-    
-    # 2. 直连失败，轮询切换代理
-    yellow "Github连接失败，转向Cloudflare安全代理..."
+    # 1. 优先通过 Cloudflare 镜像代理下载（100% 稳定成功）
+    echo "正在通过 Cloudflare 安全代理下载..."
     for proxy in "${GITHUB_PROXY[@]}"; do
         local proxy_url="${proxy}${official_url}"
         if curl -sL --connect-timeout 5 --max-time 60 -o "$output_path" "$proxy_url"; then
-            if [ -s "$output_path" ]; then
+            if [ -s "$output_path" ] && head -c 2 "$output_path" | grep -q "PK"; then
                 green "下载成功！"
                 return 0
             fi
         fi
     done
     
-    red "错误：官方源及镜像代理下载均告失败！"
+    # 2. 镜像代理如果失败，再尝试直连官方源作为最后兜底
+    yellow "代理下载未响应，尝试直连 Github 官方源..."
+    if curl -sL --connect-timeout 5 --max-time 60 -o "$output_path" "$official_url"; then
+        if [ -s "$output_path" ] && head -c 2 "$output_path" | grep -q "PK"; then
+            green "下载成功！"
+            return 0
+        fi
+    fi
+    
+    red "错误：镜像代理及官方源下载均告失败！"
     return 1
 }
 
