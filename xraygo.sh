@@ -12,18 +12,25 @@ download_file() {
     local output_path="$1"
     local official_url="$2"
     
-    echo "正在通过安全镜像通道下载核心组件..."
+    echo "正在通过安全镜像通道下载组件..."
     for proxy in "${GITHUB_PROXY[@]}"; do
         local proxy_url="${proxy}${official_url}"
-        # 增加最大重试次数 --retry 3 和更宽容的超时时间，适应纯 IPv6 抖动
         if curl -sL --retry 3 --connect-timeout 15 --max-time 120 -o "$output_path" "$proxy_url"; then
-            # 严格校验：文件必须存在、有体积、且前两个字节必须是 Zip 的特征码 "PK"
-            if [ -s "$output_path" ] && head -c 2 "$output_path" | grep -q "PK"; then
-                green "下载并校验成功！"
-                return 0
+            # 智能校验：如果是 zip 后缀，检查 Zip 文件头；如果是二进制文件，检查文件大小大于 5MB
+            if [[ "$output_path" == *.zip ]]; then
+                if [ -s "$output_path" ] && head -c 2 "$output_path" | grep -q "PK"; then
+                    green "ZIP 组件下载并校验成功！"
+                    return 0
+                fi
             else
-                yellow "下载的文件内容异常（非有效压缩包），正在重试..."
+                # cloudflared 等二进制文件，校验体积大于 5MB 且存在
+                local file_size=$(stat -c%s "$output_path" 2>/dev/null || stat -f%z "$output_path" 2>/dev/null || echo 0)
+                if [ "$s" != "0" ] && [ "$file_size" -gt 5000000 ]; then
+                    green "二进制组件下载并校验成功！"
+                    return 0
+                fi
             fi
+            yellow "下载的文件内容校验未通过，正在重试..."
         fi
     done
     
