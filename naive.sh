@@ -115,7 +115,7 @@ cat > "${sing_box_dir}/config.json" <<EOF
   "outbounds": [
     {
       "type": "direct",
-      "outbound": "direct"
+       "tag": "direct"
     }
   ]
 }
