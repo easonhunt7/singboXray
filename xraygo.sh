@@ -5,47 +5,46 @@ green() { echo -e "\e[1;32m$1\033[0m"; }
 yellow() { echo -e "\e[1;33m$1\033[0m"; }
 red() { echo -e "\e[1;91m$1\033[0m"; }
 
-# 安全镜像代理源（可配置多个，优先走第一个）
+# Cloudflare安全代理源（易分享 自建）
 GITHUB_PROXY=('https://ess.ieshare.workers.dev/')
 
 download_file() {
     local output_path="$1"
     local official_url="$2"
     
-    # 智能文件校验：自动识别 .zip 压缩包或大体积二进制文件
+    # 智能文件校验
     validate_file() {
         local path="$1"
         if [[ "$path" == *.zip ]]; then
             [ -s "$path" ] && head -c 2 "$path" | grep -q "PK"
         else
             local fsize=$(stat -c%s "$path" 2>/dev/null || stat -f%z "$path" 2>/dev/null || echo 0)
-            [ "$fsize" -gt 5000000 ] # 大于 5MB 视为合法二进制
+            [ "$fsize" -gt 5000000 ]
         fi
     }
 
-    # 1. 优先通过 Cloudflare 镜像加速下载（给予 15 秒连接超时，兼顾欧亚高延迟网络）
-    echo "正在通过安全镜像通道下载组件..."
+    # 1. 镜像下载
+    echo "正在通过Cloudflare安全代理下载..."
     for proxy in "${GITHUB_PROXY[@]}"; do
         local proxy_url="${proxy}${official_url}"
-        if curl -sL --retry 2 --connect-timeout 15 --max-time 120 -o "$output_path" "$proxy_url"; then
+        if curl -sL --connect-timeout 5 --max-time 30 -o "$output_path" "$proxy_url"; then
             if validate_file "$output_path"; then
-                green "通过镜像通道下载成功！"
+                green "下载成功！"
                 return 0
             fi
         fi
-        yellow "当前镜像节点响应较慢，准备切换..."
     done
     
-    # 2. 镜像不通时，自动降级切换至 GitHub 官方源直连兜底（适合美线等直连较好的地区）
-    yellow "镜像通道未响应，自动切换直连 Github 官方源..."
-    if curl -sL --retry 2 --connect-timeout 15 --max-time 120 -o "$output_path" "$official_url"; then
+    # 2. 镜像若卡住或失败，瞬间切换官方源直连（同样 5 秒超时）
+    yellow "Cloudflare 响应超时，切换官方源..."
+    if curl -sL --connect-timeout 5 --max-time 30 -o "$output_path" "$official_url"; then
         if validate_file "$output_path"; then
-            green "直连官方源下载成功！"
+            green "下载成功！"
             return 0
         fi
     fi
     
-    red "错误：镜像通道及官方源下载均告失败！"
+    red "错误：所有下载均超时或失败，请稍后再试！"
     return 1
 }
 
