@@ -1,87 +1,121 @@
 #!/bin/bash
 
-# ==========================================
-# NaiveProxy 独立自签证书版一键部署脚本
-# 兼容: Ubuntu / Debian / Alpine
-# ==========================================
+export LANG=en_US.UTF-8
+green() { echo -e "\e[1;32m$1\033[0m"; }
+yellow() { echo -e "\e[1;33m$1\033[0m"; }
+red() { echo -e "\e[1;91m$1\033[0m"; }
 
-# 变量区（可按需修改或通过交互输入）
-naive="y"        # 输入 "y" 表示部署，输入 "n" 表示放弃部署
-port_input=""    # 留空或直接回车则自动随机生成端口，输入具体数字则使用指定端口
+# Github Cloudflare安全代理
+GITHUB_PROXY=('https://ess.ieshare.workers.dev/')
+download_file() {
+    local output_path="$1"
+    local official_url="$2"
+    
+    echo "连接Github官方源中..."
+    if curl -sL --connect-timeout 5 --max-time 60 -o "$output_path" "$official_url"; then
+        if [ -s "$output_path" ]; then
+            green "下载成功！"
+            return 0
+        fi
+    fi
+    
+    yellow "Github连接失败，转向Cloudflare安全代理..."
+    for proxy in "${GITHUB_PROXY[@]}"; do
+        local proxy_url="${proxy}${official_url}"
+        if curl -sL --connect-timeout 5 --max-time 60 -o "$output_path" "$proxy_url"; then
+            if [ -s "$output_path" ]; then
+                green "下载成功！"
+                return 0
+            fi
+        fi
+    done
+    
+    red "错误：官方源及镜像代理下载均告失败！"
+    return 1
+}
 
-# 检查执行权限
-if [ "$EUID" -ne 0 ]; then
-  echo "[-] 请使用 root 权限运行此脚本 (sudo -i)"
-  exit 1
+# 仿照你习惯的变量解析逻辑
+ARG_NAIVE=""
+
+for arg in "$@"; do
+    clean_arg="${arg//\"/}"
+    clean_arg="${clean_arg//\'/}"
+    
+    if [[ "$clean_arg" =~ ^[nN][aA][iI][vV][eE](.*)$ ]]; then
+        ARG_NAIVE="${BASH_REMATCH[1]}"
+    elif [[ "$clean_arg" =~ ^[0-9]+$ ]] || [[ "$clean_arg" =~ ^[yYnN]$ ]]; then
+        if [ -z "$ARG_NAIVE" ]; then
+            ARG_NAIVE="$clean_arg"
+        fi
+    fi
+done
+
+parse_port() {
+    local input="$1"
+    [ -z "$input" ] && echo "" && return
+    if [ "$input" = "n" ] || [ "$input" = "N" ]; then
+        echo ""
+    elif [ "$input" = "y" ] || [ "$input" = "Y" ]; then
+        shuf -i 10000-60000 -n 1
+    elif [[ "$input" =~ ^[0-9]+$ ]]; then
+        echo "$input"
+    else
+        echo ""
+    fi
+}
+
+naive_port=$(parse_port "$ARG_NAIVE")
+
+if [ -z "$naive_port" ]; then
+    yellow "提示：未检测到有效变量（NaïveProxy 未启用或传入了 n）。"
+    exit 0
 fi
 
-# 1. 交互逻辑判断
-if [ "$naive" != "y" ]; then
-  echo "[*] 已选择放弃部署 NaïveProxy 协议，脚本安全退出。"
-  exit 0
-fi
+naive_dir="/etc/naive"
+sing_box_dir="/etc/sing-box"
+[[ $EUID -ne 0 ]] && red "请在root用户下运行" && exit 1
 
-echo "[+] 开始部署 NaïveProxy (自签证书模式)..."
+# 1. 初始化
+systemctl stop sing-box 2>/dev/null || rc-service sing-box stop 2>/dev/null || true
 
-# 2. 系统环境检测与依赖安装
-if [ -f /etc/alpine-release ]; then
-    apk update && apk add --no-cache curl openssl jq
-elif [ -f /etc/debian_version ]; then
-    apt-get update && apt-get install -y curl openssl jq
+green "正在初始化 NaïveProxy 环境..."
+if command -v apt >/dev/null 2>&1; then
+    apt update -y >/dev/null 2>&1
+    apt install -y curl wget unzip openssl iptables coreutils jq >/dev/null 2>&1
+elif command -v yum >/dev/null 2>&1; then
+    yum install -y curl wget unzip openssl iptables coreutils jq >/dev/null 2>&1
+elif command -v apk >/dev/null 2>&1; then
+    apk update >/dev/null 2>&1
+    apk add --no-cache bash curl wget unzip openssl iptables coreutils jq >/dev/null 2>&1
 else
-    echo "[-] 不支持的操作系统发行版"
+    red "未识别的系统包管理器，无法自动安装依赖！"
     exit 1
 fi
 
-# 3. 确定服务端口
-if [ -z "$port_input" ]; then
-    # 随机生成一个 10000-60000 之间的端口
-    port_nv=$((RANDOM % 50000 + 10000))
-    echo "[*] 未指定端口，已自动随机分配端口: $port_nv"
-else
-    port_nv="$port_input"
-    echo "[*] 使用指定端口: $port_nv"
-fi
+mkdir -p "${sing_box_dir}" "${naive_dir}"
 
-# 4. 生成自签证书与固定目录
-CERT_DIR="/etc/naive"
-mkdir -p "$CERT_DIR"
+# 2. 下载 Sing-box 内核
+echo "正在下载 Sing-box 内核..."
+ARCH_SB=$(uname -m)
+[ "$ARCH_SB" = "x86_64" ] && SB_ARCH="amd64"
+[ "$ARCH_SB" = "aarch64" ] && SB_ARCH="arm64"
+SB_VERSION=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
+download_file "${sing_box_dir}/sing-box.tar.gz" "https://github.com/SagerNet/sing-box/releases/download/v${SB_VERSION}/sing-box-${SB_VERSION}-linux-${SB_ARCH}.tar.gz" || exit 1
+tar -xz -C "${sing_box_dir}" -f "${sing_box_dir}/sing-box.tar.gz"
+mv "${sing_box_dir}/sing-box-${SB_VERSION}-linux-${SB_ARCH}/sing-box" /usr/local/bin/
+chmod +x /usr/local/bin/sing-box
+rm -rf "${sing_box_dir}/sing-box.tar.gz" "${sing_box_dir}/sing-box-${SB_VERSION}-linux-${SB_ARCH}"
 
-# 生成 10 年期的自签证书（SNI 伪装成 bing.com 或 cloudflare.com 均可）
-openssl req -x509 -nodes -days 3650 -newkey rsa:2050 \
-    -keyout "$CERT_DIR/private.key" \
-    -out "$CERT_DIR/cert.crt" \
-    -subj "/CN=cloudflare.com" >/dev/null 2>&1
+# 3. 生成 UUID 与自签证书
+echo "生成凭证与自签证书..."
+uuid=$(cat /proc/sys/kernel/random/uuid)
+echo "$uuid" > "${naive_dir}/uuid"
 
-echo "[+] 自签证书已成功生成至: $CERT_DIR"
+openssl ecparam -genkey -name prime256v1 -out "${naive_dir}/private.key"
+openssl req -new -x509 -days 3650 -key "${naive_dir}/private.key" -out "${naive_dir}/cert.crt" -subj "/CN=bing.com"
 
-# 5. 生成固定的 UUID 凭证作为账号密码
-if [ ! -f "$CERT_DIR/uuid" ]; then
-    cat /proc/sys/kernel/random/uuid > "$CERT_DIR/uuid"
-fi
-uuid=$(cat "$CERT_DIR/uuid")
-
-# 6. 下载并安装 Sing-box 内核（如果尚未安装）
-if ! command -v sing-box &> /dev/null; then
-    echo "[+] 正在自动下载并安装 Sing-box 正式版内核..."
-    bash <(curl -fsSL https://sing-box.app/deb-install.sh) || {
-        # 兜底：若官方脚本在部分纯IPv6环境失败，手动获取最新二进制
-        ARCH=$(uname -m)
-        [ "$ARCH" = "x86_64" ] && ARCH="amd64"
-        [ "$ARCH" = "aarch64" ] && ARCH="arm64"
-        VERSION=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
-        wget -O /tmp/sing-box.tar.gz "https://github.com/SagerNet/sing-box/releases/download/v${VERSION}/sing-box-${VERSION}-linux-${ARCH}.tar.gz"
-        tar -xz -C /tmp -f /tmp/sing-box.tar.gz
-        mv /tmp/sing-box-${VERSION}-linux-${ARCH}/sing-box /usr/local/bin/
-        chmod +x /usr/local/bin/sing-box
-    }
-fi
-
-# 7. 写入 Sing-box 独立配置文件
-CONFIG_DIR="/etc/sing-box"
-mkdir -p "$CONFIG_DIR"
-
-cat > "$CONFIG_DIR/config.json" <<EOF
+# 4. 写入 Sing-box 独立配置
+cat > "${sing_box_dir}/config.json" <<EOF
 {
   "log": {
     "level": "info",
@@ -92,7 +126,7 @@ cat > "$CONFIG_DIR/config.json" <<EOF
       "type": "naive",
       "tag": "naive-in",
       "listen": "::",
-      "listen_port": ${port_nv},
+      "listen_port": ${naive_port},
       "users": [
         {
           "username": "${uuid}",
@@ -101,8 +135,8 @@ cat > "$CONFIG_DIR/config.json" <<EOF
       ],
       "tls": {
         "enabled": true,
-        "certificate_path": "$CERT_DIR/cert.crt",
-        "key_path": "$CERT_DIR/private.key"
+        "certificate_path": "${naive_dir}/cert.crt",
+        "key_path": "${naive_dir}/private.key"
       }
     }
   ],
@@ -115,18 +149,18 @@ cat > "$CONFIG_DIR/config.json" <<EOF
 }
 EOF
 
-# 8. 创建并启动 Systemd 服务
-cat > /etc/systemd/system/sing-box.service <<EOF
+# 5. 配置并启动 Systemd 服务
+green "正在启动 Sing-box 服务..."
+cat > /etc/systemd/system/sing-box.service << EOF
 [Unit]
-Description=Sing-Box Service
-Documentation=https://sing-box.sagernet.org
+Description=Sing-Box Naive Service
 After=network.target nss-lookup.target
 
 [Service]
 User=root
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
-ExecStart=/usr/local/bin/sing-box run -c /etc/sing-box/config.json
+ExecStart=/usr/local/bin/sing-box run -c ${sing_box_dir}/config.json
 Restart=on-failure
 RestartSec=10
 LimitNOFILE=infinity
@@ -134,26 +168,31 @@ LimitNOFILE=infinity
 [Install]
 WantedBy=multi-user.target
 EOF
-
 systemctl daemon-reload
-systemctl enable sing-box
-systemctl restart sing-box
+systemctl enable --now sing-box
 
-# 9. 获取本机 IPv6 地址用于拼接分享链接
-LOCAL_IP=$(ip -6 addr show scope global | grep -v "inet6 ::1" | awk '{print $2}' | cut -d/ -f1 | head -n 1)
-[ -z "$LOCAL_IP" ] && LOCAL_IP="[你的服务器IPv6]"
+# 6. 放行防火墙端口
+if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
+    ufw allow $naive_port/tcp >/dev/null 2>&1
+    ufw allow $naive_port/udp >/dev/null 2>&1
+fi
+if command -v iptables >/dev/null 2>&1; then
+    iptables -A INPUT -p tcp --dport $naive_port -j ACCEPT 2>/dev/null
+    iptables -A INPUT -p udp --dport $naive_port -j ACCEPT 2>/dev/null
+fi
 
-# 10. 输出结果与客户端链接
-echo "=================================================="
-echo "🎉 NaïveProxy 自签证书版部署成功！"
-echo "=================================================="
-echo "监听地址: [::]"
-echo "监听端口: $port_nv"
-echo "认证账号: $uuid"
-echo "认证密码: $uuid"
-echo "证书路径: $CERT_DIR/cert.crt"
-echo "--------------------------------------------------"
-echo "👉 客户端分享链接 (自签模式必须开启 insecure=1):"
-echo "naive+https://$uuid:$uuid@[$LOCAL_IP]:$port_nv?security=tls&sni=cloudflare.com&insecure=1&allowInsecure=1#naive-h2-self"
-echo "naive+quic://$uuid:$uuid@[$LOCAL_IP]:$port_nv?congestion_control=bbr&security=tls&sni=cloudflare.com&insecure=1&allowInsecure=1#naive-h3-self"
-echo "=================================================="
+# 7. 获取 IP 并输出链接
+raw_ip=$(curl -4 -sm 2 ip.sb || curl -6 -sm 2 ip.sb)
+if [[ "$raw_ip" =~ : ]]; then
+    server_ip="[$raw_ip]"
+else
+    server_ip="$raw_ip"
+fi
+
+clear
+green "=========================================================================================="
+green " NaïveProxy 单节点独立测试成功 "
+green "=========================================================================================="
+green "naive+https://${uuid}:${uuid}@${server_ip}:${naive_port}?security=tls&sni=bing.com&insecure=1&allowInsecure=1#Naive-H2"
+green "naive+quic://${uuid}:${uuid}@${server_ip}:${naive_port}?congestion_control=bbr&security=tls&sni=bing.com&insecure=1&allowInsecure=1#Naive-H3"
+green "=========================================================================================="
