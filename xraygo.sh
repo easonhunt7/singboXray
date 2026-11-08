@@ -5,37 +5,40 @@ green() { echo -e "\e[1;32m$1\033[0m"; }
 yellow() { echo -e "\e[1;33m$1\033[0m"; }
 red() { echo -e "\e[1;91m$1\033[0m"; }
 
-# Github Cloudflare安全代理
+# Github Cloudflare安全代理（设为首选）
 GITHUB_PROXY=('https://ess.ieshare.workers.dev/')
-# 优先直连官方，失败后尝试代理
+
+# 优先通过 Cloudflare 代理下载，失败后降级回官方源，并加入文件头校验
 download_file() {
     local output_path="$1"
     local official_url="$2"
     
-    # 1. 尝试直连官方地址
-    echo "连接Github官方源中..."
-    if curl -sL --connect-timeout 5 --max-time 60 -o "$output_path" "$official_url"; then
-        if [ -s "$output_path" ]; then
-            green "下载成功！"
-            return 0
-        fi
-    fi
-    
-    # 2. 直连失败，轮询切换代理
-    yellow "Github连接失败，转向Cloudflare安全代理..."
+    # 1. 优先尝试通过 Cloudflare 安全代理下载
+    echo "正在通过 Cloudflare 安全代理下载..."
     for proxy in "${GITHUB_PROXY[@]}"; do
         local proxy_url="${proxy}${official_url}"
-        if curl -sL --connect-timeout 5 --max-time 60 -o "$output_path" "$proxy_url"; then
-            if [ -s "$output_path" ]; then
+        if curl -sL --connect-timeout 10 --max-time 120 -o "$output_path" "$proxy_url"; then
+            # 严格校验：文件必须存在、有体积、且前两个字节必须是 Zip 的特征码 "PK"
+            if [ -s "$output_path" ] && head -c 2 "$output_path" | grep -q "PK"; then
                 green "下载成功！"
                 return 0
             fi
         fi
     done
     
-    red "错误：官方源及镜像代理下载均告失败！"
+    # 2. 代理下载失败或文件无效，降级尝试直连官方源作为最后兜底
+    yellow "代理下载未响应，尝试直连 Github 官方源..."
+    if curl -sL --connect-timeout 5 --max-time 60 -o "$output_path" "$official_url"; then
+        if [ -s "$output_path" ] && head -c 2 "$output_path" | grep -q "PK"; then
+            green "下载成功！"
+            return 0
+        fi
+    fi
+    
+    red "错误：镜像代理及官方源下载均告失败！"
     return 1
 }
+
 ARG_H3=""
 ARG_REALITY=""
 ARG_ARGO_PROTOCOL="quic"
