@@ -5,36 +5,46 @@ green() { echo -e "\e[1;32m$1\033[0m"; }
 yellow() { echo -e "\e[1;33m$1\033[0m"; }
 red() { echo -e "\e[1;91m$1\033[0m"; }
 
-# 固定的安全镜像代理源
+# Cloudflare代理源
 GITHUB_PROXY=('https://ess.ieshare.workers.dev/')
 
 download_file() {
     local output_path="$1"
     local official_url="$2"
     
-    echo "正在通过安全镜像通道下载组件..."
+    # 辅助校验函数：根据文件类型判断是否合法
+    validate_file() {
+        local path="$1"
+        if [[ "$path" == *.zip ]]; then
+            [ -s "$path" ] && head -c 2 "$path" | grep -q "PK"
+        else
+            local fsize=$(stat -c%s "$path" 2>/dev/null || stat -f%z "$path" 2>/dev/null || echo 0)
+            [ "$fsize" -gt 5000000 ]
+        fi
+    }
+
+    # 1. 优先尝试通过 Cloudflare 镜像代理下载
+    echo "正在通过Cloudflare代理下载..."
     for proxy in "${GITHUB_PROXY[@]}"; do
         local proxy_url="${proxy}${official_url}"
-        if curl -sL --retry 3 --connect-timeout 15 --max-time 120 -o "$output_path" "$proxy_url"; then
-            # 智能校验：如果是 zip 后缀，检查 Zip 文件头；如果是二进制文件，检查文件大小大于 5MB
-            if [[ "$output_path" == *.zip ]]; then
-                if [ -s "$output_path" ] && head -c 2 "$output_path" | grep -q "PK"; then
-                    green "ZIP 组件下载并校验成功！"
-                    return 0
-                fi
-            else
-                # cloudflared 等二进制文件，校验体积大于 5MB 且存在
-                local file_size=$(stat -c%s "$output_path" 2>/dev/null || stat -f%z "$output_path" 2>/dev/null || echo 0)
-                if [ "$s" != "0" ] && [ "$file_size" -gt 5000000 ]; then
-                    green "二进制组件下载并校验成功！"
-                    return 0
-                fi
+        if curl -sL --retry 2 --connect-timeout 10 --max-time 90 -o "$output_path" "$proxy_url"; then
+            if validate_file "$output_path"; then
+                green "下载成功！"
+                return 0
             fi
-            yellow "下载的文件内容校验未通过，正在重试..."
         fi
     done
     
-    red "错误：安全镜像通道下载失败，请检查 VPS 的网络出口。"
+    # 2. 代理下载失败或校验不通过，切换直连官方源作
+    yellow "Cloudflare代理未响应，尝试直连 Github 官方源..."
+    if curl -sL --retry 2 --connect-timeout 10 --max-time 90 -o "$output_path" "$official_url"; then
+        if validate_file "$output_path"; then
+            green "下载成功！"
+            return 0
+        fi
+    fi
+    
+    red "错误：Cloudflare代理及官方源下载均告失败！"
     return 1
 }
 
