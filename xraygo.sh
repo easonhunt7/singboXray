@@ -29,6 +29,7 @@ download_file() {
         local proxy_url="${proxy}${official_url}"
         if curl -sL --connect-timeout 10 --max-time 60 -o "$output_path" "$proxy_url"; then
             if validate_file "$output_path"; then
+            green "下载成功！"
                 return 0
             fi
         fi
@@ -38,6 +39,7 @@ download_file() {
     echo "Cloudflare 响应超时，切换回官方源..."
     if curl -sL --connect-timeout 10 --max-time 60 -o "$output_path" "$official_url"; then
         if validate_file "$output_path"; then
+        green "下载成功！"
             return 0
         fi
     fi
