@@ -34,7 +34,7 @@ download_file() {
     return 1
 }
 
-# 仿照你习惯的变量解析逻辑
+# 变量解析逻辑：兼容 naive="y" 或直接传端口号
 ARG_NAIVE=""
 
 for arg in "$@"; do
@@ -94,17 +94,21 @@ fi
 
 mkdir -p "${sing_box_dir}" "${naive_dir}"
 
-# 2. 下载 Sing-box 内核
+# 2. 下载 Sing-box 内核（确保使用官方最新二进制解压到 /usr/local/bin/）
 echo "正在下载 Sing-box 内核..."
 ARCH_SB=$(uname -m)
 [ "$ARCH_SB" = "x86_64" ] && SB_ARCH="amd64"
 [ "$ARCH_SB" = "aarch64" ] && SB_ARCH="arm64"
-SB_VERSION=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
-download_file "${sing_box_dir}/sing-box.tar.gz" "https://github.com/SagerNet/sing-box/releases/download/v${SB_VERSION}/sing-box-${SB_VERSION}-linux-${SB_ARCH}.tar.gz" || exit 1
-tar -xz -C "${sing_box_dir}" -f "${sing_box_dir}/sing-box.tar.gz"
-mv "${sing_box_dir}/sing-box-${SB_VERSION}-linux-${SB_ARCH}/sing-box" /usr/local/bin/
+[ -z "$SB_ARCH" ] && SB_ARCH="amd64"
+
+VERSION="1.11.0"
+download_file "/tmp/sing-box.tar.gz" "https://github.com/SagerNet/sing-box/releases/download/v${VERSION}/sing-box-${VERSION}-linux-${SB_ARCH}.tar.gz" || \
+download_file "/tmp/sing-box.tar.gz" "https://github.com/SagerNet/sing-box/releases/latest/download/sing-box-linux-${SB_ARCH}.tar.gz" || exit 1
+
+tar -xz -C /tmp -f /tmp/sing-box.tar.gz
+find /tmp -type f -name "sing-box" -exec cp -f {} /usr/local/bin/ \;
 chmod +x /usr/local/bin/sing-box
-rm -rf "${sing_box_dir}/sing-box.tar.gz" "${sing_box_dir}/sing-box-${SB_VERSION}-linux-${SB_ARCH}"
+rm -rf /tmp/sing-box.tar.gz
 
 # 3. 生成 UUID 与自签证书
 echo "生成凭证与自签证书..."
@@ -112,9 +116,12 @@ uuid=$(cat /proc/sys/kernel/random/uuid)
 echo "$uuid" > "${naive_dir}/uuid"
 
 openssl ecparam -genkey -name prime256v1 -out "${naive_dir}/private.key"
-openssl req -new -x509 -days 3650 -key "${naive_dir}/private.key" -out "${naive_dir}/cert.crt" -subj "/CN=bing.com"
+openssl req -new -x509 -days 3650 -key "${naive_dir}/private.key" -out "${naive_dir}/cert.crt" -subj "/CN=bing.com" >/dev/null 2>&1
 
-# 4. 写入 Sing-box 独立配置
+# 获取自签证书的 SHA256 指纹（供新版本客户端需要固定指纹时参考）
+cert_sha256=$(openssl x509 -noout -fingerprint -sha256 -in "${naive_dir}/cert.crt" | cut -d'=' -f2 | tr -d ':')
+
+# 4. 写入 Sing-box 独立配置 (监听双栈 ::)
 cat > "${sing_box_dir}/config.json" <<EOF
 {
   "log": {
@@ -168,10 +175,11 @@ LimitNOFILE=infinity
 [Install]
 WantedBy=multi-user.target
 EOF
+
 systemctl daemon-reload
 systemctl enable --now sing-box
 
-# 6. 放行防火墙端口
+# 6. 放行防火墙端口 (同时兼容 iptables 与纯 IPv6 环境的 ip6tables)
 if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
     ufw allow $naive_port/tcp >/dev/null 2>&1
     ufw allow $naive_port/udp >/dev/null 2>&1
@@ -180,9 +188,14 @@ if command -v iptables >/dev/null 2>&1; then
     iptables -A INPUT -p tcp --dport $naive_port -j ACCEPT 2>/dev/null
     iptables -A INPUT -p udp --dport $naive_port -j ACCEPT 2>/dev/null
 fi
+if command -v ip6tables >/dev/null 2>&1; then
+    ip6tables -A INPUT -p tcp --dport $naive_port -j ACCEPT 2>/dev/null
+    ip6tables -A INPUT -p udp --dport $naive_port -j ACCEPT 2>/dev/null
+fi
 
-# 7. 获取 IP 并输出链接
-raw_ip=$(curl -4 -sm 2 ip.sb || curl -6 -sm 2 ip.sb)
+# 7. 获取服务器 IPv6/双栈地址并输出链接
+raw_ip=$(ip -6 addr show scope global | grep -v "inet6 ::1" | awk '{print $2}' | cut -d/ -f1 | head -n 1)
+[ -z "$raw_ip" ] && raw_ip=$(curl -6 -sm 2 ip.sb)
 if [[ "$raw_ip" =~ : ]]; then
     server_ip="[$raw_ip]"
 else
@@ -191,8 +204,13 @@ fi
 
 clear
 green "=========================================================================================="
-green " NaïveProxy 单节点独立测试成功 "
+green " NaïveProxy 自签证书版部署成功！"
 green "=========================================================================================="
+green "证书 SHA256 指纹 (若新客户端提示校验可填): ${cert_sha256}"
+green "------------------------------------------------------------------------------------------"
+green "👉 H2 链接 (推荐在纯IPv6环境首选测试):"
 green "naive+https://${uuid}:${uuid}@${server_ip}:${naive_port}?security=tls&sni=bing.com&insecure=1&allowInsecure=1#Naive-H2"
+green "------------------------------------------------------------------------------------------"
+green "👉 H3 链接 (QUIC):"
 green "naive+quic://${uuid}:${uuid}@${server_ip}:${naive_port}?congestion_control=bbr&security=tls&sni=bing.com&insecure=1&allowInsecure=1#Naive-H3"
 green "=========================================================================================="
