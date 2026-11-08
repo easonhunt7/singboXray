@@ -17,7 +17,7 @@ download_file() {
     echo "正在通过 Cloudflare 安全代理下载..."
     for proxy in "${GITHUB_PROXY[@]}"; do
         local proxy_url="${proxy}${official_url}"
-        if curl -sL --connect-timeout 5 --max-time 60 -o "$output_path" "$proxy_url"; then
+        curl -sL --connect-timeout 15 --max-time 120 -o "$output_path" "$proxy_url"; then
             if [ -s "$output_path" ] && head -c 2 "$output_path" | grep -q "PK"; then
                 green "下载成功！"
                 return 0
