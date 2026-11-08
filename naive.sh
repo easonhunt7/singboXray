@@ -1,189 +1,159 @@
-#!/usr/bin/env bash
-set -e
+#!/bin/bash
 
-# 接收固定参数：$1=开关(y/n), $2=端口(留空或数字), $3=域名
-DEPLOY_FLAG="${1:-n}"
-INPUT_PORT="$2"
-DOMAIN="$3"
+# ==========================================
+# NaiveProxy 独立自签证书版一键部署脚本
+# 兼容: Ubuntu / Debian / Alpine
+# ==========================================
 
-# 如果开关不是 y，则直接退出
-if [[ "${DEPLOY_FLAG,,}" != "y" ]]; then
-    echo "[!] 跳过 NaïveProxy 部署。"
-    exit 0
+# 变量区（可按需修改或通过交互输入）
+naive="y"        # 输入 "y" 表示部署，输入 "n" 表示放弃部署
+port_input=""    # 留空或直接回车则自动随机生成端口，输入具体数字则使用指定端口
+
+# 检查执行权限
+if [ "$EUID" -ne 0 ]; then
+  echo "[-] 请使用 root 权限运行此脚本 (sudo -i)"
+  exit 1
 fi
 
-# 如果第二个参数传的是域名而不是端口（即没填端口、直接填了域名）
-if [[ "$INPUT_PORT" == *.* ]] && [ -z "$DOMAIN" ]; then
-    DOMAIN="$INPUT_PORT"
-    INPUT_PORT=""
+# 1. 交互逻辑判断
+if [ "$naive" != "y" ]; then
+  echo "[*] 已选择放弃部署 NaïveProxy 协议，脚本安全退出。"
+  exit 0
 fi
 
-if [ -z "$DOMAIN" ]; then
-    echo "[Error] 域名不能为空！请正确传入域名参数。"
-    exit 1
-fi
+echo "[+] 开始部署 NaïveProxy (自签证书模式)..."
 
-# 端口处理：未指定或为空则随机分配高位端口
-if [ -z "$INPUT_PORT" ] || ! [[ "$INPUT_PORT" =~ ^[0-9]+$ ]]; then
-    PORT=$((RANDOM % 55536 + 10000))
-    echo "[+] 未指定有效端口，已随机分配高位端口: ${PORT}"
-else
-    PORT="$INPUT_PORT"
-    echo "[+] 使用指定端口: ${PORT}"
-fi
-
-USER=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 12)
-PASS=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 16)
-
-echo "================================================="
-echo " 开始部署 NaïveProxy"
-echo " 域名: ${DOMAIN}"
-echo " 端口: ${PORT}"
-echo " 用户: ${USER}"
-echo " 密码: ${PASS}"
-echo "================================================="
-
-# 系统环境检测
-OS_TYPE=""
+# 2. 系统环境检测与依赖安装
 if [ -f /etc/alpine-release ]; then
-    OS_TYPE="alpine"
-    apk update
-    apk add --no-progress curl wget sudo tar bash jq openssl ca-certificates
-elif [ -f /etc/os-release ]; then
-    source /etc/os-release
-    if [[ "$ID" == "ubuntu" || "$ID" == "debian" || "$ID_LIKE" =~ "debian" ]]; then
-        OS_TYPE="debian"
-        export DEBIAN_FRONTEND=noninteractive
-        apt-get update -y
-        apt-get install -y curl wget sudo tar bash jq openssl ca-certificates
-    fi
-fi
-
-if [ -z "$OS_TYPE" ]; then
-    echo "[Error] 暂不支持该系统架构，仅支持 Ubuntu / Debian / Alpine。"
+    apk update && apk add --no-cache curl openssl jq
+elif [ -f /etc/debian_version ]; then
+    apt-get update && apt-get install -y curl openssl jq
+else
+    echo "[-] 不支持的操作系统发行版"
     exit 1
 fi
 
-# 下载集成 forwardproxy 模块的 Caddy 引擎
-CADDY_BIN="/usr/local/bin/caddy"
-echo "[+] 正在获取集成 forwardproxy 模块的 Caddy 引擎..."
-
-ARCH=$(uname -m)
-case "$ARCH" in
-    x86_64|amd64) CADDY_ARCH="amd64" ;;
-    aarch64|arm64) CADDY_ARCH="arm64" ;;
-    *) echo "[Error] 不支持的架构: $ARCH"; exit 1 ;;
-esac
-
-DOWNLOAD_URL="https://caddyserver.com/api/download?os=linux&arch=${CADDY_ARCH}&p=github.com%2Fcaddyserver%2Fforwardproxy"
-curl -sSL "$DOWNLOAD_URL" -o "$CADDY_BIN"
-chmod +x "$CADDY_BIN"
-
-# 生成静态伪装网页
-WEB_ROOT="/var/www/naive_mask"
-mkdir -p "$WEB_ROOT"
-cat <<'EOF' > "${WEB_ROOT}/index.html"
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Notice</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f4f6f8; color: #333; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .card { background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); text-align: center; max-width: 400px; }
-        h1 { font-size: 20px; font-weight: 600; margin-bottom: 12px; color: #111; }
-        p { font-size: 14px; color: #666; line-height: 1.5; }
-    </style>
-</head>
-<body>
-    <div class="card">
-        <h1>System Normal</h1>
-        <p>This edge node is operating within normal technical metrics. Unauthorized protocol traffic is filtered.</p>
-    </div>
-</body>
-</html>
-EOF
-
-# 动态构建 Caddyfile
-CADDY_DIR="/etc/caddy"
-mkdir -p "$CADDY_DIR"
-CADDYFILE="${CADDY_DIR}/Caddyfile"
-
-cat <<EOF > "$CADDYFILE"
-{
-    admin off
-}
-
-:${PORT}, ${DOMAIN}:${PORT} {
-    tls admin@${DOMAIN}
-    
-    forwardproxy {
-        basic_auth ${USER} ${PASS}
-        hide_ip
-        hide_via
-        probe_resistance
-    }
-    
-    root * ${WEB_ROOT}
-    file_server
-}
-EOF
-
-# 配置后台守护服务
-echo "[+] 配置系统后台守护服务..."
-if [ "$OS_TYPE" == "alpine" ]; then
-    cat <<'EOF' > /etc/init.d/caddy
-#!/sbin/openrc-run
-description="Caddy Web Server (NaïveProxy)"
-command="/usr/local/bin/caddy"
-command_args="run --config /etc/caddy/Caddyfile"
-pidfile="/run/caddy.pid"
-command_background="yes"
-
-depend() {
-    need net
-    after firewall
-}
-EOF
-    chmod +x /etc/init.d/caddy
-    rc-update add caddy default >/dev/null 2>&1 || true
-    rc-service caddy restart
+# 3. 确定服务端口
+if [ -z "$port_input" ]; then
+    # 随机生成一个 10000-60000 之间的端口
+    port_nv=$((RANDOM % 50000 + 10000))
+    echo "[*] 未指定端口，已自动随机分配端口: $port_nv"
 else
-    cat <<EOF > /etc/systemd/system/caddy.service
+    port_nv="$port_input"
+    echo "[*] 使用指定端口: $port_nv"
+fi
+
+# 4. 生成自签证书与固定目录
+CERT_DIR="/etc/naive"
+mkdir -p "$CERT_DIR"
+
+# 生成 10 年期的自签证书（SNI 伪装成 bing.com 或 cloudflare.com 均可）
+openssl req -x509 -nodes -days 3650 -newkey rsa:2050 \
+    -keyout "$CERT_DIR/private.key" \
+    -out "$CERT_DIR/cert.crt" \
+    -subj "/CN=cloudflare.com" >/dev/null 2>&1
+
+echo "[+] 自签证书已成功生成至: $CERT_DIR"
+
+# 5. 生成固定的 UUID 凭证作为账号密码
+if [ ! -f "$CERT_DIR/uuid" ]; then
+    cat /proc/sys/kernel/random/uuid > "$CERT_DIR/uuid"
+fi
+uuid=$(cat "$CERT_DIR/uuid")
+
+# 6. 下载并安装 Sing-box 内核（如果尚未安装）
+if ! command -v sing-box &> /dev/null; then
+    echo "[+] 正在自动下载并安装 Sing-box 正式版内核..."
+    bash <(curl -fsSL https://sing-box.app/deb-install.sh) || {
+        # 兜底：若官方脚本在部分纯IPv6环境失败，手动获取最新二进制
+        ARCH=$(uname -m)
+        [ "$ARCH" = "x86_64" ] && ARCH="amd64"
+        [ "$ARCH" = "aarch64" ] && ARCH="arm64"
+        VERSION=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
+        wget -O /tmp/sing-box.tar.gz "https://github.com/SagerNet/sing-box/releases/download/v${VERSION}/sing-box-${VERSION}-linux-${ARCH}.tar.gz"
+        tar -xz -C /tmp -f /tmp/sing-box.tar.gz
+        mv /tmp/sing-box-${VERSION}-linux-${ARCH}/sing-box /usr/local/bin/
+        chmod +x /usr/local/bin/sing-box
+    }
+fi
+
+# 7. 写入 Sing-box 独立配置文件
+CONFIG_DIR="/etc/sing-box"
+mkdir -p "$CONFIG_DIR"
+
+cat > "$CONFIG_DIR/config.json" <<EOF
+{
+  "log": {
+    "level": "info",
+    "timestamp": true
+  },
+  "inbounds": [
+    {
+      "type": "naive",
+      "tag": "naive-in",
+      "listen": "::",
+      "listen_port": ${port_nv},
+      "users": [
+        {
+          "username": "${uuid}",
+          "password": "${uuid}"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "certificate_path": "$CERT_DIR/cert.crt",
+        "key_path": "$CERT_DIR/private.key"
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "outbound": "direct"
+    }
+  ]
+}
+EOF
+
+# 8. 创建并启动 Systemd 服务
+cat > /etc/systemd/system/sing-box.service <<EOF
 [Unit]
-Description=Caddy Web Server with NaiveProxy
-After=network.target network-online.target
-Requires=network-online.target
+Description=Sing-Box Service
+Documentation=https://sing-box.sagernet.org
+After=network.target nss-lookup.target
 
 [Service]
-Type=notify
 User=root
-ExecStart=/usr/local/bin/caddy run --environ --config /etc/caddy/Caddyfile
-ExecReload=/usr/local/bin/caddy reload --config /etc/caddy/Caddyfile
-TimeoutStopSec=5s
-LimitNOFILE=1048576
-LimitNPROC=512
-PrivateTmp=true
-ProtectSystem=full
-AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+ExecStart=/usr/local/bin/sing-box run -c /etc/sing-box/config.json
+Restart=on-failure
+RestartSec=10
+LimitNOFILE=infinity
 
 [Install]
 WantedBy=multi-user.target
 EOF
-    systemctl daemon-reload
-    systemctl enable caddy >/dev/null 2>&1
-    systemctl restart caddy
-fi
 
-echo "================================================="
-echo " 🎉 NaïveProxy 部署成功！"
-echo "================================================="
-echo " 域名 (Domain)   : ${DOMAIN}"
-echo " 端口 (Port)     : ${PORT}"
-echo " 用户名 (Username): ${USER}"
-echo " 密码 (Password) : ${PASS}"
-echo "-------------------------------------------------"
-echo " 🔗 客户端连接 URL (支持 HTTP/2 & HTTP/3):"
-echo " naive+https://${USER}:${PASS}@${DOMAIN}:${PORT}"
-echo "================================================="
+systemctl daemon-reload
+systemctl enable sing-box
+systemctl restart sing-box
+
+# 9. 获取本机 IPv6 地址用于拼接分享链接
+LOCAL_IP=$(ip -6 addr show scope global | grep -v "inet6 ::1" | awk '{print $2}' | cut -d/ -f1 | head -n 1)
+[ -z "$LOCAL_IP" ] && LOCAL_IP="[你的服务器IPv6]"
+
+# 10. 输出结果与客户端链接
+echo "=================================================="
+echo "🎉 NaïveProxy 自签证书版部署成功！"
+echo "=================================================="
+echo "监听地址: [::]"
+echo "监听端口: $port_nv"
+echo "认证账号: $uuid"
+echo "认证密码: $uuid"
+echo "证书路径: $CERT_DIR/cert.crt"
+echo "--------------------------------------------------"
+echo "👉 客户端分享链接 (自签模式必须开启 insecure=1):"
+echo "naive+https://$uuid:$uuid@[$LOCAL_IP]:$port_nv?security=tls&sni=cloudflare.com&insecure=1&allowInsecure=1#naive-h2-self"
+echo "naive+quic://$uuid:$uuid@[$LOCAL_IP]:$port_nv?congestion_control=bbr&security=tls&sni=cloudflare.com&insecure=1&allowInsecure=1#naive-h3-self"
+echo "=================================================="
