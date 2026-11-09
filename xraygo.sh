@@ -62,7 +62,7 @@ download_file() {
                 clean_garbage
             fi
         fi
-        }
+done
     # 3. 全部失败
     red "下载或校验失败，请检查网络，稍后再试！"
     clean_garbage
