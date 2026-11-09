@@ -353,10 +353,30 @@ if [ "$argo_proto_lower" = "http2" ]; then
     argo_connections="4"
 fi
 
-# 如果开启了 Argo，启动 cloudflared 后台进程
+# 如果开启了 Argo，启动 cloudflared 服务
 if [ "$enable_argo" = true ]; then
     green "正在启动 Cloudflare Argo 固定隧道 (协议: ${argo_protocol}, 连接数: ${argo_connections})..."
-  nohup "${work_dir}/cloudflared" tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol "${argo_protocol}" --ha-connections "${argo_connections}" run --token "${argo_token}" > "${work_dir}/cloudflared.log" 2>&1 &
+    
+    # 写入标准的 systemd 服务文件
+    cat <<EOF > /etc/systemd/system/cloudflared.service
+[Unit]
+Description=Cloudflare Tunnels Service
+After=network.target
+
+[Service]
+TimeoutStartSec=0
+Type=simple
+ExecStart=${work_dir}/cloudflared tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol ${argo_protocol} --ha-connections ${argo_connections} run --token ${argo_token}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # 重载配置并启动托管服务
+    systemctl daemon-reload
+    systemctl enable --now cloudflared
 fi
 
 # 6. 放行对应的防火墙端口 (仅直连端口需要放行，Argo 不需要)
