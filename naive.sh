@@ -11,7 +11,7 @@ port_arg="y"
 naive_domain=""
 cf_token=""
 
-# 智能解析紧凑无等号参数
+# 智能解析无等号紧凑参数
 for arg in "$@"; do
     clean_arg="${arg//\"/}"
     clean_arg="${clean_arg//\'/}"
@@ -29,20 +29,16 @@ for arg in "$@"; do
     esac
 done
 
-# 防错兜底
+# 多重防错兜底提取
 if [ -z "$naive_domain" ]; then
     for arg in "$@"; do
-        if [[ "$arg" == *naivedomain* ]]; then
-            naive_domain=$(echo "$arg" | sed 's/.*naivedomain//;s/[\"'\'']//g')
-        fi
+        [[ "$arg" == *naivedomain* ]] && naive_domain=$(echo "$arg" | sed 's/.*naivedomain//;s/[\"'\'']//g')
     done
 fi
 
 if [ -z "$cf_token" ]; then
     for arg in "$@"; do
-        if [[ "$arg" == *api* ]]; then
-            cf_token=$(echo "$arg" | sed 's/.*api//;s/[\"'\'']//g')
-        fi
+        [[ "$arg" == *api* ]] && cf_token=$(echo "$arg" | sed 's/.*api//;s/[\"'\'']//g')
     done
 fi
 
@@ -95,7 +91,7 @@ bin_url="https://github.com/jonssonyan/naive/releases/latest/download/naive-linu
 curl -fLss "${bin_url}" -o /usr/local/naive/naive || { red "核心下载失败，请检查网络！"; exit 1; }
 chmod +x /usr/local/naive/naive
 
-green "---> 正在生成 NaïveProxy 配置文件..."
+green "---> 正在生成纯 Cloudflare DNS-01 验证配置文件..."
 cat > "${NAIVE_DATA_SYSTEMD}naive.json" << EOF
 {
   "admin": { "disabled": true },
