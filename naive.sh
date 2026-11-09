@@ -1,25 +1,19 @@
 #!/bin/bash
 export PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 
-green() { echo -e "\033[32m$1\033[0m"; }
-red() { echo -e "\033[31m$1\033[0m"; }
-yellow() { echo -e "\033[33m$1\033[0m"; }
-
-[[ $EUID -ne 0 ]] && red "必须以 root 用户运行此脚本！" && exit 1
-
-# 初始化默认变量
+# 初始化变量
 port_arg="y"
 naive_domain=""
 cf_token=""
 
-# 遍历所有传入的参数，利用前缀匹配提取对应的值
+# 循环遍历所有传入的紧凑参数 (如 port"y" domain"xxx" api"xxx")
 for arg in "$@"; do
     case "$arg" in
-        naive*)
-            port_arg="${arg#naive}"
+        port*)
+            port_arg="${arg#port}"
             ;;
-        naivedomain*)
-            naive_domain="${arg#naivedomain}"
+        domain*)
+            naive_domain="${arg#domain}"
             ;;
         api*)
             cf_token="${arg#api}"
@@ -27,30 +21,13 @@ for arg in "$@"; do
     esac
 done
 
-# 检查是否选择放弃部署
-if [[ "$port_arg" == [nN]* ]]; then
-    yellow "用户选择放弃部署，脚本已安全退出。"
-    exit 0
+# 如果变量成功接收，直接跳过交互输入
+if [ -n "$naive_domain" ]; then
+    echo "检测到传入的域名: $naive_domain"
 fi
 
-# 端口逻辑处理
-if [ "$port_arg" = "y" ] || [ "$port_arg" = "Y" ] || [ -z "$port_arg" ]; then
-    naive_port=$(shuf -i 10000-65000 -n 1)
-elif [[ "$port_arg" =~ ^[0-9]+$ ]]; then
-    naive_port="$port_arg"
-else
-    naive_port=$(shuf -i 10000-65000 -n 1)
-fi
-
-# 交互式兜底
-if [ -z "$naive_domain" ]; then
-    read -r -p "请输入你的域名 (例如 proxy.mydomain.com): " naive_domain
-    [[ -z "$naive_domain" ]] && red "域名不能为空！" && exit 1
-fi
-
-if [ -z "$cf_token" ]; then
-    read -r -p "请输入你的 Cloudflare API Token: " cf_token
-    [[ -z "$cf_token" ]] && red "Cloudflare API Token 不能为空！" && exit 1
+if [ -n "$cf_token" ]; then
+    echo "检测到传入的 Cloudflare API Token"
 fi
 
 NAIVE_DATA_SYSTEMD="/usr/local/naive/"
