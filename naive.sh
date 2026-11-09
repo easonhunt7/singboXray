@@ -6,7 +6,7 @@ red() { echo -e "\e[1;91m$1\033[0m"; }
 
 [[ $EUID -ne 0 ]] && red "请在 root 用户下运行此脚本！" && exit 1
 
-# 1. 端口逻辑解析：若输入为数字则指定，若为 y/Y 或为空则随机生成
+# 1. 端口参数解析：输入数字则指定，输入 y 或留空则随机生成
 input_arg="$1"
 if [ "$input_arg" = "y" ] || [ "$input_arg" = "Y" ] || [ -z "$input_arg" ]; then
     naive_port=$(shuf -i 10000-65000 -n 1)
@@ -60,7 +60,7 @@ fi
 openssl ecparam -genkey -name prime256v1 -out "${naive_dir}/private.key" >/dev/null 2>&1
 openssl req -new -x509 -days 3650 -key "${naive_dir}/private.key" -out "${naive_dir}/cert.crt" -subj "/CN=bing.com" >/dev/null 2>&1
 
-# 5. 写入严格符合 sing-box v1.11+ 标准且显式绑定 server_name 的 config.json
+# 5. 写入严格符合 sing-box v1.11+ 标准且显式绑定 server_name 的服务端 config.json
 cat > "${sing_box_dir}/config.json" <<EOF
 {
   "log": {
@@ -142,13 +142,23 @@ fi
 
 clear
 green "=========================================================================================="
-green " NaïveProxy 部署成功（零交互直连模式 + 显式 SNI 绑定）"
+green " NaïveProxy 部署成功（零交互直连模式 + 原生 JSON 适配）"
 green "=========================================================================================="
 green "👉 当前使用端口: ${naive_port}"
 green "------------------------------------------------------------------------------------------"
-green "👉 H2 节点链接:"
-green "naive+https://${uuid}:${uuid}@${server_ip}:${naive_port}?security=tls&sni=bing.com&insecure=1&allowInsecure=1#Naive-H2"
+green "👉 请在客户端 (v2rayN / sing-box) 中直接使用以下【原生 JSON 出站配置】进行连接："
 green "------------------------------------------------------------------------------------------"
-green "👉 H3 节点链接:"
-green "naive+quic://${uuid}:${uuid}@${server_ip}:${naive_port}?congestion_control=bbr&security=tls&sni=bing.com&insecure=1&allowInsecure=1#Naive-H3"
+echo -e "\e[1;33m{
+  \"type\": \"naive\",
+  \"tag\": \"naive-out\",
+  \"server\": \"${raw_ip}\",
+  \"server_port\": ${naive_port},
+  \"username\": \"${uuid}\",
+  \"password\": \"${uuid}\",
+  \"tls\": {
+    \"enabled\": true,
+    \"server_name\": \"bing.com\",
+    \"insecure\": true
+  }
+}\e[0m"
 green "=========================================================================================="
