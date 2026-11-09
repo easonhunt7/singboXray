@@ -66,7 +66,7 @@ download_file() {
     }
 
     # 3. 全部失败
-    red "下载失败 or 校验未通过，请检查网络后重试！"
+    red "下载失败 or 校验未通过，请检查网络，稍后再试！"
     clean_garbage
     return 1
 }
