@@ -1,112 +1,240 @@
 #!/bin/bash
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 
-export LANG=en_US.UTF-8
-green() { echo -e "\e[1;32m$1\033[0m"; }
-red() { echo -e "\e[1;91m$1\033[0m"; }
+# 颜色输出工具
+green() { echo -e "\033[32m$1\033[0m"; }
+red() { echo -e "\033[31m$1\033[0m"; }
+yellow() { echo -e "\033[33m$1\033[0m"; }
 
-[[ $EUID -ne 0 ]] && red "请在 root 用户下运行此脚本！" && exit 1
+[[ $EUID -ne 0 ]] && red "必须以 root 用户运行此脚本！" && exit 1
 
-# 1. 端口参数解析：输入数字则指定，输入 y 或留空则随机生成
-input_arg="$1"
-if [ "$input_arg" = "y" ] || [ "$input_arg" = "Y" ] || [ -z "$input_arg" ]; then
+# 1. 命令行参数解析
+# 用法示例: bash naive_cf.sh y proxy.mydomain.com your_cf_api_token
+# 或者指定端口: bash naive_cf.sh 443 proxy.mydomain.com your_cf_api_token
+port_arg="${1:-y}"
+naive_domain="$2"
+cf_token="$3"
+
+# 检查是否选择放弃部署
+if [[ "$port_arg" == [nN]* ]]; then
+    yellow "用户选择放弃部署，脚本已安全退出。"
+    exit 0
+fi
+
+# 端口逻辑处理
+if [ "$port_arg" = "y" ] || [ "$port_arg" = "Y" ] || [ -z "$port_arg" ]; then
     naive_port=$(shuf -i 10000-65000 -n 1)
-elif [[ "$input_arg" =~ ^[0-9]+$ ]]; then
-    naive_port="$input_arg"
+elif [[ "$port_arg" =~ ^[0-9]+$ ]]; then
+    naive_port="$port_arg"
 else
     naive_port=$(shuf -i 10000-65000 -n 1)
 fi
 
-sing_box_dir="/etc/sing-box"
-naive_dir="/etc/naive"
+# 交互式兜底：如果没在命令行传参，则终端提示输入
+if [ -z "$naive_domain" ]; then
+    read -r -p "请输入你的域名 (例如 proxy.mydomain.com): " naive_domain
+    [[ -z "$naive_domain" ]] && red "域名不能为空！" && exit 1
+fi
 
-# 2. 停止旧服务并初始化目录
-systemctl stop sing-box 2>/dev/null || true
-green "正在初始化系统环境与核心依赖..."
+if [ -z "$cf_token" ]; then
+    read -r -p "请输入你的 Cloudflare API Token: " cf_token
+    [[ -z "$cf_token" ]] && red "Cloudflare API Token 不能为空！" && exit 1
+fi
 
-if command -v apt >/dev/null 2>&1; then
-    apt update -y >/dev/null 2>&1
-    apt install -y curl wget unzip openssl iptables coreutils >/dev/null 2>&1
+NAIVE_DATA_SYSTEMD="/usr/local/naive/"
+naive_config_systemd="/usr/local/naive/naive.json"
+
+# 2. 系统环境与依赖检查
+green "---> 正在检查系统环境与网络..."
+if command -v apt-get >/dev/null 2>&1; then
+    apt-get update -y >/dev/null 2>&1
+    apt-get install -y curl systemd nftables openssl jq >/dev/null 2>&1
 elif command -v yum >/dev/null 2>&1; then
-    yum install -y curl wget unzip openssl iptables coreutils >/dev/null 2>&1
+    yum install -y curl systemd nftables openssl jq >/dev/null 2>&1
 fi
 
-mkdir -p "${sing_box_dir}" "${naive_dir}"
-
-# 3. 下载 sing-box 核心
-echo "正在获取并安装 sing-box 核心..."
-ARCH_SB=$(uname -m)
-[ "$ARCH_SB" = "x86_64" ] && SB_ARCH="amd64"
-[ "$ARCH_SB" = "aarch64" ] && SB_ARCH="arm64"
-[ -z "$SB_ARCH" ] && SB_ARCH="amd64"
-
-VERSION="1.11.0"
-wget -O /tmp/sing-box.tar.gz "https://github.com/SagerNet/sing-box/releases/download/v${VERSION}/sing-box-${VERSION}-linux-${SB_ARCH}.tar.gz" || \
-wget -O /tmp/sing-box.tar.gz "https://github.com/SagerNet/sing-box/releases/latest/download/sing-box-linux-${SB_ARCH}.tar.gz"
-
-tar -xz -C /tmp -f /tmp/sing-box.tar.gz
-find /tmp -type f -name "sing-box" -exec cp -f {} /usr/local/bin/ \;
-chmod +x /usr/local/bin/sing-box
-rm -rf /tmp/sing-box.tar.gz
-
-# 4. 生成持久化 UUID 与自签证书 (SNI: bing.com)
-echo "正在生成加密凭证与自签 TLS 证书..."
-if [ ! -f "${naive_dir}/uuid" ]; then
-    uuid=$(cat /proc/sys/kernel/random/uuid)
-    echo "$uuid" > "${naive_dir}/uuid"
+# 3. 架构判断与 xcaddy/caddy (带 cloudflare 插件) 编译准备
+# 正统 NaïveProxy 依赖带有 forwardproxy 插件的 Caddy
+get_arch=""
+if [[ $(arch) =~ ("x86_64"|"amd64") ]]; then
+    get_arch="amd64"
+elif [[ $(arch) =~ ("aarch64"|"arm64") ]]; then
+    get_arch="arm64"
 else
-    uuid=$(cat "${naive_dir}/uuid")
+    red "仅支持 x86_64/amd64 与 arm64/aarch64 架构"
+    exit 1
 fi
 
-openssl ecparam -genkey -name prime256v1 -out "${naive_dir}/private.key" >/dev/null 2>&1
-openssl req -new -x509 -days 3650 -key "${naive_dir}/private.key" -out "${naive_dir}/cert.crt" -subj "/CN=bing.com" >/dev/null 2>&1
+mkdir -p ${NAIVE_DATA_SYSTEMD}
+mkdir -p ${NAIVE_DATA_SYSTEMD}html/
 
-# 5. 写入严格符合 sing-box v1.11+ 标准且显式绑定 server_name 的服务端 config.json
-cat > "${sing_box_dir}/config.json" <<EOF
+# 生成默认伪装主页
+if [ ! -f "${NAIVE_DATA_SYSTEMD}html/index.html" ]; then
+    cat >"${NAIVE_DATA_SYSTEMD}html/index.html" <<EOF
+<!DOCTYPE html>
+<html>
+<head><title>Welcome!</title></head>
+<body><h1>System Operational</h1></body>
+</html>
+EOF
+fi
+
+# 4. 生成固定的鉴权凭证 (UUID 作为用户名和密码)
+uuid_file="${NAIVE_DATA_SYSTEMD}uuid"
+if [ ! -f "$uuid_file" ]; then
+    naive_uuid=$(cat /proc/sys/kernel/random/uuid)
+    echo "$naive_uuid" > "$uuid_file"
+else
+    naive_uuid=$(cat "$uuid_file")
+fi
+
+# 计算 NaïveProxy v2.7.6+ 标准的 auth_credentials
+auth_str=$(echo -n "${naive_uuid}:${naive_uuid}" | base64 | tr --delete '\n' | base64 | tr --delete '\n')
+
+green "---> 正在生成纯 Cloudflare DNS-01 验证的正统 NaïveProxy 配置文件..."
+
+# 5. 写入纯 CF 验证的 Caddy/Naïve JSON 核心配置
+cat >${naive_config_systemd} <<EOF
 {
-  "log": {
-    "level": "info",
-    "timestamp": true
+  "admin": {
+    "disabled": true
   },
-  "inbounds": [
-    {
-      "type": "naive",
-      "tag": "naive-in",
-      "listen": "::",
-      "listen_port": ${naive_port},
-      "users": [
-        {
-          "username": "${uuid}",
-          "password": "${uuid}"
+  "logging": {
+    "sink": {
+      "writer": {
+        "output": "stderr"
+      }
+    },
+    "logs": {
+      "default": {
+        "writer": {
+          "output": "stderr"
         }
-      ],
-      "tls": {
-        "enabled": true,
-        "server_name": "bing.com",
-        "certificate_path": "${naive_dir}/cert.crt",
-        "key_path": "${naive_dir}/private.key"
       }
     }
-  ],
-  "outbounds": [
-    {
-      "type": "direct",
-      "tag": "direct"
+  },
+  "storage": {
+    "module": "file_system",
+    "root": "${NAIVE_DATA_SYSTEMD}file_system/"
+  },
+  "apps": {
+    "http": {
+      "servers": {
+        "srv0": {
+          "listen": [
+            ":${naive_port}"
+          ],
+          "protocols": [
+            "h1",
+            "h2",
+            "h3"
+          ],
+          "routes": [
+            {
+              "handle": [
+                {
+                  "handler": "subroute",
+                  "routes": [
+                    {
+                      "handle": [
+                        {
+                          "auth_credentials": [
+                            "${auth_str}"
+                          ],
+                          "handler": "forward_proxy",
+                          "hide_ip": true,
+                          "hide_via": true,
+                          "probe_resistance": {}
+                        }
+                      ]
+                    },
+                    {
+                      "match": [
+                        {
+                          "host": [
+                            "${naive_domain}"
+                          ]
+                        }
+                      ],
+                      "handle": [
+                        {
+                          "handler": "file_server",
+                          "root": "${NAIVE_DATA_SYSTEMD}html/",
+                          "index_names": [
+                            "index.html",
+                            "index.htm"
+                          ]
+                        }
+                      ],
+                      "terminal": true
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "tls_connection_policies": [
+            {
+              "match": {
+                "sni": [
+                  "${naive_domain}"
+                ]
+              }
+            }
+          ],
+          "automatic_https": {
+            "disable": false
+          }
+        }
+      }
+    },
+    "tls": {
+      "certificates": {
+        "automate": [
+          "${naive_domain}"
+        ]
+      },
+      "automation": {
+        "policies": [
+          {
+            "issuers": [
+              {
+                "module": "acme",
+                "challenges": {
+                  "dns": {
+                    "provider": {
+                      "name": "cloudflare",
+                      "api_token": "${cf_token}"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
     }
-  ]
+  }
 }
 EOF
 
-# 6. 配置 systemd 服务托管
-cat > /etc/systemd/system/sing-box.service << EOF
+# 6. 下载原汁原味的二进制核心并配置 Systemd 服务
+green "---> 正在下载并安装服务端核心..."
+bin_url="https://github.com/jonssonyan/naive/releases/latest/download/naive-linux-${get_arch}"
+curl -fsSL "${bin_url}" -o /usr/local/naive/naive || { red "核心下载失败，请检查网络！"; exit 1; }
+chmod +x /usr/local/naive/naive
+
+# 编写 systemd 服务文件
+cat > /etc/systemd/system/naive.service << EOF
 [Unit]
-Description=Sing-Box Naive Service
+Description=Official NaiveProxy Service (Cloudflare DNS-01)
 After=network.target nss-lookup.target
 
 [Service]
 User=root
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
-ExecStart=/usr/local/bin/sing-box run -c ${sing_box_dir}/config.json
+ExecStart=/usr/local/naive/naive run --config ${naive_config_systemd}
 Restart=on-failure
 RestartSec=5
 LimitNOFILE=infinity
@@ -116,9 +244,9 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable --now sing-box >/dev/null 2>&1
+systemctl enable --now naive >/dev/null 2>&1
 
-# 7. 自动化放行防火墙端口
+# 7. 开放防火墙端口
 if command -v iptables >/dev/null 2>&1; then
     iptables -I INPUT -p tcp --dport $naive_port -j ACCEPT 2>/dev/null
     iptables -I INPUT -p udp --dport $naive_port -j ACCEPT 2>/dev/null
@@ -128,37 +256,20 @@ if command -v ip6tables >/dev/null 2>&1; then
     ip6tables -I INPUT -p udp --dport $naive_port -j ACCEPT 2>/dev/null
 fi
 
-# 8. 精准捕获公网 IP（完美兼容纯 IPv6 环境）
+# 获取本机公网 IP（完美兼容纯 IPv6）
 raw_ip=$(curl -6 -sm 2 ip.sb || curl -4 -sm 2 ip.sb)
-if [ -z "$raw_ip" ]; then
-    raw_ip=$(ip -6 addr show scope global | grep -v "inet6 ::1" | grep -v "venet" | awk '{print $2}' | cut -d/ -f1 | head -n 1)
-fi
-
-if [[ "$raw_ip" =~ : ]]; then
-    server_ip="[$raw_ip]"
-else
-    server_ip="$raw_ip"
-fi
+[[ "$raw_ip" =~ : ]] && server_ip="[$raw_ip]" || server_ip="$raw_ip"
 
 clear
 green "=========================================================================================="
-green " NaïveProxy 部署成功（零交互直连模式 + 原生 JSON 适配）"
+green " 正统 NaïveProxy (Caddy + forwardproxy) 部署成功！"
 green "=========================================================================================="
-green "👉 当前使用端口: ${naive_port}"
+green "👉 验证方式: Cloudflare DNS-01 自动签证 (不占用 80/443 端口)"
+green "👉 绑定的域名: ${naive_domain}"
+green "👉 服务端口: ${naive_port}"
 green "------------------------------------------------------------------------------------------"
-green "👉 请在客户端 (v2rayN / sing-box) 中直接使用以下【原生 JSON 出站配置】进行连接："
+green "👉 客户端分享链接 (可在 v2rayN 中直接导入)："
 green "------------------------------------------------------------------------------------------"
-echo -e "\e[1;33m{
-  \"type\": \"naive\",
-  \"tag\": \"naive-out\",
-  \"server\": \"${raw_ip}\",
-  \"server_port\": ${naive_port},
-  \"username\": \"${uuid}\",
-  \"password\": \"${uuid}\",
-  \"tls\": {
-    \"enabled\": true,
-    \"server_name\": \"bing.com\",
-    \"insecure\": true
-  }
-}\e[0m"
+echo -e "\e[1;33mnaive+https://${naive_uuid}:${naive_uuid}@${naive_domain}:${naive_port}?security=tls&sni=${naive_domain}#Naive-Official-CF\e[0m"
+echo -e "\e[1;33mnaive+quic://${naive_uuid}:${naive_uuid}@${naive_domain}:${naive_port}?congestion_control=bbr&security=tls&sni=${naive_domain}#Naive-Official-QUIC\e[0m"
 green "=========================================================================================="
