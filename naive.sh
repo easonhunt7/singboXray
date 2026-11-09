@@ -1,7 +1,7 @@
 #!/bin/bash
 export PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 
-# 1. 补全颜色输出函数（防止命令报错）
+# 1. 必须最先定义颜色函数，防止后面的代码报错
 green() { echo -e "\033[32m$1\033[0m"; }
 red() { echo -e "\033[31m$1\033[0m"; }
 yellow() { echo -e "\033[33m$1\033[0m"; }
@@ -13,7 +13,7 @@ port_arg="y"
 naive_domain=""
 cf_token=""
 
-# 循环遍历所有传入的紧凑参数 (如 port"y" domain"xxx" api"xxx")
+# 2. 紧凑参数解析（精准匹配无等号传参）
 for arg in "$@"; do
     case "$arg" in
         port*)
@@ -28,7 +28,11 @@ for arg in "$@"; do
     esac
 done
 
-# 端口逻辑处理（如果传入的是 y 或为空，则自动随机分配 10000-65000 之间的端口）
+# 调试打印，确保参数不丢
+[ -n "$naive_domain" ] && echo "检测到传入的域名: $naive_domain"
+[ -n "$cf_token" ] && echo "检测到传入的 Cloudflare API Token"
+
+# 端口逻辑处理
 if [ "$port_arg" = "y" ] || [ "$port_arg" = "Y" ] || [ -z "$port_arg" ]; then
     naive_port=$(shuf -i 10000-65000 -n 1)
 elif [[ "$port_arg" =~ ^[0-9]+$ ]]; then
@@ -37,21 +41,20 @@ else
     naive_port=$(shuf -i 10000-65000 -n 1)
 fi
 
-# 交互式兜底：若未通过命令行传参，则提示输入
+# 交互式兜底
 if [ -z "$naive_domain" ]; then
-    read -r -p "请输入你的域名 (例如 proxy.mydomain.com): " naive_domain
+    read -r -p "请输入你的域名: " naive_domain
     [[ -z "$naive_domain" ]] && red "域名不能为空！" && exit 1
 fi
 
 if [ -z "$cf_token" ]; then
     read -r -p "请输入你的 Cloudflare API Token: " cf_token
-    [[ -z "$cf_token" ]] && red "Cloudflare API Token 不能为空！" && exit 1
+    [[ -z "$cf_token" ]] && red "Token 不能为空！" && exit 1
 fi
 
 NAIVE_DATA_SYSTEMD="/usr/local/naive/"
 naive_config_systemd="/usr/local/naive/naive.json"
 
-# 2. 系统环境与依赖检查
 green "---> 正在检查系统环境与网络..."
 if command -v apt-get >/dev/null 2>&1; then
     apt-get update -y >/dev/null 2>&1
@@ -60,7 +63,6 @@ elif command -v yum >/dev/null 2>&1; then
     yum install -y curl systemd nftables openssl jq >/dev/null 2>&1
 fi
 
-# 3. 架构判断
 get_arch=""
 if [[ $(arch) =~ ("x86_64"|"amd64") ]]; then
     get_arch="amd64"
@@ -74,18 +76,13 @@ fi
 mkdir -p ${NAIVE_DATA_SYSTEMD}
 mkdir -p ${NAIVE_DATA_SYSTEMD}html/
 
-# 生成默认伪装主页
 if [ ! -f "${NAIVE_DATA_SYSTEMD}html/index.html" ]; then
     cat >"${NAIVE_DATA_SYSTEMD}html/index.html" <<EOF
 <!DOCTYPE html>
-<html>
-<head><title>Welcome!</title></head>
-<body><h1>System Operational</h1></body>
-</html>
+<html><head><title>Welcome!</title></head><body><h1>System Operational</h1></body></html>
 EOF
 fi
 
-# 4. 生成固定的鉴权凭证 (UUID 作为用户名和密码)
 uuid_file="${NAIVE_DATA_SYSTEMD}uuid"
 if [ ! -f "$uuid_file" ]; then
     naive_uuid=$(cat /proc/sys/kernel/random/uuid)
@@ -94,47 +91,24 @@ else
     naive_uuid=$(cat "$uuid_file")
 fi
 
-# 计算 NaïveProxy v2.7.6+ 标准的 auth_credentials
 auth_str=$(echo -n "${naive_uuid}:${naive_uuid}" | base64 | tr --delete '\n' | base64 | tr --delete '\n')
 
 green "---> 正在生成纯 Cloudflare DNS-01 验证的正统 NaïveProxy 配置文件..."
 
-# 5. 写入纯 CF 验证的 Caddy/Naïve JSON 核心配置
 cat >${naive_config_systemd} <<EOF
 {
-  "admin": {
-    "disabled": true
-  },
+  "admin": { "disabled": true },
   "logging": {
-    "sink": {
-      "writer": {
-        "output": "stderr"
-      }
-    },
-    "logs": {
-      "default": {
-        "writer": {
-          "output": "stderr"
-        }
-      }
-    }
+    "sink": { "writer": { "output": "stderr" } },
+    "logs": { "default": { "writer": { "output": "stderr" } } }
   },
-  "storage": {
-    "module": "file_system",
-    "root": "${NAIVE_DATA_SYSTEMD}file_system/"
-  },
+  "storage": { "module": "file_system", "root": "${NAIVE_DATA_SYSTEMD}file_system/" },
   "apps": {
     "http": {
       "servers": {
         "srv0": {
-          "listen": [
-            ":${naive_port}"
-          ],
-          "protocols": [
-            "h1",
-            "h2",
-            "h3"
-          ],
+          "listen": [ ":${naive_port}" ],
+          "protocols": [ "h1", "h2", "h3" ],
           "routes": [
             {
               "handle": [
@@ -144,9 +118,7 @@ cat >${naive_config_systemd} <<EOF
                     {
                       "handle": [
                         {
-                          "auth_credentials": [
-                            "${auth_str}"
-                          ],
+                          "auth_credentials": [ "${auth_str}" ],
                           "handler": "forward_proxy",
                           "hide_ip": true,
                           "hide_via": true,
@@ -155,21 +127,12 @@ cat >${naive_config_systemd} <<EOF
                       ]
                     },
                     {
-                      "match": [
-                        {
-                          "host": [
-                            "${naive_domain}"
-                          ]
-                        }
-                      ],
+                      "match": [ { "host": [ "${naive_domain}" ] } ],
                       "handle": [
                         {
                           "handler": "file_server",
                           "root": "${NAIVE_DATA_SYSTEMD}html/",
-                          "index_names": [
-                            "index.html",
-                            "index.htm"
-                          ]
+                          "index_names": [ "index.html", "index.htm" ]
                         }
                       ],
                       "terminal": true
@@ -179,27 +142,13 @@ cat >${naive_config_systemd} <<EOF
               ]
             }
           ],
-          "tls_connection_policies": [
-            {
-              "match": {
-                "sni": [
-                  "${naive_domain}"
-                ]
-              }
-            }
-          ],
-          "automatic_https": {
-            "disable": false
-          }
+          "tls_connection_policies": [ { "match": { "sni": [ "${naive_domain}" ] } } ],
+          "automatic_https": { "disable": false }
         }
       }
     },
     "tls": {
-      "certificates": {
-        "automate": [
-          "${naive_domain}"
-        ]
-      },
+      "certificates": { "automate": [ "${naive_domain}" ] },
       "automation": {
         "policies": [
           {
@@ -224,13 +173,11 @@ cat >${naive_config_systemd} <<EOF
 }
 EOF
 
-# 6. 下载二进制核心并配置 Systemd 服务
 green "---> 正在下载并安装服务端核心..."
 bin_url="https://github.com/jonssonyan/naive/releases/latest/download/naive-linux-${get_arch}"
 curl -fsSL "${bin_url}" -o /usr/local/naive/naive || { red "核心下载失败，请检查网络！"; exit 1; }
 chmod +x /usr/local/naive/naive
 
-# 编写 systemd 服务文件
 cat > /etc/systemd/system/naive.service << EOF
 [Unit]
 Description=Official NaiveProxy Service (Cloudflare DNS-01)
@@ -252,7 +199,6 @@ EOF
 systemctl daemon-reload
 systemctl enable --now naive >/dev/null 2>&1
 
-# 7. 开放防火墙端口
 if command -v iptables >/dev/null 2>&1; then
     iptables -I INPUT -p tcp --dport $naive_port -j ACCEPT 2>/dev/null
     iptables -I INPUT -p udp --dport $naive_port -j ACCEPT 2>/dev/null
