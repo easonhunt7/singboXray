@@ -13,14 +13,14 @@ port_arg="y"
 naive_domain=""
 cf_token=""
 
-# 2. 精准解析无等号紧凑参数 (如 port"y" domain"..." api"...")
+# 精准解析无等号紧凑参数 (与一键指令中的 naive, naivedomain, api 完全对齐)
 for arg in "$@"; do
     case "$arg" in
-        port*)
-            port_arg="${arg#port}"
+        naive*)
+            port_arg="${arg#naive}"
             ;;
-        domain*)
-            naive_domain="${arg#domain}"
+        naivedomain*)
+            naive_domain="${arg#naivedomain}"
             ;;
         api*)
             cf_token="${arg#api}"
