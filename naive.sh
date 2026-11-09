@@ -1,19 +1,19 @@
 #!/bin/bash
 export PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 
-# 1. 必须最先定义颜色函数，防止后面的代码报错
+# 1. 基础颜色输出函数
 green() { echo -e "\033[32m$1\033[0m"; }
 red() { echo -e "\033[31m$1\033[0m"; }
 yellow() { echo -e "\033[33m$1\033[0m"; }
 
 [[ $EUID -ne 0 ]] && red "必须以 root 用户运行此脚本！" && exit 1
 
-# 初始化默认变量
+# 初始化变量
 port_arg="y"
 naive_domain=""
 cf_token=""
 
-# 2. 紧凑参数解析（精准匹配无等号传参）
+# 2. 精准解析无等号紧凑参数 (如 port"y" domain"..." api"...")
 for arg in "$@"; do
     case "$arg" in
         port*)
@@ -28,9 +28,9 @@ for arg in "$@"; do
     esac
 done
 
-# 调试打印，确保参数不丢
-[ -n "$naive_domain" ] && echo "检测到传入的域名: $naive_domain"
-[ -n "$cf_token" ] && echo "检测到传入的 Cloudflare API Token"
+# 3. 严格校验必填参数（去除交互式输入，缺失直接静默报错退出）
+[[ -z "${naive_domain}" ]] && red "错误: 未检测到有效的域名参数！" && exit 1
+[[ -z "${cf_token}" ]] && red "错误: 未检测到有效的 Cloudflare API Token！" && exit 1
 
 # 端口逻辑处理
 if [ "$port_arg" = "y" ] || [ "$port_arg" = "Y" ] || [ -z "$port_arg" ]; then
@@ -39,17 +39,6 @@ elif [[ "$port_arg" =~ ^[0-9]+$ ]]; then
     naive_port="$port_arg"
 else
     naive_port=$(shuf -i 10000-65000 -n 1)
-fi
-
-# 交互式兜底
-if [ -z "$naive_domain" ]; then
-    read -r -p "请输入你的域名: " naive_domain
-    [[ -z "$naive_domain" ]] && red "域名不能为空！" && exit 1
-fi
-
-if [ -z "$cf_token" ]; then
-    read -r -p "请输入你的 Cloudflare API Token: " cf_token
-    [[ -z "$cf_token" ]] && red "Token 不能为空！" && exit 1
 fi
 
 NAIVE_DATA_SYSTEMD="/usr/local/naive/"
