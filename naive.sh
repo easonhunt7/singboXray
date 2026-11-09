@@ -1,7 +1,14 @@
 #!/bin/bash
 export PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 
-# 初始化变量
+# 1. 补全颜色输出函数（防止命令报错）
+green() { echo -e "\033[32m$1\033[0m"; }
+red() { echo -e "\033[31m$1\033[0m"; }
+yellow() { echo -e "\033[33m$1\033[0m"; }
+
+[[ $EUID -ne 0 ]] && red "必须以 root 用户运行此脚本！" && exit 1
+
+# 初始化默认变量
 port_arg="y"
 naive_domain=""
 cf_token=""
@@ -21,13 +28,24 @@ for arg in "$@"; do
     esac
 done
 
-# 如果变量成功接收，直接跳过交互输入
-if [ -n "$naive_domain" ]; then
-    echo "检测到传入的域名: $naive_domain"
+# 端口逻辑处理（如果传入的是 y 或为空，则自动随机分配 10000-65000 之间的端口）
+if [ "$port_arg" = "y" ] || [ "$port_arg" = "Y" ] || [ -z "$port_arg" ]; then
+    naive_port=$(shuf -i 10000-65000 -n 1)
+elif [[ "$port_arg" =~ ^[0-9]+$ ]]; then
+    naive_port="$port_arg"
+else
+    naive_port=$(shuf -i 10000-65000 -n 1)
 fi
 
-if [ -n "$cf_token" ]; then
-    echo "检测到传入的 Cloudflare API Token"
+# 交互式兜底：若未通过命令行传参，则提示输入
+if [ -z "$naive_domain" ]; then
+    read -r -p "请输入你的域名 (例如 proxy.mydomain.com): " naive_domain
+    [[ -z "$naive_domain" ]] && red "域名不能为空！" && exit 1
+fi
+
+if [ -z "$cf_token" ]; then
+    read -r -p "请输入你的 Cloudflare API Token: " cf_token
+    [[ -z "$cf_token" ]] && red "Cloudflare API Token 不能为空！" && exit 1
 fi
 
 NAIVE_DATA_SYSTEMD="/usr/local/naive/"
@@ -42,8 +60,7 @@ elif command -v yum >/dev/null 2>&1; then
     yum install -y curl systemd nftables openssl jq >/dev/null 2>&1
 fi
 
-# 3. 架构判断与 xcaddy/caddy (带 cloudflare 插件) 编译准备
-# 正统 NaïveProxy 依赖带有 forwardproxy 插件的 Caddy
+# 3. 架构判断
 get_arch=""
 if [[ $(arch) =~ ("x86_64"|"amd64") ]]; then
     get_arch="amd64"
@@ -207,7 +224,7 @@ cat >${naive_config_systemd} <<EOF
 }
 EOF
 
-# 6. 下载原汁原味的二进制核心并配置 Systemd 服务
+# 6. 下载二进制核心并配置 Systemd 服务
 green "---> 正在下载并安装服务端核心..."
 bin_url="https://github.com/jonssonyan/naive/releases/latest/download/naive-linux-${get_arch}"
 curl -fsSL "${bin_url}" -o /usr/local/naive/naive || { red "核心下载失败，请检查网络！"; exit 1; }
@@ -244,10 +261,6 @@ if command -v ip6tables >/dev/null 2>&1; then
     ip6tables -I INPUT -p tcp --dport $naive_port -j ACCEPT 2>/dev/null
     ip6tables -I INPUT -p udp --dport $naive_port -j ACCEPT 2>/dev/null
 fi
-
-# 获取本机公网 IP（完美兼容纯 IPv6）
-raw_ip=$(curl -6 -sm 2 ip.sb || curl -4 -sm 2 ip.sb)
-[[ "$raw_ip" =~ : ]] && server_ip="[$raw_ip]" || server_ip="$raw_ip"
 
 clear
 green "=========================================================================================="
