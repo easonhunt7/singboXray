@@ -1,19 +1,31 @@
 #!/bin/bash
 export PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 
-# 颜色输出工具
 green() { echo -e "\033[32m$1\033[0m"; }
 red() { echo -e "\033[31m$1\033[0m"; }
 yellow() { echo -e "\033[33m$1\033[0m"; }
 
 [[ $EUID -ne 0 ]] && red "必须以 root 用户运行此脚本！" && exit 1
 
-# 1. 命令行参数解析
-# 用法示例: bash naive_cf.sh y proxy.mydomain.com your_cf_api_token
-# 或者指定端口: bash naive_cf.sh 443 proxy.mydomain.com your_cf_api_token
-port_arg="${1:-y}"
-naive_domain="$2"
-cf_token="$3"
+# 初始化默认变量
+port_arg="y"
+naive_domain=""
+cf_token=""
+
+# 遍历所有传入的参数，利用前缀匹配提取对应的值
+for arg in "$@"; do
+    case "$arg" in
+        naive*)
+            port_arg="${arg#naive}"
+            ;;
+        naivedomain*)
+            naive_domain="${arg#naivedomain}"
+            ;;
+        api*)
+            cf_token="${arg#api}"
+            ;;
+    esac
+done
 
 # 检查是否选择放弃部署
 if [[ "$port_arg" == [nN]* ]]; then
@@ -30,7 +42,7 @@ else
     naive_port=$(shuf -i 10000-65000 -n 1)
 fi
 
-# 交互式兜底：如果没在命令行传参，则终端提示输入
+# 交互式兜底
 if [ -z "$naive_domain" ]; then
     read -r -p "请输入你的域名 (例如 proxy.mydomain.com): " naive_domain
     [[ -z "$naive_domain" ]] && red "域名不能为空！" && exit 1
