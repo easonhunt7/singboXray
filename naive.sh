@@ -19,7 +19,7 @@ fi
 sing_box_dir="/etc/sing-box"
 naive_dir="/etc/naive"
 
-# 2. 停止旧服务并清理环境
+# 2. 停止旧服务并初始化目录
 systemctl stop sing-box 2>/dev/null || true
 green "正在初始化系统环境与核心依赖..."
 
@@ -60,7 +60,7 @@ fi
 openssl ecparam -genkey -name prime256v1 -out "${naive_dir}/private.key" >/dev/null 2>&1
 openssl req -new -x509 -days 3650 -key "${naive_dir}/private.key" -out "${naive_dir}/cert.crt" -subj "/CN=bing.com" >/dev/null 2>&1
 
-# 5. 写入严格符合 sing-box v1.11+ 标准的 config.json
+# 5. 写入严格符合 sing-box v1.11+ 标准且显式绑定 server_name 的 config.json
 cat > "${sing_box_dir}/config.json" <<EOF
 {
   "log": {
@@ -81,6 +81,7 @@ cat > "${sing_box_dir}/config.json" <<EOF
       ],
       "tls": {
         "enabled": true,
+        "server_name": "bing.com",
         "certificate_path": "${naive_dir}/cert.crt",
         "key_path": "${naive_dir}/private.key"
       }
@@ -141,7 +142,7 @@ fi
 
 clear
 green "=========================================================================================="
-green " NaïveProxy 部署成功（零交互直连模式）"
+green " NaïveProxy 部署成功（零交互直连模式 + 显式 SNI 绑定）"
 green "=========================================================================================="
 green "👉 当前使用端口: ${naive_port}"
 green "------------------------------------------------------------------------------------------"
