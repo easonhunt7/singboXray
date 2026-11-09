@@ -5,7 +5,7 @@ green() { echo -e "\e[1;32m$1\033[0m"; }
 yellow() { echo -e "\e[1;33m$1\033[0m"; }
 red() { echo -e "\e[1;91m$1\033[0m"; }
 
-# Cloudflare 安全代理源（易分享-自建）
+# Cloudflare 安全代理源（易分享-自建，保障安全）
 GITHUB_PROXY=('https://ess.ieshare.workers.dev/')
 
 download_file() {
@@ -35,38 +35,37 @@ download_file() {
 
    # 1. 优先尝试：GitHub 官方源
 
-    echo "正在从 GitHub 官方源下载..."
+    echo "正在连接 GitHub 官方源..."
     # 给予充足的超时时间：连接超时 15 秒，总下载限时 120 秒
     if curl -sL --connect-timeout 15 --max-time 120 -o "$output_path" "$official_url"; then
         if validate_file "$output_path"; then
             green "下载+校验成功！"
             return 0
         else
-            yellow "校验不合格，切换至安全代理..."
+            yellow "校验失败，切换至 Cloudflare 安全代理..."
             clean_garbage
         fi
     else
-        yellow "GitHub 连接超时，切换至安全代理..."
+        yellow "GitHub 连接超时，切换至 Cloudflare 安全代理..."
         clean_garbage
     fi
     
-    # 2. 备选尝试：Cloudflare 安全代理
+    # 2. 备选尝试：Cloudflare 安全代理源
     for proxy in "${GITHUB_PROXY[@]}"; do
         local proxy_url="${proxy}${official_url}"
-        echo "正在从 Cloudflare 安全代理下载..."
         if curl -sL --connect-timeout 15 --max-time 120 -o "$output_path" "$proxy_url"; then
             if validate_file "$output_path"; then
                 green "下载+校验成功！"
                 return 0
             else
-                yellow "校验不合格，正在清除残留..."
+                yellow "校验失败，已清除残留..."
                 clean_garbage
             fi
         fi
     }
 
     # 3. 全部失败
-    red "下载失败 or 校验未通过，请检查网络，稍后再试！"
+    red "下载或校验失败，请检查网络，稍后再试！"
     clean_garbage
     return 1
 }
