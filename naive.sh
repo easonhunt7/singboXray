@@ -13,7 +13,7 @@ port_arg="y"
 naive_domain=""
 cf_token=""
 
-# 精准解析无等号紧凑参数 (与一键指令中的 naive, naivedomain, api 完全对齐)
+# 2. 精准解析无等号紧凑参数
 for arg in "$@"; do
     case "$arg" in
         naive*)
@@ -28,7 +28,7 @@ for arg in "$@"; do
     esac
 done
 
-# 3. 严格校验必填参数（去除交互式输入，缺失直接静默报错退出）
+# 3. 严格校验必填参数
 [[ -z "${naive_domain}" ]] && red "错误: 未检测到有效的域名参数！" && exit 1
 [[ -z "${cf_token}" ]] && red "错误: 未检测到有效的 Cloudflare API Token！" && exit 1
 
