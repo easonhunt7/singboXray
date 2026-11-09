@@ -1,7 +1,7 @@
+cat << 'EOF' > /tmp/naive_run.sh
 #!/bin/bash
 export PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 
-# 1. 基础颜色输出函数
 green() { echo -e "\033[32m$1\033[0m"; }
 red() { echo -e "\033[31m$1\033[0m"; }
 yellow() { echo -e "\033[33m$1\033[0m"; }
@@ -9,30 +9,33 @@ yellow() { echo -e "\033[33m$1\033[0m"; }
 [[ $EUID -ne 0 ]] && red "必须以 root 用户运行此脚本！" && exit 1
 
 # 初始化变量
-port_arg="y"
-naive_domain=""
-cf_token=""
+ARG_NAIVE=""
+ARG_NAIVEDOMAIN=""
+ARG_API=""
 
-# 2. 精准解析无等号紧凑参数
+# 智能解析复合与紧凑关键字参数（参考你提供的优雅逻辑）
 for arg in "$@"; do
-    case "$arg" in
-        naive*)
-            port_arg="${arg#naive}"
-            ;;
-        naivedomain*)
-            naive_domain="${arg#naivedomain}"
-            ;;
-        api*)
-            cf_token="${arg#api}"
-            ;;
-    esac
+    clean_arg="${arg//\"/}"
+    clean_arg="${clean_arg//\'/}"
+    
+    if [[ "$clean_arg" =~ ^[nN][aA][iI][vV][eE](.*)$ ]]; then
+        ARG_NAIVE="${BASH_REMATCH[1]}"
+    elif [[ "$clean_arg" =~ ^[nN][aA][iI][vV][eE][dD][oO][mM][aA][iI][nN](.*)$ ]]; then
+        ARG_NAIVEDOMAIN="${BASH_REMATCH[1]}"
+    elif [[ "$clean_arg" =~ ^[aA][pP][iI](.*)$ ]]; then
+        ARG_API="${BASH_REMATCH[1]}"
+    fi
 done
 
-# 3. 严格校验必填参数
+# 变量映射与兜底
+port_arg="${ARG_NAIVE:-y}"
+naive_domain="${ARG_NAIVEDOMAIN}"
+cf_token="${ARG_API}"
+
+# 严格校验必填参数（绝不卡住等待输入）
 [[ -z "${naive_domain}" ]] && red "错误: 未检测到有效的域名参数！" && exit 1
 [[ -z "${cf_token}" ]] && red "错误: 未检测到有效的 Cloudflare API Token！" && exit 1
 
-# 端口逻辑处理
 if [ "$port_arg" = "y" ] || [ "$port_arg" = "Y" ] || [ -z "$port_arg" ]; then
     naive_port=$(shuf -i 10000-65000 -n 1)
 elif [[ "$port_arg" =~ ^[0-9]+$ ]]; then
@@ -66,10 +69,10 @@ mkdir -p ${NAIVE_DATA_SYSTEMD}
 mkdir -p ${NAIVE_DATA_SYSTEMD}html/
 
 if [ ! -f "${NAIVE_DATA_SYSTEMD}html/index.html" ]; then
-    cat >"${NAIVE_DATA_SYSTEMD}html/index.html" <<EOF
+    cat >"${NAIVE_DATA_SYSTEMD}html/index.html" <<HTMLEOF
 <!DOCTYPE html>
 <html><head><title>Welcome!</title></head><body><h1>System Operational</h1></body></html>
-EOF
+HTMLEOF
 fi
 
 uuid_file="${NAIVE_DATA_SYSTEMD}uuid"
@@ -84,7 +87,7 @@ auth_str=$(echo -n "${naive_uuid}:${naive_uuid}" | base64 | tr --delete '\n' | b
 
 green "---> 正在生成纯 Cloudflare DNS-01 验证的正统 NaïveProxy 配置文件..."
 
-cat >${naive_config_systemd} <<EOF
+cat >${naive_config_systemd} <<JSONEOF
 {
   "admin": { "disabled": true },
   "logging": {
@@ -160,14 +163,14 @@ cat >${naive_config_systemd} <<EOF
     }
   }
 }
-EOF
+JSONEOF
 
 green "---> 正在下载并安装服务端核心..."
 bin_url="https://github.com/jonssonyan/naive/releases/latest/download/naive-linux-${get_arch}"
-curl -fsSL "${bin_url}" -o /usr/local/naive/naive || { red "核心下载失败，请检查网络！"; exit 1; }
+curl -fLss "${bin_url}" -o /usr/local/naive/naive || { red "核心下载失败，请检查网络！"; exit 1; }
 chmod +x /usr/local/naive/naive
 
-cat > /etc/systemd/system/naive.service << EOF
+cat > /etc/systemd/system/naive.service << SVIEOF
 [Unit]
 Description=Official NaiveProxy Service (Cloudflare DNS-01)
 After=network.target nss-lookup.target
@@ -183,7 +186,7 @@ LimitNOFILE=infinity
 
 [Install]
 WantedBy=multi-user.target
-EOF
+SVIEOF
 
 systemctl daemon-reload
 systemctl enable --now naive >/dev/null 2>&1
@@ -210,3 +213,4 @@ green "-------------------------------------------------------------------------
 echo -e "\e[1;33mnaive+https://${naive_uuid}:${naive_uuid}@${naive_domain}:${naive_port}?security=tls&sni=${naive_domain}#Naive-Official-CF\e[0m"
 echo -e "\e[1;33mnaive+quic://${naive_uuid}:${naive_uuid}@${naive_domain}:${naive_port}?congestion_control=bbr&security=tls&sni=${naive_domain}#Naive-Official-QUIC\e[0m"
 green "=========================================================================================="
+EOF
