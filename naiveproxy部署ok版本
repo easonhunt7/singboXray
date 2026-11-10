@@ -53,7 +53,7 @@ else
     naive_port=$(shuf -i 10000-65000 -n 1)
 fi
 
-GREEN_DATA_DIR="/usr/local/easyshare_core"
+CADDY_DATA_DIR="/usr/local/easyshare_core"
 CERT_DIR="/root/easyshare"
 
 green "---> 正在检查系统环境与依赖..."
@@ -67,12 +67,20 @@ fi
 get_arch="amd64"
 [[ $(arch) =~ ("aarch64"|"arm64") ]] && get_arch="arm64"
 
-mkdir -p ${GREEN_DATA_DIR}
+mkdir -p ${CADDY_DATA_DIR}
 mkdir -p ${CERT_DIR}
+mkdir -p ${CADDY_DATA_DIR}/html/
 
-uuid_file="${GREEN_DATA_DIR}/uuid"
+if [ ! -f "${CADDY_DATA_DIR}/html/index.html" ]; then
+    cat >"${CADDY_DATA_DIR}/html/index.html" <<EOF
+<!DOCTYPE html>
+<html><head><title>Welcome!</title></head><body><h1>System Operational</h1></body></html>
+EOF
+fi
+
+uuid_file="${CADDY_DATA_DIR}/uuid"
 if [ ! -f "$uuid_file" ]; then
-    naive_uuid=$(cat /proc/sys/kernel/random/uuid)
+    naive_uuid=$(cat /proc/sys/kernel/random/uuid | tr -d '-' | cut -c 1-16)
     echo "$naive_uuid" > "$uuid_file"
 else
     naive_uuid=$(cat "$uuid_file")
@@ -81,17 +89,13 @@ fi
 green "---> 正在使用 Cloudflare DNS-01 申请/配置 SSL 证书..."
 export CF_Token="${cf_token}"
 
-# 安装 acme.sh（若未安装）
 if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
     curl -s https://get.acme.sh | sh -s email=admin@${naive_domain} >/dev/null 2>&1
 fi
 
 ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt >/dev/null 2>&1
-
-# 申请证书
 ~/.acme.sh/acme.sh --issue --dns dns_cf -d "${naive_domain}" --force || { red "SSL 证书通过 Cloudflare DNS 申请失败，请检查 API Token 权限！"; exit 1; }
 
-# 安装证书到指定 easyshare 目录
 ~/.acme.sh/acme.sh --install-cert -d "${naive_domain}" \
     --cert-file "${CERT_DIR}/cert.crt" \
     --key-file "${CERT_DIR}/private.key" \
@@ -99,64 +103,50 @@ fi
 
 [[ ! -f "${CERT_DIR}/cert.crt" ]] && red "错误: 证书文件安装失败！" && exit 1
 
-green "---> 正在下载并安装 sing-box 核心..."
-sb_latest=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
-[ -z "$sb_latest" ] && sb_latest="1.10.0"
+green "---> 正在下载并配置集成 forwardproxy 插件的 Caddy 服务端..."
+# 使用稳定可靠的集成 forwardproxy 的定制 Caddy 二进制
+caddy_url="https://github.com/caddyserver/caddy/releases/download/v2.7.5/caddy_2.7.5_linux_${get_arch}.tar.gz"
+# 注：如需极致纯净，也可采用带 forwardproxy 的编译核心，此处采用成熟稳定的方案
+curl -fLss "https://github.com/jonssonyan/naive/releases/latest/download/naive-linux-${get_arch}" -o ${CADDY_DATA_DIR}/caddy || {
+    # 备用下载通道
+    curl -fLss "${caddy_url}" -o /tmp/caddy.tar.gz
+    tar -xz -f /tmp/caddy.tar.gz -C ${CADDY_DATA_DIR}/ caddy
+}
+chmod +x ${CADDY_DATA_DIR}/caddy
 
-sb_url="https://github.com/SagerNet/sing-box/releases/download/v${sb_latest}/sing-box-${sb_latest}-linux-${get_arch}.tar.gz"
-curl -fLss "${sb_url}" -o /tmp/sing-box.tar.gz || { red "sing-box 下载失败！"; exit 1; }
-
-tar -xz -f /tmp/sing-box.tar.gz -C /tmp/ >/dev/null 2>&1
-mv -f /tmp/sing-box-${sb_latest}-linux-${get_arch}/sing-box ${GREEN_DATA_DIR}/sing-box
-chmod +x ${GREEN_DATA_DIR}/sing-box
-rm -rf /tmp/sing-box*
-
-green "---> 正在生成 sing-box 原生 Naive 配置文件..."
-cat > "${GREEN_DATA_DIR}/config.json" << EOF
+green "---> 正在生成 Caddyfile 配置文件..."
+cat > "${CADDY_DATA_DIR}/Caddyfile" << EOF
 {
-  "log": {
-    "disabled": false,
-    "level": "info",
-    "timestamp": true
-  },
-  "inbounds": [
-    {
-      "type": "naive",
-      "tag": "naive-in",
-      "listen": "::",
-      "listen_port": ${naive_port},
-      "users": [
-        {
-          "username": "${naive_uuid}",
-          "password": "${naive_uuid}"
+    admin off
+    auto_https off
+}
+
+:${naive_port} {
+    tls ${CERT_DIR}/cert.crt ${CERT_DIR}/private.key
+    route {
+        forward_proxy {
+            basic_auth ${naive_uuid} ${naive_uuid}
+            hide_ip
+            hide_via
+            probe_resistance
         }
-      ],
-      "tls": {
-        "enabled": true,
-        "certificate_path": "${CERT_DIR}/cert.crt",
-        "key_path": "${CERT_DIR}/private.key"
-      }
+        file_server {
+            root ${CADDY_DATA_DIR}/html
+        }
     }
-  ],
-  "outbounds": [
-    {
-      "type": "direct",
-      "tag": "direct"
-    }
-  ]
 }
 EOF
 
 cat > /etc/systemd/system/naive.service << EOF
 [Unit]
-Description=Sing-Box Native NaiveProxy Service
+Description=Standard NaiveProxy Service (Caddy + ForwardProxy)
 After=network.target nss-lookup.target
 
 [Service]
 User=root
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
-ExecStart=${GREEN_DATA_DIR}/sing-box run -c ${GREEN_DATA_DIR}/config.json
+ExecStart=${CADDY_DATA_DIR}/caddy run --config ${CADDY_DATA_DIR}/Caddyfile
 Restart=on-failure
 RestartSec=5
 LimitNOFILE=infinity
@@ -179,14 +169,14 @@ fi
 
 clear
 green "=========================================================================================="
-green " Sing-Box 原生 NaïveProxy 部署成功！"
+green " 标准 NaïveProxy 服务端部署成功！"
 green "=========================================================================================="
 green "👉 证书存放路径: ${CERT_DIR}/ (easyshare)"
 green "👉 绑定的域名: ${naive_domain}"
 green "👉 服务端口: ${naive_port}"
 green "------------------------------------------------------------------------------------------"
-green "👉 客户端分享链接 (可在 v2rayN 中直接导入)："
+green "👉 客户端分享链接 (可在 v2rayN / v2rayNG / Hiddify 中直接导入)："
 green "------------------------------------------------------------------------------------------"
-echo -e "\e[1;33mnaive+https://${naive_uuid}:${naive_uuid}@${naive_domain}:${naive_port}?security=tls&sni=${naive_domain}#Naive-SingBox-CF\e[0m"
-echo -e "\e[1;33mnaive+quic://${naive_uuid}:${naive_uuid}@${naive_domain}:${naive_port}?congestion_control=bbr&security=tls&sni=${naive_domain}#Naive-SingBox-QUIC\e[0m"
+echo -e "\e[1;33mnaive+https://${naive_uuid}:${naive_uuid}@${naive_domain}:${naive_port}?security=tls&sni=${naive_domain}#Naive-Standard-H2\e[0m"
+echo -e "\e[1;33mnaive+quic://${naive_uuid}:${naive_uuid}@${naive_domain}:${naive_port}?congestion_control=bbr&security=tls&sni=${naive_domain}#Naive-Standard-QUIC\e[0m"
 green "=========================================================================================="
