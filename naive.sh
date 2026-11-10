@@ -94,7 +94,7 @@ if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
 fi
 
 ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt >/dev/null 2>&1
-~/.acme.sh/acme.sh --issue --dns dns_cf -d "${naive_domain}" --force || { red "SSL 证书通过 Cloudflare DNS 申请失败，请检查 API Token 权限！"; exit 1; }
+~/.acme.sh/acme.sh --issue --dns dns_cf -d "${naive_domain}" --force || { red "SSL 证书通过 Cloudflare DNS 申请失败，请检查 API Token 权限或域名限制！"; exit 1; }
 
 ~/.acme.sh/acme.sh --install-cert -d "${naive_domain}" \
     --cert-file "${CERT_DIR}/cert.crt" \
@@ -104,8 +104,7 @@ fi
 [[ ! -f "${CERT_DIR}/cert.crt" ]] && red "错误: 证书文件安装失败！" && exit 1
 
 green "---> 正在检查并安装官方最新版 Go 运行环境..."
-# 如果系统自带的 go 版本过低或不存在，直接下载安装官方最新稳定版
-GO_VERSION="1.23.4" # 使用稳定且兼容性极佳的版本
+GO_VERSION="1.23.4"
 if ! command -v go &> /dev/null || [[ "$(go version)" =~ "go1.1" ]] || [[ "$(go version)" =~ "go1.20" ]]; then
     yellow "---> 正在从官方获取并安装最新 Go 运行时..."
     apt-get remove -y golang-go golang >/dev/null 2>&1
@@ -115,16 +114,19 @@ if ! command -v go &> /dev/null || [[ "$(go version)" =~ "go1.1" ]] || [[ "$(go 
     export PATH=$PATH:/usr/local/go/bin
 fi
 
-# 将官方 Go 路径加入环境变量
 export PATH=$PATH:/usr/local/go/bin
 export GOPATH=$(go env GOPATH 2>/dev/null || echo "/root/go")
 export PATH=$PATH:$GOPATH/bin
 
+# 关键：配置 Go 代理策略（官方源优先，代理源作为直连超时的智能平滑回退）
+export GOPROXY="https://proxy.golang.org,https://ess.ieshare.workers.dev/,direct"
+export GO111MODULE=on
+
 green "---> 正在安装 xcaddy 编译工具..."
 go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest || { red "xcaddy 安装失败，请检查网络！"; exit 1; }
 
-# 寻找 xcaddy 的绝对路径
-XCADDY_BIN="$GOPATH/bin/xcaddy"
+GOPATH_BIN="$(go env GOPATH)/bin"
+XCADDY_BIN="$GOPATH_BIN/xcaddy"
 [ ! -f "$XCADDY_BIN" ] && XCADDY_BIN=$(command -v xcaddy)
 
 if [ -z "$XCADDY_BIN" ] || [ ! -f "$XCADDY_BIN" ]; then
@@ -132,10 +134,9 @@ if [ -z "$XCADDY_BIN" ] || [ ! -f "$XCADDY_BIN" ]; then
     exit 1
 fi
 
-green "---> 正在使用 xcaddy 编译集成最新 forwardproxy (naive 分支) 的 Caddy 服务端..."
+green "---> 正在使用官方 xcaddy 编译集成最新 forwardproxy (naive 分支) 的 Caddy 服务端..."
 [ -f "${CADDY_DATA_DIR}/caddy" ] && rm -f "${CADDY_DATA_DIR}/caddy"
 
-# 执行编译并捕获异常
 "$XCADDY_BIN" build \
     --output "${CADDY_DATA_DIR}/caddy" \
     --with github.com/caddyserver/forwardproxy@caddy2=github.com/klzgrad/forwardproxy@naive || {
