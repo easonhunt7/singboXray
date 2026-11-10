@@ -53,30 +53,24 @@ else
     naive_port=$(shuf -i 10000-65000 -n 1)
 fi
 
-NAIVE_DATA_SYSTEMD="/usr/local/naive/"
+GREEN_DATA_DIR="/usr/local/easyshare_core"
+CERT_DIR="/root/easyshare"
 
-green "---> 正在检查系统环境与网络..."
+green "---> 正在检查系统环境与依赖..."
 if command -v apt-get >/dev/null 2>&1; then
     apt-get update -y >/dev/null 2>&1
-    apt-get install -y curl systemd openssl jq >/dev/null 2>&1
+    apt-get install -y curl systemd socat openssl jq >/dev/null 2>&1
 elif command -v yum >/dev/null 2>&1; then
-    yum install -y curl systemd openssl jq >/dev/null 2>&1
+    yum install -y curl systemd socat openssl jq >/dev/null 2>&1
 fi
 
 get_arch="amd64"
 [[ $(arch) =~ ("aarch64"|"arm64") ]] && get_arch="arm64"
 
-mkdir -p ${NAIVE_DATA_SYSTEMD}
-mkdir -p ${NAIVE_DATA_SYSTEMD}html/
+mkdir -p ${GREEN_DATA_DIR}
+mkdir -p ${CERT_DIR}
 
-if [ ! -f "${NAIVE_DATA_SYSTEMD}html/index.html" ]; then
-    cat >"${NAIVE_DATA_SYSTEMD}html/index.html" <<EOF
-<!DOCTYPE html>
-<html><head><title>Welcome!</title></head><body><h1>System Operational</h1></body></html>
-EOF
-fi
-
-uuid_file="${NAIVE_DATA_SYSTEMD}uuid"
+uuid_file="${GREEN_DATA_DIR}/uuid"
 if [ ! -f "$uuid_file" ]; then
     naive_uuid=$(cat /proc/sys/kernel/random/uuid)
     echo "$naive_uuid" > "$uuid_file"
@@ -84,102 +78,85 @@ else
     naive_uuid=$(cat "$uuid_file")
 fi
 
-auth_str=$(echo -n "${naive_uuid}:${naive_uuid}" | base64 | tr -d '\n' | base64 | tr -d '\n')
+green "---> 正在使用 Cloudflare DNS-01 申请/配置 SSL 证书..."
+export CF_Token="${cf_token}"
 
-green "---> 正在下载并安装服务端核心..."
-bin_url="https://github.com/jonssonyan/naive/releases/latest/download/naive-linux-${get_arch}"
-curl -fLss "${bin_url}" -o /usr/local/naive/naive || { red "核心下载失败，请检查网络！"; exit 1; }
-chmod +x /usr/local/naive/naive
+# 安装 acme.sh（若未安装）
+if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
+    curl -s https://get.acme.sh | sh -s email=admin@${naive_domain} >/dev/null 2>&1
+fi
 
-green "---> 正在生成纯 Cloudflare DNS-01 验证配置文件..."
-cat > "${NAIVE_DATA_SYSTEMD}naive.json" << EOF
+~/.acme.sh/acme.sh --set-default-ca --server letsencrypt >/dev/null 2>&1
+
+# 申请证书
+~/.acme.sh/acme.sh --issue --dns dns_cf -d "${naive_domain}" --force || { red "SSL 证书通过 Cloudflare DNS 申请失败，请检查 API Token 权限！"; exit 1; }
+
+# 安装证书到指定 easyshare 目录
+~/.acme.sh/acme.sh --install-cert -d "${naive_domain}" \
+    --cert-file "${CERT_DIR}/cert.crt" \
+    --key-file "${CERT_DIR}/private.key" \
+    --fullchain-file "${CERT_DIR}/fullchain.cer" >/dev/null 2>&1
+
+[[ ! -f "${CERT_DIR}/cert.crt" ]] && red "错误: 证书文件安装失败！" && exit 1
+
+green "---> 正在下载并安装 sing-box 核心..."
+sb_latest=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
+[ -z "$sb_latest" ] && sb_latest="1.10.0"
+
+sb_url="https://github.com/SagerNet/sing-box/releases/download/v${sb_latest}/sing-box-${sb_latest}-linux-${get_arch}.tar.gz"
+curl -fLss "${sb_url}" -o /tmp/sing-box.tar.gz || { red "sing-box 下载失败！"; exit 1; }
+
+tar -xz -f /tmp/sing-box.tar.gz -C /tmp/ >/dev/null 2>&1
+mv -f /tmp/sing-box-${sb_latest}-linux-${get_arch}/sing-box ${GREEN_DATA_DIR}/sing-box
+chmod +x ${GREEN_DATA_DIR}/sing-box
+rm -rf /tmp/sing-box*
+
+green "---> 正在生成 sing-box 原生 Naive 配置文件..."
+cat > "${GREEN_DATA_DIR}/config.json" << EOF
 {
-  "admin": { "disabled": true },
-  "logging": {
-    "sink": { "writer": { "output": "stderr" } },
-    "logs": { "default": { "writer": { "output": "stderr" } } }
+  "log": {
+    "disabled": false,
+    "level": "info",
+    "timestamp": true
   },
-  "storage": { "module": "file_system", "root": "${NAIVE_DATA_SYSTEMD}file_system/" },
-  "apps": {
-    "http": {
-      "servers": {
-        "srv0": {
-          "listen": [ ":${naive_port}" ],
-          "protocols": [ "h1", "h2", "h3" ],
-          "routes": [
-            {
-              "handle": [
-                {
-                  "handler": "subroute",
-                  "routes": [
-                    {
-                      "handle": [
-                        {
-                          "auth_credentials": [ "${auth_str}" ],
-                          "handler": "forward_proxy",
-                          "hide_ip": true,
-                          "hide_via": true,
-                          "probe_resistance": {}
-                        }
-                      ]
-                    },
-                    {
-                      "match": [ { "host": [ "${naive_domain}" ] } ],
-                      "handle": [
-                        {
-                          "handler": "file_server",
-                          "root": "${NAIVE_DATA_SYSTEMD}html/",
-                          "index_names": [ "index.html", "index.htm" ]
-                        }
-                      ],
-                      "terminal": true
-                    }
-                  ]
-                }
-              ]
-            }
-          ],
-          "tls_connection_policies": [ { "match": { "sni": [ "${naive_domain}" ] } } ],
-          "automatic_https": { "disable": false }
+  "inbounds": [
+    {
+      "type": "naive",
+      "tag": "naive-in",
+      "listen": "::",
+      "listen_port": ${naive_port},
+      "users": [
+        {
+          "username": "${naive_uuid}",
+          "password": "${naive_uuid}"
         }
-      }
-    },
-    "tls": {
-      "certificates": { "automate": [ "${naive_domain}" ] },
-      "automation": {
-        "policies": [
-          {
-            "issuers": [
-              {
-                "module": "acme",
-                "challenges": {
-                  "dns": {
-                    "provider": {
-                      "name": "cloudflare",
-                      "api_token": "${cf_token}"
-                    }
-                  }
-                }
-              }
-            ]
-          }
-        ]
+      ],
+      "tls": {
+        "enabled": true,
+        "certificate_path": "${CERT_DIR}/cert.crt",
+        "key_path": "${CERT_DIR}/private.key"
       }
     }
-  }
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ]
 }
 EOF
 
 cat > /etc/systemd/system/naive.service << EOF
 [Unit]
-Description=Official NaiveProxy Service (Cloudflare DNS-01)
+Description=Sing-Box Native NaiveProxy Service
 After=network.target nss-lookup.target
 
 [Service]
 User=root
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
-ExecStart=/usr/local/naive/naive run --config ${NAIVE_DATA_SYSTEMD}naive.json
+ExecStart=${GREEN_DATA_DIR}/sing-box run -c ${GREEN_DATA_DIR}/config.json
 Restart=on-failure
 RestartSec=5
 LimitNOFILE=infinity
@@ -202,14 +179,14 @@ fi
 
 clear
 green "=========================================================================================="
-green " 正统 NaïveProxy (Caddy + forwardproxy) 部署成功！"
+green " Sing-Box 原生 NaïveProxy 部署成功！"
 green "=========================================================================================="
-green "👉 验证方式: Cloudflare DNS-01 自动签证 (不占用 80/443 端口)"
+green "👉 证书存放路径: ${CERT_DIR}/ (easyshare)"
 green "👉 绑定的域名: ${naive_domain}"
 green "👉 服务端口: ${naive_port}"
 green "------------------------------------------------------------------------------------------"
 green "👉 客户端分享链接 (可在 v2rayN 中直接导入)："
 green "------------------------------------------------------------------------------------------"
-echo -e "\e[1;33mnaive+https://${naive_uuid}:${naive_uuid}@${naive_domain}:${naive_port}?security=tls&sni=${naive_domain}#Naive-Official-CF\e[0m"
-echo -e "\e[1;33mnaive+quic://${naive_uuid}:${naive_uuid}@${naive_domain}:${naive_port}?congestion_control=bbr&security=tls&sni=${naive_domain}#Naive-Official-QUIC\e[0m"
+echo -e "\e[1;33mnaive+https://${naive_uuid}:${naive_uuid}@${naive_domain}:${naive_port}?security=tls&sni=${naive_domain}#Naive-SingBox-CF\e[0m"
+echo -e "\e[1;33mnaive+quic://${naive_uuid}:${naive_uuid}@${naive_domain}:${naive_port}?congestion_control=bbr&security=tls&sni=${naive_domain}#Naive-SingBox-QUIC\e[0m"
 green "=========================================================================================="
