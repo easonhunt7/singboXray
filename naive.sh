@@ -103,18 +103,25 @@ fi
 
 [[ ! -f "${CERT_DIR}/cert.crt" ]] && red "错误: 证书文件安装失败！" && exit 1
 
-green "---> 正在检查并安装 Go 语言环境..."
-if ! command -v go &> /dev/null; then
-    apt-get update -y >/dev/null 2>&1
-    apt-get install -y golang-go >/dev/null 2>&1 || yum install -y golang >/dev/null 2>&1
+green "---> 正在检查并安装官方最新版 Go 运行环境..."
+# 如果系统自带的 go 版本过低或不存在，直接下载安装官方最新稳定版
+GO_VERSION="1.23.4" # 使用稳定且兼容性极佳的版本
+if ! command -v go &> /dev/null || [[ "$(go version)" =~ "go1.1" ]] || [[ "$(go version)" =~ "go1.20" ]]; then
+    yellow "---> 正在从官方获取并安装最新 Go 运行时..."
+    apt-get remove -y golang-go golang >/dev/null 2>&1
+    curl -fLss "https://go.dev/dl/go${GO_VERSION}.linux-${get_arch}.tar.gz" -o /tmp/go.tar.gz
+    rm -rf /usr/local/go
+    tar -C /usr/local -xzf /tmp/go.tar.gz
+    export PATH=$PATH:/usr/local/go/bin
 fi
 
-# 确保 Go 路径正确加入环境变量
+# 将官方 Go 路径加入环境变量
+export PATH=$PATH:/usr/local/go/bin
 export GOPATH=$(go env GOPATH 2>/dev/null || echo "/root/go")
 export PATH=$PATH:$GOPATH/bin
 
-green "---> 正在安装/更新 xcaddy 编译工具..."
-go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest || { red "xcaddy 安装失败，请检查网络或 Go 环境！"; exit 1; }
+green "---> 正在安装 xcaddy 编译工具..."
+go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest || { red "xcaddy 安装失败，请检查网络！"; exit 1; }
 
 # 寻找 xcaddy 的绝对路径
 XCADDY_BIN="$GOPATH/bin/xcaddy"
@@ -132,7 +139,7 @@ green "---> 正在使用 xcaddy 编译集成最新 forwardproxy (naive 分支) �
 "$XCADDY_BIN" build \
     --output "${CADDY_DATA_DIR}/caddy" \
     --with github.com/caddyserver/forwardproxy@caddy2=github.com/klzgrad/forwardproxy@naive || {
-    red "Caddy 编译失败！通常是由于系统自带的 Go 版本过低，建议升级 Go 或使用预编译版本。"
+    red "Caddy 编译失败！"
     exit 1
 }
 
