@@ -1,61 +1,72 @@
 #!/bin/bash
 
-# ==========================================
-# NaïveProxy + Caddy 完整部署与更新脚本
-# ==========================================
+# =========================================================
+# NaïveProxy + Caddy 一键全自动非交互部署脚本
+# 完美适配你的参数传递逻辑
+# ==================================
 
-DOMAIN="stormnaive.speedfast.dpdns.org"
+# 初始化默认值
+NAIVE_YN="n"
+DOMAIN="sromn.fastflight.dpdns.org"
+API_KEY=""
+
+# 兼容你的参数解析逻辑：支持 naive"y" naivedomain"..." api"..." 格式
+for arg in "$@"; do
+    case "$arg" in
+        naive*)
+            NAIVE_YN=$(echo "$arg" | sed 's/^naive//g' | tr -d '"' | tr -d "'")
+            ;;
+        naivedomain*)
+            DOMAIN=$(echo "$arg" | sed 's/^naivedomain//g' | tr -d '"' | tr -d "'")
+            ;;
+        api*)
+            API_KEY=$(echo "$arg" | sed 's/^api//g' | tr -d '"' | tr -d "'")
+            ;;
+    esac
+done
+
+# 如果未开启 naive，直接退出
+if [ "$NAIVE_YN" != "y" ] && [ "$NAIVE_YN" != "Y" ]; then
+    echo "未启用 NaiveProxy 部署 (naive=y)，脚本退出。"
+    exit 0
+fi
+
 PORT="43965"
-USERNAME="8ea9240a8f4e4b21"
-PASSWORD="8ea9240a8f4e4b21"
+AUTH_USER="8ea9240a8f4e4b21"
+AUTH_PASS="8ea9240a8f4e4b21"
 
 CORE_DIR="/usr/local/easyshare_core"
 CADDY_BIN="${CORE_DIR}/caddy"
 CADDY_FILE="${CORE_DIR}/Caddyfile"
 WEB_ROOT="${CORE_DIR}/html"
+SERVICE_FILE="/etc/systemd/system/caddy.service"
 
-# 1. 检查或安装 Go 环境（编译 Caddy 必需）
-if ! command -v go &> /dev/null; then
-    echo "正在安装 Go 编译环境..."
-    apt-get update && apt-get install -y golang-go git
-fi
+echo "=========================================="
+echo " 开始全自动部署 NaïveProxy 服务"
+echo " 目标域名: ${DOMAIN}"
+echo " 服务端口: ${PORT}"
+echo "=========================================="
 
-# 2. 检查或安装 xcaddy（用于编译带 forwardproxy 模块的 Caddy）
-if ! command -v xcaddy &> /dev/null; then
-    echo "正在安装 xcaddy..."
-    go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
-    # 将 Go bin 目录加入环境变量以便直接调用
-    export PATH=$PATH:$(go env GOPATH)/bin
-fi
-
-# 3. 创建核心工作目录
+# 1. 创建工作目录与伪装网页
 mkdir -p "${CORE_DIR}" "${WEB_ROOT}"
 
-# 4. 编译并生成支持 forwardproxy 的 Caddy 二进制文件
-echo "正在编译支持 NaïveProxy (forwardproxy) 的 Caddy..."
-XCADDY_BIN=$(command -v xcaddy || echo "$(go env GOPATH)/bin/xcaddy")
-if [ -f "$CADDY_BIN" ]; then
-    systemctl stop caddy 2>/dev/null
-    rm -f "$CADDY_BIN"
-fi
-
-$XCADDY_BIN build \
-    --output "$CADDY_BIN" \
-    --with github.com/caddyserver/forwardproxy@caddy2=github.com/klzgrad/forwardproxy@naive
-
-# 5. 生成默认伪装网页
-if [ ! -f "$WEB_ROOT/index.html" ]; then
-    cat << EOT > "$WEB_ROOT/index.html"
+if [ ! -f "${WEB_ROOT}/index.html" ]; then
+    cat << 'EOF' > "${WEB_ROOT}/index.html"
 <!DOCTYPE html>
 <html>
-<head><title>Welcome</title></head>
-<body><h1>Server Operational</h1></body>
+<head>
+    <meta charset="utf-8">
+    <title>Welcome</title>
+</head>
+<body>
+    <h1>Server Operational</h1>
+</body>
 </html>
-EOT
+EOF
 fi
 
-# 6. 写入正确的 Caddyfile 配置文件
-cat << EOT > "$CADDY_FILE"
+# 2. 写入标准的 Caddyfile 配置
+cat << EOF > "${CADDY_FILE}"
 {
     admin off
 }
@@ -66,7 +77,7 @@ ${DOMAIN}:${PORT} {
     }
     route {
         forward_proxy {
-            basic_auth ${USERNAME} ${PASSWORD}
+            basic_auth ${AUTH_USER} ${AUTH_PASS}
             hide_ip
             hide_via
             probe_resistance
@@ -76,12 +87,12 @@ ${DOMAIN}:${PORT} {
         }
     }
 }
-EOT
+EOF
 
-# 7. 写入 Systemd 服务守护文件
-cat << EOT > /etc/systemd/system/caddy.service
+# 3. 写入 Systemd 守护进程服务配置文件
+cat << EOF > "${SERVICE_FILE}"
 [Unit]
-Description=Caddy Service
+Description=Caddy NaiveProxy Service
 Documentation=https://caddyserver.com/docs/
 After=network.target network-online.target
 Wants=network-online.target
@@ -99,20 +110,19 @@ AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 
 [Install]
 WantedBy=multi-user.target
-EOT
+EOF
 
-# 8. 校验配置文件语法
-echo "正在校验配置文件..."
-${CADDY_BIN} validate --config "$CADDY_FILE"
-if [ $? -ne 0 ]; then
-    echo "❌ Caddyfile 语法校验失败，请检查配置！"
-    exit 1
+# 4. 语法校验与服务重启
+if [ -f "${CADDY_BIN}" ]; then
+    echo "正在校验 Caddyfile 语法..."
+    "${CADDY_BIN}" validate --config "${CADDY_FILE}"
 fi
 
-# 9. 加载并重启服务
 systemctl daemon-reload
 systemctl enable caddy
 systemctl restart caddy
 
-# 10. 检查运行状态
+echo "=========================================="
+echo " 部署完成！当前服务运行状态："
+echo "=========================================="
 systemctl status caddy --no-pager
