@@ -103,12 +103,26 @@ fi
 
 [[ ! -f "${CERT_DIR}/cert.crt" ]] && red "错误: 证书文件安装失败！" && exit 1
 
-green "---> 正在下载并配置集成 forwardproxy 插件的 Caddy 服务端..."
-caddy_url="https://github.com/caddyserver/caddy/releases/download/v2.7.5/caddy_2.7.5_linux_${get_arch}.tar.gz"
-curl -fLss "https://github.com/jonssonyan/naive/releases/latest/download/naive-linux-${get_arch}" -o ${CADDY_DATA_DIR}/caddy || {
-    curl -fLss "${caddy_url}" -o /tmp/caddy.tar.gz
-    tar -xz -f /tmp/caddy.tar.gz -C ${CADDY_DATA_DIR}/ caddy
-}
+green "---> 正在安装 Go 语言环境与 xcaddy 编译工具..."
+if ! command -v go &> /dev/null; then
+    apt-get update -y >/dev/null 2>&1
+    apt-get install -y golang-go >/dev/null 2>&1 || yum install -y golang >/dev/null 2>&1
+fi
+
+if ! command -v xcaddy &> /dev/null; then
+    go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+    export PATH=$PATH:$(go env GOPATH)/bin
+fi
+
+green "---> 正在使用 xcaddy 编译集成最新 forwardproxy (naive 分支) 的 Caddy 服务端..."
+XCADDY_BIN=$(command -v xcaddy || echo "$(go env GOPATH)/bin/xcaddy")
+[ -f "${CADDY_DATA_DIR}/caddy" ] && rm -f "${CADDY_DATA_DIR}/caddy"
+
+# 拉取官方最新版 Caddy 核心并挂载 naive 插件分支
+$XCADDY_BIN build \
+    --output "${CADDY_DATA_DIR}/caddy" \
+    --with github.com/caddyserver/forwardproxy@caddy2=github.com/klzgrad/forwardproxy@naive
+
 chmod +x ${CADDY_DATA_DIR}/caddy
 
 green "---> 正在生成 Caddyfile 配置文件..."
