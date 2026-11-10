@@ -1,46 +1,34 @@
 #!/bin/bash
 
-# ==========================================
-# NaiveProxy 自签证书版一键卸载脚本
-# 兼容: Ubuntu / Debian / Alpine
-# ==========================================
-
-# 检查执行权限
+# 确保以 root 权限运行
 if [ "$EUID" -ne 0 ]; then
-  echo "[-] 请使用 root 权限运行此脚本 (sudo -i)"
+  echo "请使用 root 权限运行此脚本 (sudo -i)"
   exit 1
 fi
 
-echo "[+] 开始清理并卸载 NaïveProxy 及相关组件..."
+echo "==> 1. 停止并清理所有 Caddy 进程..."
+pkill -f caddy 2>/dev/null
+killall -9 caddy 2>/dev/null
 
-# 1. 停止并禁用 Sing-box 服务
-if systemctl list-units --type=service --all | grep -q "sing-box.service"; then
-    echo "[*] 正在停止 sing-box 服务..."
-    systemctl stop sing-box
-    systemctl disable sing-box
-    rm -f /etc/systemd/system/sing-box.service
-    systemctl daemon-reload
-    echo "[+] sing-box 服务已清除"
-fi
+echo "==> 2. 卸载 Caddy 服务与删除二进制文件..."
+systemctl stop caddy 2>/dev/null
+systemctl disable caddy 2>/dev/null
+rm -f /etc/systemd/system/caddy.service
+rm -f /usr/bin/caddy
+systemctl daemon-reload
 
-# 2. 删除 Sing-box 二进制文件
-if [ -f /usr/local/bin/sing-box ]; then
-    rm -f /usr/local/bin/sing-box
-    echo "[+] 已删除 sing-box 内核主程序"
-fi
+echo "==> 3. 清理 Caddy 配置文件与证书残留目录..."
+rm -rf /etc/caddy
+rm -rf /etc/ssl/caddy
+rm -rf /root/.local/share/caddy
+rm -rf /root/.config/caddy
+# 清理你前面提到的 easyshare 目录（存放证书的位置，可根据需要保留）
+rm -rf /root/easyshare
 
-# 3. 删除自签证书与账号凭证目录
-if [ -d /etc/naive ]; then
-    rm -rf /etc/naive
-    echo "[+] 已清理证书与认证目录 (/etc/naive)"
-fi
+echo "==> 4. 重置系统防火墙（可选：清空 iptables 规则）..."
+iptables -F
+ip6tables -F
 
-# 4. 删除配置文件目录
-if [ -d /etc/sing-box ]; then
-    rm -rf /etc/sing-box
-    echo "[+] 已清理配置文件目录 (/etc/sing-box)"
-fi
-
-echo "=================================================="
-echo "🎉 NaïveProxy 卸载完成！服务器已恢复干净状态。"
-echo "=================================================="
+echo "=========================================="
+echo "🎉 Caddy 及相关代理环境已彻底卸载清理完毕！"
+echo "=========================================="
