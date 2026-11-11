@@ -118,12 +118,21 @@ export PATH=$PATH:/usr/local/go/bin
 export GOPATH=$(go env GOPATH 2>/dev/null || echo "/root/go")
 export PATH=$PATH:$GOPATH/bin
 
-# 关键：配置 Go 代理策略
-export GOPROXY="https://proxy.golang.org,https://ess.ieshare.workers.dev/,direct"
+# 配置标准的 Go 编译代理环境
+export GOPROXY="https://proxy.golang.org,https://goproxy.io,direct"
 export GO111MODULE=on
 
-green "---> 正在安装 xcaddy 编译工具..."
-go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest || { red "xcaddy 安装失败，请检查网络！"; exit 1; }
+green "---> 正在直接下载官方 xcaddy 编译工具..."
+XCADDY_VERSION="v0.4.7"
+XCADDY_URL="https://github.com/caddyserver/xcaddy/releases/download/${XCADDY_VERSION}/xcaddy_${XCADDY_VERSION}_linux_${get_arch}.tar.gz"
+
+mkdir -p "$GOPATH/bin"
+curl -fLss "$XCADDY_URL" -o /tmp/xcaddy.tar.gz || {
+    red "xcaddy 二进制下载失败，请检查网络！"
+    exit 1
+}
+tar -C "$GOPATH/bin" -xzf /tmp/xcaddy.tar.gz xcaddy
+rm -f /tmp/xcaddy.tar.gz
 
 GOPATH_BIN="$(go env GOPATH)/bin"
 XCADDY_BIN="$GOPATH_BIN/xcaddy"
