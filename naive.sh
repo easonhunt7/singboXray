@@ -122,12 +122,11 @@ export PATH=$PATH:$GOPATH/bin
 export GOPROXY="https://proxy.golang.org,https://goproxy.io,direct"
 export GO111MODULE=on
 
-green "---> 正在直接下载官方 xcaddy 编译工具..."
+green "---> 正在通过您的自建 Cloudflare 代理下载 xcaddy 编译工具..."
 XCADDY_VERSION="v0.4.7"
+VERSION_NUM="0.4.7" # 修正：官方文件名无 v 前缀
 
-# 兼容不同的架构命名
 if [ "$get_arch" = "amd64" ]; then
-    XCADDY_ARCH="k8s" # 占位或标准命名
     arch_name="amd64"
 elif [ "$get_arch" = "arm64" ]; then
     arch_name="arm64"
@@ -135,21 +134,20 @@ else
     arch_name="amd64"
 fi
 
-XCADDY_URL="https://github.com/caddyserver/xcaddy/releases/download/${XCADDY_VERSION}/xcaddy_${XCADDY_VERSION}_linux_${arch_name}.tar.gz"
+# 核心：直接使用您的自建 Worker 加速代理
+PROXY_URL="https://ess.ieshare.workers.dev/https://github.com/caddyserver/xcaddy/releases/download/${XCADDY_VERSION}/xcaddy_${VERSION_NUM}_linux_${arch_name}.tar.gz"
 
 mkdir -p "$GOPATH/bin"
-yellow "正在请求下载链接: $XCADDY_URL"
+yellow "正在请求代理下载链接: $PROXY_URL"
 
-# 使用更为健壮的下载方式，并打印详细错误信息
-if ! curl -fL --progress-bar "$XCADDY_URL" -o /tmp/xcaddy.tar.gz; then
-    red "GitHub 官方下载失败，正在尝试通过备用代理加速下载..."
-    # 备用通道下载
-    ALT_URL="https://ess.ieshare.workers.dev/https://github.com/caddyserver/xcaddy/releases/download/${XCADDY_VERSION}/xcaddy_${XCADDY_VERSION}_linux_${arch_name}.tar.gz"
+curl -fL --progress-bar "$PROXY_URL" -o /tmp/xcaddy.tar.gz || {
+    red "自建代理下载失败，正在尝试通过官方直连下载..."
+    ALT_URL="https://github.com/caddyserver/xcaddy/releases/download/${XCADDY_VERSION}/xcaddy_${VERSION_NUM}_linux_${arch_name}.tar.gz"
     curl -fL --progress-bar "$ALT_URL" -o /tmp/xcaddy.tar.gz || {
-        red "错误: xcaddy 二进制下载彻底失败！请检查当前网络环境是否能连通 GitHub。"
+        red "错误: xcaddy 二进制下载彻底失败！"
         exit 1
     }
-fi
+}
 
 tar -C "$GOPATH/bin" -xzf /tmp/xcaddy.tar.gz xcaddy || {
     red "错误: xcaddy 解压失败，压缩包可能损坏！"
@@ -170,7 +168,7 @@ fi
 green "---> 正在使用官方 xcaddy 编译集成最新 forwardproxy (naive 分支) 的 Caddy 服务端..."
 [ -f "${CADDY_DATA_DIR}/caddy" ] && rm -f "${CADDY_DATA_DIR}/caddy"
 
-# 【核心修复】：在执行编译前，再次强制导出 PATH，确保 xcaddy 内部能定位到 go 命令
+# 在执行编译前，再次强制导出 PATH，确保 xcaddy 内部能定位到 go 命令
 export PATH="/usr/local/go/bin:$GOPATH/bin:$PATH"
 
 "$XCADDY_BIN" build \
