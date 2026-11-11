@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Xhttp 节点一键部署命令生成器</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; background: #f9f9f9; color: #333; }
+        .card { background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: 600; }
+        input { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+        pre { background: #2d3748; color: #fff; padding: 15px; border-radius: 6px; overflow-x: auto; font-size: 13px; line-height: 1.5; }
+        button { background: #0070f3; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 14px; margin-top: 10px; }
+        button:hover { background: #0051a2; }
+    </style>
+</head>
+<body>
+<div class="card">
+    <h2>🚀 Xhttp 节点一键部署命令生成器</h2>
+    <p>在下方填入你的配置信息，系统将为你实时生成专属的 VPS 安装命令。</p>
+    
+    <div class="form-group">
+        <label>直连子域名 (例如 h2.example.com):</label>
+        <input type="text" id="domain" placeholder="h2.example.com" oninput="updateCommand()">
+    </div>
+    
+    <div class="form-group">
+        <label>Cloudflare API Token:</label>
+        <input type="text" id="token" placeholder="你的 Cloudflare API Token" oninput="updateCommand()">
+    </div>
+
+    <div class="form-group">
+        <label>专属安装命令 (复制并在你的 VPS 终端中运行):</label>
+        <pre id="cmdOutput">请先在上方填写域名和 Token...</pre>
+        <button onclick="copyCommand()">📋 一键复制命令</button>
+    </div>
+</div>
+
+<script>
+    function updateCommand() {
+        const domain = document.getElementById('domain').value.trim() || '填写的域名';
+        const token = document.getElementById('token').value.trim() || '你的Token';
+        
+        // 生成带环境变量前置赋值的 curl 命令
+        const fullCmd = `DOMAIN="${domain}" CF_TOKEN="${token}" bash <(curl -Ls https://raw.githubusercontent.com/你的GitHub用户名/你的仓库名/main/install.sh)`;
+        
+        document.getElementById('cmdOutput').innerText = fullCmd;
+    }
+
+    function copyCommand() {
+        const text = document.getElementById('cmdOutput').innerText;
+        navigator.clipboard.writeText(text).then(() => {
+            alert('命令已复制到剪贴板！请到 VPS 终端中粘贴运行。');
+        });
+    }
+</script>
+</body>
+</html>
