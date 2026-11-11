@@ -118,13 +118,12 @@ export PATH=$PATH:/usr/local/go/bin
 export GOPATH=$(go env GOPATH 2>/dev/null || echo "/root/go")
 export PATH=$PATH:$GOPATH/bin
 
-# 关键：配置 Go 代理策略（官方源优先，代理源作为直连超时的智能平滑回退）
+# 关键：配置 Go 代理策略
 export GOPROXY="https://proxy.golang.org,https://ess.ieshare.workers.dev/,direct"
 export GO111MODULE=on
 
 green "---> 正在安装 xcaddy 编译工具..."
-export GOSUMDB=off
-go install -v github.com/caddyserver/xcaddy/cmd/xcaddy@latest || { red "xcaddy 安装失败，请检查网络！"; exit 1; }
+go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest || { red "xcaddy 安装失败，请检查网络！"; exit 1; }
 
 GOPATH_BIN="$(go env GOPATH)/bin"
 XCADDY_BIN="$GOPATH_BIN/xcaddy"
@@ -137,6 +136,9 @@ fi
 
 green "---> 正在使用官方 xcaddy 编译集成最新 forwardproxy (naive 分支) 的 Caddy 服务端..."
 [ -f "${CADDY_DATA_DIR}/caddy" ] && rm -f "${CADDY_DATA_DIR}/caddy"
+
+# 【核心修复】：在执行编译前，再次强制导出 PATH，确保 xcaddy 内部能定位到 go 命令
+export PATH="/usr/local/go/bin:$GOPATH/bin:$PATH"
 
 "$XCADDY_BIN" build \
     --output "${CADDY_DATA_DIR}/caddy" \
