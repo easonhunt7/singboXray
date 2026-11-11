@@ -122,9 +122,9 @@ export PATH=$PATH:$GOPATH/bin
 export GOPROXY="https://proxy.golang.org,https://goproxy.io,direct"
 export GO111MODULE=on
 
-green "---> 正在通过您的自建 Cloudflare 代理下载 xcaddy 编译工具..."
+green "---> 正在通过自建 Cloudflare 代理下载 xcaddy 编译工具..."
 XCADDY_VERSION="v0.4.7"
-VERSION_NUM="0.4.7" # 修正：官方文件名无 v 前缀
+VERSION_NUM="0.4.7"
 
 if [ "$get_arch" = "amd64" ]; then
     arch_name="amd64"
@@ -134,12 +134,9 @@ else
     arch_name="amd64"
 fi
 
-# 核心：直接使用您的自建 Worker 加速代理
 PROXY_URL="https://ess.ieshare.workers.dev/https://github.com/caddyserver/xcaddy/releases/download/${XCADDY_VERSION}/xcaddy_${VERSION_NUM}_linux_${arch_name}.tar.gz"
 
 mkdir -p "$GOPATH/bin"
-yellow "正在请求代理下载链接: $PROXY_URL"
-
 curl -fL --progress-bar "$PROXY_URL" -o /tmp/xcaddy.tar.gz || {
     red "自建代理下载失败，正在尝试通过官方直连下载..."
     ALT_URL="https://github.com/caddyserver/xcaddy/releases/download/${XCADDY_VERSION}/xcaddy_${VERSION_NUM}_linux_${arch_name}.tar.gz"
@@ -150,7 +147,7 @@ curl -fL --progress-bar "$PROXY_URL" -o /tmp/xcaddy.tar.gz || {
 }
 
 tar -C "$GOPATH/bin" -xzf /tmp/xcaddy.tar.gz xcaddy || {
-    red "错误: xcaddy 解压失败，压缩包可能损坏！"
+    red "错误: xcaddy 解压失败！"
     rm -f /tmp/xcaddy.tar.gz
     exit 1
 }
@@ -165,12 +162,12 @@ if [ -z "$XCADDY_BIN" ] || [ ! -f "$XCADDY_BIN" ]; then
     exit 1
 fi
 
-green "---> 正在使用官方 xcaddy 编译集成最新 forwardproxy (naive 分支) 的 Caddy 服务端..."
+green "---> 正在使用官方 xcaddy 编译集成 forwardproxy (naive 分支) 的 Caddy 服务端..."
 [ -f "${CADDY_DATA_DIR}/caddy" ] && rm -f "${CADDY_DATA_DIR}/caddy"
 
-# 在执行编译前，再次强制导出 PATH，确保 xcaddy 内部能定位到 go 命令
 export PATH="/usr/local/go/bin:$GOPATH/bin:$PATH"
 
+# 【优化点】：去掉了复杂的裁剪标签，使用最稳健的标准编译指令
 "$XCADDY_BIN" build \
     --output "${CADDY_DATA_DIR}/caddy" \
     --with github.com/caddyserver/forwardproxy@caddy2=github.com/klzgrad/forwardproxy@naive || {
