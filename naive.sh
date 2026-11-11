@@ -123,7 +123,8 @@ export GOPROXY="https://proxy.golang.org,https://ess.ieshare.workers.dev/,direct
 export GO111MODULE=on
 
 green "---> 正在安装 xcaddy 编译工具..."
-go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest || { red "xcaddy 安装失败，请检查网络！"; exit 1; }
+export GOSUMDB=off
+go install -v github.com/caddyserver/xcaddy/cmd/xcaddy@latest || { red "xcaddy 安装失败，请检查网络！"; exit 1; }
 
 GOPATH_BIN="$(go env GOPATH)/bin"
 XCADDY_BIN="$GOPATH_BIN/xcaddy"
