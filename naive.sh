@@ -124,14 +124,38 @@ export GO111MODULE=on
 
 green "---> 正在直接下载官方 xcaddy 编译工具..."
 XCADDY_VERSION="v0.4.7"
-XCADDY_URL="https://github.com/caddyserver/xcaddy/releases/download/${XCADDY_VERSION}/xcaddy_${XCADDY_VERSION}_linux_${get_arch}.tar.gz"
+
+# 兼容不同的架构命名
+if [ "$get_arch" = "amd64" ]; then
+    XCADDY_ARCH="k8s" # 占位或标准命名
+    arch_name="amd64"
+elif [ "$get_arch" = "arm64" ]; then
+    arch_name="arm64"
+else
+    arch_name="amd64"
+fi
+
+XCADDY_URL="https://github.com/caddyserver/xcaddy/releases/download/${XCADDY_VERSION}/xcaddy_${XCADDY_VERSION}_linux_${arch_name}.tar.gz"
 
 mkdir -p "$GOPATH/bin"
-curl -fLss "$XCADDY_URL" -o /tmp/xcaddy.tar.gz || {
-    red "xcaddy 二进制下载失败，请检查网络！"
+yellow "正在请求下载链接: $XCADDY_URL"
+
+# 使用更为健壮的下载方式，并打印详细错误信息
+if ! curl -fL --progress-bar "$XCADDY_URL" -o /tmp/xcaddy.tar.gz; then
+    red "GitHub 官方下载失败，正在尝试通过备用代理加速下载..."
+    # 备用通道下载
+    ALT_URL="https://ess.ieshare.workers.dev/https://github.com/caddyserver/xcaddy/releases/download/${XCADDY_VERSION}/xcaddy_${XCADDY_VERSION}_linux_${arch_name}.tar.gz"
+    curl -fL --progress-bar "$ALT_URL" -o /tmp/xcaddy.tar.gz || {
+        red "错误: xcaddy 二进制下载彻底失败！请检查当前网络环境是否能连通 GitHub。"
+        exit 1
+    }
+fi
+
+tar -C "$GOPATH/bin" -xzf /tmp/xcaddy.tar.gz xcaddy || {
+    red "错误: xcaddy 解压失败，压缩包可能损坏！"
+    rm -f /tmp/xcaddy.tar.gz
     exit 1
 }
-tar -C "$GOPATH/bin" -xzf /tmp/xcaddy.tar.gz xcaddy
 rm -f /tmp/xcaddy.tar.gz
 
 GOPATH_BIN="$(go env GOPATH)/bin"
