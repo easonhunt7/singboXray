@@ -56,7 +56,12 @@ fi
 SBX_DIR="/usr/local/singbox_naive"
 CERT_DIR="/root/easyshare"
 
-green "---> 正在检查系统环境与依赖..."
+green "---> 正在清理旧版服务及检查系统环境..."
+systemctl stop naive >/dev/null 2>&1
+systemctl disable naive >/dev/null 2>&1
+rm -f /etc/systemd/system/naive.service
+pkill -9 caddy >/dev/null 2>&1
+
 if command -v apt-get >/dev/null 2>&1; then
     apt-get update -y >/dev/null 2>&1
     apt-get install -y curl systemd socat openssl jq >/dev/null 2>&1
