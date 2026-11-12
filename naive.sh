@@ -42,8 +42,9 @@ if [ -z "$cf_token" ]; then
     done
 fi
 
-[[ -z "${naive_domain}" ]] && red "错误: 未检测到有效的域名参数！" && exit 1
-[[ -z "${cf_token}" ]] && red "错误: 未检测到有效的 Cloudflare API Token！" && exit 1
+# 自动获取当前 VPS 的公网 IP（支持 IPv4/IPv6）
+server_ip=$(curl -s 4.ip.sb || curl -s 6.ip.sb || curl -s ifconfig.me)
+[[ -z "${server_ip}" ]] && red "错误: 无法自动获取 VPS 的公网 IP！" && exit 1
 
 if [ "$port_arg" = "y" ] || [ "$port_arg" = "Y" ] || [ -z "$port_arg" ]; then
     naive_port=$(shuf -i 10000-65000 -n 1)
@@ -86,17 +87,17 @@ else
     naive_uuid=$(cat "$uuid_file")
 fi
 
-green "---> 正在使用 Cloudflare DNS-01 申请/配置 SSL 证书..."
-export CF_Token="${cf_token}"
+green "---> 正在通过 80 端口为公网 IP (${server_ip}) 申请受信任的 SSL 证书..."
 
 if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
-    curl -s https://get.acme.sh | sh -s email=admin@${naive_domain} >/dev/null 2>&1
+    curl -s https://get.acme.sh | sh -s email=admin@${server_ip} >/dev/null 2>&1
 fi
 
 ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt >/dev/null 2>&1
-~/.acme.sh/acme.sh --issue --dns dns_cf -d "${naive_domain}" --force || { red "SSL 证书通过 Cloudflare DNS 申请失败，请检查 API Token 权限或域名限制！"; exit 1; }
+# 使用 standalone 模式通过 80 端口为 IP 申请证书
+~/.acme.sh/acme.sh --issue --standalone -d "${server_ip}" --force || { red "SSL 证书通过 80 端口申请失败，请确保 80 端口未被占用且防火墙已放行！"; exit 1; }
 
-~/.acme.sh/acme.sh --install-cert -d "${naive_domain}" \
+~/.acme.sh/acme.sh --install-cert -d "${server_ip}" \
     --cert-file "${CERT_DIR}/cert.crt" \
     --key-file "${CERT_DIR}/private.key" \
     --fullchain-file "${CERT_DIR}/fullchain.cer" >/dev/null 2>&1
@@ -236,11 +237,11 @@ green "=========================================================================
 green " 标准 NaïveProxy 服务端部署成功！"
 green "=========================================================================================="
 green "👉 证书存放路径: ${CERT_DIR}/ (easyshare)"
-green "👉 绑定的域名: ${naive_domain}"
+green "👉 绑定的 IP: ${server_ip}"
 green "👉 服务端口: ${naive_port}"
 green "------------------------------------------------------------------------------------------"
 green "👉 客户端分享链接 (可在 v2rayN / v2rayNG / Hiddify 中直接导入)："
 green "------------------------------------------------------------------------------------------"
-echo -e "\e[1;33mnaive+https://${naive_uuid}:${naive_uuid}@${naive_domain}:${naive_port}?security=tls&sni=${naive_domain}#Naive-Standard-H2\e[0m"
-echo -e "\e[1;33mnaive+quic://${naive_uuid}:${naive_uuid}@${naive_domain}:${naive_port}?congestion_control=bbr&security=tls&sni=${naive_domain}#Naive-Standard-QUIC\e[0m"
+echo -e "\e[1;33mnaive+https://${naive_uuid}:${naive_uuid}@${server_ip}:${naive_port}?security=tls&sni=${server_ip}#Naive-IP-H2\e[0m"
+echo -e "\e[1;33mnaive+quic://${naive_uuid}:${naive_uuid}@${server_ip}:${naive_port}?congestion_control=bbr&security=tls&sni=${server_ip}#Naive-IP-QUIC\e[0m"
 green "=========================================================================================="
