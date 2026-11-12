@@ -42,9 +42,8 @@ if [ -z "$cf_token" ]; then
     done
 fi
 
-# 自动获取当前 VPS 的公网 IP（支持 IPv4/IPv6）
-server_ip=$(curl -s 4.ip.sb || curl -s 6.ip.sb || curl -s ifconfig.me)
-[[ -z "${server_ip}" ]] && red "错误: 无法自动获取 VPS 的公网 IP！" && exit 1
+[[ -z "${naive_domain}" ]] && red "错误: 未检测到有效的域名参数！" && exit 1
+[[ -z "${cf_token}" ]] && red "错误: 未检测到有效的 Cloudflare API Token！" && exit 1
 
 if [ "$port_arg" = "y" ] || [ "$port_arg" = "Y" ] || [ -z "$port_arg" ]; then
     naive_port=$(shuf -i 10000-65000 -n 1)
@@ -54,7 +53,7 @@ else
     naive_port=$(shuf -i 10000-65000 -n 1)
 fi
 
-CADDY_DATA_DIR="/usr/local/easyshare_core"
+SBX_DIR="/usr/local/singbox_naive"
 CERT_DIR="/root/easyshare"
 
 green "---> 正在检查系统环境与依赖..."
@@ -68,18 +67,10 @@ fi
 get_arch="amd64"
 [[ $(arch) =~ ("aarch64"|"arm64") ]] && get_arch="arm64"
 
-mkdir -p ${CADDY_DATA_DIR}
+mkdir -p ${SBX_DIR}
 mkdir -p ${CERT_DIR}
-mkdir -p ${CADDY_DATA_DIR}/html/
 
-if [ ! -f "${CADDY_DATA_DIR}/html/index.html" ]; then
-    cat >"${CADDY_DATA_DIR}/html/index.html" <<EOF
-<!DOCTYPE html>
-<html><head><title>Welcome!</title></head><body><h1>System Operational</h1></body></html>
-EOF
-fi
-
-uuid_file="${CADDY_DATA_DIR}/uuid"
+uuid_file="${SBX_DIR}/uuid"
 if [ ! -f "$uuid_file" ]; then
     naive_uuid=$(cat /proc/sys/kernel/random/uuid | tr -d '-' | cut -c 1-16)
     echo "$naive_uuid" > "$uuid_file"
@@ -87,131 +78,92 @@ else
     naive_uuid=$(cat "$uuid_file")
 fi
 
-green "---> 正在通过 80 端口为公网 IP (${server_ip}) 申请受信任的 SSL 证书..."
+green "---> 正在使用 Cloudflare DNS-01 申请/配置 SSL 证书（完全不占用 80 端口）..."
+export CF_Token="${cf_token}"
 
 if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
-    curl -s https://get.acme.sh | sh -s email=admin@${server_ip} >/dev/null 2>&1
+    curl -s https://get.acme.sh | sh -s email=admin@${naive_domain} >/dev/null 2>&1
 fi
 
 ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt >/dev/null 2>&1
-# 使用 standalone 模式通过 80 端口为 IP 申请证书
-~/.acme.sh/acme.sh --issue --standalone -d "${server_ip}" --force || { red "SSL 证书通过 80 端口申请失败，请确保 80 端口未被占用且防火墙已放行！"; exit 1; }
+~/.acme.sh/acme.sh --issue --dns dns_cf -d "${naive_domain}" --force || { red "SSL 证书通过 Cloudflare DNS 申请失败，请检查 API Token 权限或域名限制！"; exit 1; }
 
-~/.acme.sh/acme.sh --install-cert -d "${server_ip}" \
+~/.acme.sh/acme.sh --install-cert -d "${naive_domain}" \
     --cert-file "${CERT_DIR}/cert.crt" \
     --key-file "${CERT_DIR}/private.key" \
     --fullchain-file "${CERT_DIR}/fullchain.cer" >/dev/null 2>&1
 
 [[ ! -f "${CERT_DIR}/cert.crt" ]] && red "错误: 证书文件安装失败！" && exit 1
 
-green "---> 正在检查并安装官方最新版 Go 运行环境..."
-GO_VERSION="1.23.4"
-if ! command -v go &> /dev/null || [[ "$(go version)" =~ "go1.1" ]] || [[ "$(go version)" =~ "go1.20" ]]; then
-    yellow "---> 正在从官方获取并安装最新 Go 运行时..."
-    apt-get remove -y golang-go golang >/dev/null 2>&1
-    curl -fLss "https://go.dev/dl/go${GO_VERSION}.linux-${get_arch}.tar.gz" -o /tmp/go.tar.gz
-    rm -rf /usr/local/go
-    tar -C /usr/local -xzf /tmp/go.tar.gz
-    export PATH=$PATH:/usr/local/go/bin
-fi
-
-export PATH=$PATH:/usr/local/go/bin
-export GOPATH=$(go env GOPATH 2>/dev/null || echo "/root/go")
-export PATH=$PATH:$GOPATH/bin
-
-# 配置标准的 Go 编译代理环境
-export GOPROXY="https://proxy.golang.org,https://goproxy.io,direct"
-export GO111MODULE=on
-
-green "---> 正在通过自建 Cloudflare 代理下载 xcaddy 编译工具..."
-XCADDY_VERSION="v0.4.7"
-VERSION_NUM="0.4.7"
+green "---> 正在下载官方最新版 Sing-box 内核..."
+SB_VERSION=$(curl -s "https://api.github.com/repos/SagerNet/sing-box/releases/latest" | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
+[ -z "$SB_VERSION" ] && SB_VERSION="1.11.0"
 
 if [ "$get_arch" = "amd64" ]; then
-    arch_name="amd64"
-elif [ "$get_arch" = "arm64" ]; then
-    arch_name="arm64"
+    sb_arch="linux-amd64"
 else
-    arch_name="amd64"
+    sb_arch="linux-arm64"
 fi
 
-PROXY_URL="https://ess.ieshare.workers.dev/https://github.com/caddyserver/xcaddy/releases/download/${XCADDY_VERSION}/xcaddy_${VERSION_NUM}_linux_${arch_name}.tar.gz"
+SB_URL="https://github.com/SagerNet/sing-box/releases/download/v${SB_VERSION}/sing-box-${SB_VERSION}-${sb_arch}.tar.gz"
 
-mkdir -p "$GOPATH/bin"
-curl -fL --progress-bar "$PROXY_URL" -o /tmp/xcaddy.tar.gz || {
-    red "自建代理下载失败，正在尝试通过官方直连下载..."
-    ALT_URL="https://github.com/caddyserver/xcaddy/releases/download/${XCADDY_VERSION}/xcaddy_${VERSION_NUM}_linux_${arch_name}.tar.gz"
-    curl -fL --progress-bar "$ALT_URL" -o /tmp/xcaddy.tar.gz || {
-        red "错误: xcaddy 二进制下载彻底失败！"
-        exit 1
-    }
-}
-
-tar -C "$GOPATH/bin" -xzf /tmp/xcaddy.tar.gz xcaddy || {
-    red "错误: xcaddy 解压失败！"
-    rm -f /tmp/xcaddy.tar.gz
-    exit 1
-}
-rm -f /tmp/xcaddy.tar.gz
-
-GOPATH_BIN="$(go env GOPATH)/bin"
-XCADDY_BIN="$GOPATH_BIN/xcaddy"
-[ ! -f "$XCADDY_BIN" ] && XCADDY_BIN=$(command -v xcaddy)
-
-if [ -z "$XCADDY_BIN" ] || [ ! -f "$XCADDY_BIN" ]; then
-    red "错误: 找不到 xcaddy 可执行文件！"
-    exit 1
-fi
-
-green "---> 正在使用官方 xcaddy 编译集成 forwardproxy (naive 分支) 的 Caddy 服务端..."
-[ -f "${CADDY_DATA_DIR}/caddy" ] && rm -f "${CADDY_DATA_DIR}/caddy"
-
-export PATH="/usr/local/go/bin:$GOPATH/bin:$PATH"
-
-# 【优化点】：去掉了复杂的裁剪标签，使用最稳健的标准编译指令
-"$XCADDY_BIN" build \
-    --output "${CADDY_DATA_DIR}/caddy" \
-    --with github.com/caddyserver/forwardproxy@caddy2=github.com/klzgrad/forwardproxy@naive || {
-    red "Caddy 编译失败！"
+curl -fL --progress-bar "$SB_URL" -o /tmp/sing-box.tar.gz || {
+    red "错误: Sing-box 内核下载失败！"
     exit 1
 }
 
-[[ ! -f "${CADDY_DATA_DIR}/caddy" ]] && red "错误: Caddy 编译未生成目标文件！" && exit 1
-chmod +x "${CADDY_DATA_DIR}/caddy"
+tar -xzf /tmp/sing-box.tar.gz -C /tmp/ || {
+    red "错误: Sing-box 解压失败！"
+    rm -f /tmp/sing-box.tar.gz
+    exit 1
+}
 
-green "---> 正在生成 Caddyfile 配置文件..."
-cat > "${CADDY_DATA_DIR}/Caddyfile" << EOF
+mv /tmp/sing-box-${SB_VERSION}-${sb_arch}/sing-box ${SBX_DIR}/sing-box
+chmod +x "${SBX_DIR}/sing-box"
+rm -rf /tmp/sing-box*
+
+[[ ! -f "${SBX_DIR}/sing-box" ]] && red "错误: Sing-box 核心未成功生成！" && exit 1
+
+green "---> 正在生成 Sing-box 原生 Naive 配置文件..."
+cat > "${SBX_DIR}/config.json" << EOF
 {
-    admin off
-    auto_https off
-}
-
-:${naive_port} {
-    tls ${CERT_DIR}/cert.crt ${CERT_DIR}/private.key
-    route {
-        forward_proxy {
-            basic_auth ${naive_uuid} ${naive_uuid}
-            hide_ip
-            hide_via
-            probe_resistance
+  "log": {
+    "disabled": false,
+    "level": "info",
+    "timestamp": true
+  },
+  "inbounds": [
+    {
+      "type": "naive",
+      "tag": "naive-in",
+      "listen": "::",
+      "listen_port": ${naive_port},
+      "users": [
+        {
+          "username": "${naive_uuid}",
+          "password": "${naive_uuid}"
         }
-        file_server {
-            root ${CADDY_DATA_DIR}/html
-        }
+      ],
+      "tls": {
+        "enabled": true,
+        "certificate_path": "${CERT_DIR}/fullchain.cer",
+        "key_path": "${CERT_DIR}/private.key"
+      }
     }
+  ]
 }
 EOF
 
 cat > /etc/systemd/system/naive.service << EOF
 [Unit]
-Description=Standard NaiveProxy Service (Caddy + ForwardProxy)
+Description=Sing-box NaiveProxy Service
 After=network.target nss-lookup.target
 
 [Service]
 User=root
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
-ExecStart=${CADDY_DATA_DIR}/caddy run --config ${CADDY_DATA_DIR}/Caddyfile
+ExecStart=${SBX_DIR}/sing-box run -c ${SBX_DIR}/config.json
 Restart=on-failure
 RestartSec=5
 LimitNOFILE=infinity
@@ -234,14 +186,16 @@ fi
 
 clear
 green "=========================================================================================="
-green " 标准 NaïveProxy 服务端部署成功！"
+green " Sing-box 原生 NaïveProxy 服务端部署成功！"
 green "=========================================================================================="
-green "👉 证书存放路径: ${CERT_DIR}/ (easyshare)"
-green "👉 绑定的 IP: ${server_ip}"
+green "👉 核心架构: Sing-box Native (轻量无编译)"
+green "👉 验证方式: Cloudflare DNS-01 (免 80 端口)"
+green "👉 证书存放路径: ${CERT_DIR}/"
+green "👉 绑定的域名: ${naive_domain}"
 green "👉 服务端口: ${naive_port}"
 green "------------------------------------------------------------------------------------------"
 green "👉 客户端分享链接 (可在 v2rayN / v2rayNG / Hiddify 中直接导入)："
 green "------------------------------------------------------------------------------------------"
-echo -e "\e[1;33mnaive+https://${naive_uuid}:${naive_uuid}@${server_ip}:${naive_port}?security=tls&sni=${server_ip}#Naive-IP-H2\e[0m"
-echo -e "\e[1;33mnaive+quic://${naive_uuid}:${naive_uuid}@${server_ip}:${naive_port}?congestion_control=bbr&security=tls&sni=${server_ip}#Naive-IP-QUIC\e[0m"
+echo -e "\e[1;33mnaive+https://${naive_uuid}:${naive_uuid}@${naive_domain}:${naive_port}?security=tls&sni=${naive_domain}#Naive-SingBox-H2\e[0m"
+echo -e "\e[1;33mnaive+quic://${naive_uuid}:${naive_uuid}@${naive_domain}:${naive_port}?congestion_control=bbr&security=tls&sni=${naive_domain}#Naive-SingBox-QUIC\e[0m"
 green "=========================================================================================="
