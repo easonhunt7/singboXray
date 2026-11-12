@@ -94,7 +94,7 @@ if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
 fi
 
 ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt >/dev/null 2>&1
-~/.acme.sh/acme.sh --issue --dns dns_cf -d "${naive_domain}" --force || { red "SSL 证书通过 Cloudflare DNS 申请失败，请检查 API Token 权限！"; exit 1; }
+~/.acme.sh/acme.sh --issue --dns dns_cf -d "${naive_domain}" --force || { red "SSL 证书通过 Cloudflare DNS 申请失败，请检查 API Token 权限或域名限制！"; exit 1; }
 
 ~/.acme.sh/acme.sh --install-cert -d "${naive_domain}" \
     --cert-file "${CERT_DIR}/cert.crt" \
@@ -103,16 +103,80 @@ fi
 
 [[ ! -f "${CERT_DIR}/cert.crt" ]] && red "错误: 证书文件安装失败！" && exit 1
 
-green "---> 正在下载并配置集成 forwardproxy 插件的 Caddy 服务端..."
-# 使用稳定可靠的集成 forwardproxy 的定制 Caddy 二进制
-caddy_url="https://github.com/caddyserver/caddy/releases/download/v2.7.5/caddy_2.7.5_linux_${get_arch}.tar.gz"
-# 注：如需极致纯净，也可采用带 forwardproxy 的编译核心，此处采用成熟稳定的方案
-curl -fLss "https://github.com/jonssonyan/naive/releases/latest/download/naive-linux-${get_arch}" -o ${CADDY_DATA_DIR}/caddy || {
-    # 备用下载通道
-    curl -fLss "${caddy_url}" -o /tmp/caddy.tar.gz
-    tar -xz -f /tmp/caddy.tar.gz -C ${CADDY_DATA_DIR}/ caddy
+green "---> 正在检查并安装官方最新版 Go 运行环境..."
+GO_VERSION="1.23.4"
+if ! command -v go &> /dev/null || [[ "$(go version)" =~ "go1.1" ]] || [[ "$(go version)" =~ "go1.20" ]]; then
+    yellow "---> 正在从官方获取并安装最新 Go 运行时..."
+    apt-get remove -y golang-go golang >/dev/null 2>&1
+    curl -fLss "https://go.dev/dl/go${GO_VERSION}.linux-${get_arch}.tar.gz" -o /tmp/go.tar.gz
+    rm -rf /usr/local/go
+    tar -C /usr/local -xzf /tmp/go.tar.gz
+    export PATH=$PATH:/usr/local/go/bin
+fi
+
+export PATH=$PATH:/usr/local/go/bin
+export GOPATH=$(go env GOPATH 2>/dev/null || echo "/root/go")
+export PATH=$PATH:$GOPATH/bin
+
+# 配置标准的 Go 编译代理环境
+export GOPROXY="https://proxy.golang.org,https://goproxy.io,direct"
+export GO111MODULE=on
+
+green "---> 正在通过自建 Cloudflare 代理下载 xcaddy 编译工具..."
+XCADDY_VERSION="v0.4.7"
+VERSION_NUM="0.4.7"
+
+if [ "$get_arch" = "amd64" ]; then
+    arch_name="amd64"
+elif [ "$get_arch" = "arm64" ]; then
+    arch_name="arm64"
+else
+    arch_name="amd64"
+fi
+
+PROXY_URL="https://ess.ieshare.workers.dev/https://github.com/caddyserver/xcaddy/releases/download/${XCADDY_VERSION}/xcaddy_${VERSION_NUM}_linux_${arch_name}.tar.gz"
+
+mkdir -p "$GOPATH/bin"
+curl -fL --progress-bar "$PROXY_URL" -o /tmp/xcaddy.tar.gz || {
+    red "自建代理下载失败，正在尝试通过官方直连下载..."
+    ALT_URL="https://github.com/caddyserver/xcaddy/releases/download/${XCADDY_VERSION}/xcaddy_${VERSION_NUM}_linux_${arch_name}.tar.gz"
+    curl -fL --progress-bar "$ALT_URL" -o /tmp/xcaddy.tar.gz || {
+        red "错误: xcaddy 二进制下载彻底失败！"
+        exit 1
+    }
 }
-chmod +x ${CADDY_DATA_DIR}/caddy
+
+tar -C "$GOPATH/bin" -xzf /tmp/xcaddy.tar.gz xcaddy || {
+    red "错误: xcaddy 解压失败！"
+    rm -f /tmp/xcaddy.tar.gz
+    exit 1
+}
+rm -f /tmp/xcaddy.tar.gz
+
+GOPATH_BIN="$(go env GOPATH)/bin"
+XCADDY_BIN="$GOPATH_BIN/xcaddy"
+[ ! -f "$XCADDY_BIN" ] && XCADDY_BIN=$(command -v xcaddy)
+
+if [ -z "$XCADDY_BIN" ] || [ ! -f "$XCADDY_BIN" ]; then
+    red "错误: 找不到 xcaddy 可执行文件！"
+    exit 1
+fi
+
+green "---> 正在使用官方 xcaddy 编译集成 forwardproxy (naive 分支) 的 Caddy 服务端..."
+[ -f "${CADDY_DATA_DIR}/caddy" ] && rm -f "${CADDY_DATA_DIR}/caddy"
+
+export PATH="/usr/local/go/bin:$GOPATH/bin:$PATH"
+
+# 【优化点】：去掉了复杂的裁剪标签，使用最稳健的标准编译指令
+"$XCADDY_BIN" build \
+    --output "${CADDY_DATA_DIR}/caddy" \
+    --with github.com/caddyserver/forwardproxy@caddy2=github.com/klzgrad/forwardproxy@naive || {
+    red "Caddy 编译失败！"
+    exit 1
+}
+
+[[ ! -f "${CADDY_DATA_DIR}/caddy" ]] && red "错误: Caddy 编译未生成目标文件！" && exit 1
+chmod +x "${CADDY_DATA_DIR}/caddy"
 
 green "---> 正在生成 Caddyfile 配置文件..."
 cat > "${CADDY_DATA_DIR}/Caddyfile" << EOF
