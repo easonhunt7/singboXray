@@ -71,7 +71,6 @@
             text-align: left;
         }
 
-        /* 紧凑的双列网格 */
         .protocols-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -121,7 +120,6 @@
             display: block;
         }
 
-        /* 严格行对齐的内部网格结构 */
         .row-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -145,7 +143,6 @@
             color: var(--text-secondary);
         }
 
-        /* 统一的输入框与端口组件容器样式（高度统一为 32px） */
         .proto-port-box {
             display: flex;
             align-items: center;
@@ -290,7 +287,7 @@
             <img src="logo.png" alt="Xray-go Logo">
             <h2>Xray-go 快速一键部署</h2>
         </div>
-        <p class="desc">按需勾选下方协议，生成一键安装命令。</p>
+        <p class="desc">勾选下方协议+添加变量，生成一键安装命令。</p>
     </div>
     
     <div class="protocols-grid">
@@ -301,27 +298,27 @@
                 <input type="checkbox" id="chkNaive" class="proto-toggle"> 1. NaiveProxy
             </label>
             <div class="sub-options">
-                <!-- 第一行：H2 与 绑定域名 -->
+                <!-- 第一行：H2 与 域名 -->
                 <div class="row-grid">
                     <div class="form-group">
-                        <label class="field-label">H2 传输与端口 (留空随机):</label>
+                        <label class="field-label">H2 传输与端口 :</label>
                         <div class="proto-port-box">
                             <label><input type="checkbox" id="naiveH2" checked> H2</label>
-                            <input type="text" id="naiveH2Port" placeholder="端口 (留空随机)">
+                            <input type="text" id="naiveH2Port" placeholder="端口 (留空=随机)">
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="field-label">绑定域名 (必填):</label>
+                        <label class="field-label">域名 (关闭小黄云，必填):</label>
                         <input type="text" id="naiveDomain" placeholder="naive.example.com">
                     </div>
                 </div>
                 <!-- 第二行：H3 与 API Token -->
                 <div class="row-grid">
                     <div class="form-group">
-                        <label class="field-label">H3 传输与端口 (留空随机):</label>
+                        <label class="field-label">H3 传输与端口 :</label>
                         <div class="proto-port-box">
                             <label><input type="checkbox" id="naiveH3" checked> H3</label>
-                            <input type="text" id="naiveH3Port" placeholder="端口 (留空随机)">
+                            <input type="text" id="naiveH3Port" placeholder="端口 (留空=随机)">
                         </div>
                     </div>
                     <div class="form-group">
@@ -338,31 +335,31 @@
                 <input type="checkbox" id="chkXhttp" class="proto-toggle"> 2. xHTTP 直连
             </label>
             <div class="sub-options">
-                <!-- 第一行：H2 与 绑定域名 -->
+                <!-- 第一行：H2 与 域名 -->
                 <div class="row-grid">
                     <div class="form-group">
-                        <label class="field-label">H2 传输与端口 (留空随机):</label>
+                        <label class="field-label">H2 传输与端口 (留空=随机):</label>
                         <div class="proto-port-box">
                             <label><input type="checkbox" id="xhttpH2" checked> H2</label>
-                            <input type="text" id="xhttpH2Port" placeholder="端口 (留空随机)">
+                            <input type="text" id="xhttpH2Port" placeholder="端口 (留空=随机)">
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="field-label">绑定域名 (可选，默认自签):</label>
+                        <label class="field-label">域名 (关闭小黄云；留空=自签证书):</label>
                         <input type="text" id="xhttpDomain" placeholder="example.com">
                     </div>
                 </div>
                 <!-- 第二行：H3 与 API Token -->
                 <div class="row-grid">
                     <div class="form-group">
-                        <label class="field-label">H3 传输与端口 (留空随机):</label>
+                        <label class="field-label">H3 传输与端口 (留空=随机):</label>
                         <div class="proto-port-box">
                             <label><input type="checkbox" id="xhttpH3" checked> H3</label>
-                            <input type="text" id="xhttpH3Port" placeholder="端口 (留空随机)">
+                            <input type="text" id="xhttpH3Port" placeholder="端口 (留空=随机)">
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="field-label">API Token (可选):</label>
+                        <label class="field-label">API Token (可选；留空=自签证书):</label>
                         <input type="text" id="xhttpApi" placeholder="CF API Token">
                     </div>
                 </div>
@@ -377,7 +374,7 @@
             <div class="sub-options">
                 <div class="row-grid">
                     <div class="form-group">
-                        <label class="field-label">Argo 协议 (必填):</label>
+                        <label class="field-label">Argo Protocol (必填):</label>
                         <select id="argoProtocol">
                             <option value="http2" selected>http2</option>
                             <option value="quic">quic</option>
@@ -390,7 +387,7 @@
                 </div>
                 <div class="row-grid" style="margin-top: 8px;">
                     <div class="form-group">
-                        <label class="field-label">本地监听端口 (必填):</label>
+                        <label class="field-label">服务URL端口 (必填):</label>
                         <input type="text" id="argoPort" value="8001">
                     </div>
                     <div class="form-group">
@@ -422,7 +419,7 @@
 
     <!-- 专属安装命令输出 -->
     <div class="output-box">
-        <label style="font-size: 12px; font-weight: 600; color: var(--text-main); margin-bottom: 6px; display: block;">专属安装命令 (复制并在您的 VPS 终端运行):</label>
+        <label style="font-size: 12px; font-weight: 600; color: var(--text-main); margin-bottom: 6px; display: block;">请先登录服务器终端:</label>
         <pre id="cmdOutput">bash &lt;(curl -Ls https://raw.githubusercontent.com/easonhunt7/singboXray/main/install.sh)</pre>
         <div class="btn-container">
             <div class="btn-wrapper">
