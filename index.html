@@ -19,9 +19,9 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
-            max-width: 880px;
-            margin: 30px auto;
-            padding: 20px;
+            max-width: 1120px;
+            margin: 16px auto;
+            padding: 12px 20px;
             background: var(--bg-color);
             color: var(--text-main);
             -webkit-font-smoothing: antialiased;
@@ -29,7 +29,7 @@
 
         .container {
             background: var(--card-bg);
-            padding: 28px 32px;
+            padding: 24px 32px;
             border-radius: var(--radius);
             box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
             border: 1px solid rgba(0, 0, 0, 0.02);
@@ -37,7 +37,7 @@
 
         /* 标题居中，副标题靠左 */
         .header-box {
-            margin-bottom: 22px;
+            margin-bottom: 18px;
         }
 
         .title-row {
@@ -45,7 +45,7 @@
             align-items: center;
             justify-content: center;
             gap: 10px;
-            margin-bottom: 12px;
+            margin-bottom: 8px;
         }
 
         .title-row img {
@@ -74,9 +74,9 @@
         /* 协议双列网格容器 */
         .protocols-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
             gap: 14px;
-            margin-bottom: 20px;
+            margin-bottom: 18px;
             align-items: start;
         }
 
@@ -96,23 +96,23 @@
             display: flex;
             align-items: center;
             font-weight: 600;
-            font-size: 14px;
+            font-size: 15px;
             cursor: pointer;
             color: var(--text-main);
             user-select: none;
         }
 
         .checkbox-label input[type="checkbox"] {
-            width: 16px;
-            height: 16px;
+            width: 17px;
+            height: 17px;
             margin-right: 8px;
             accent-color: var(--accent);
             cursor: pointer;
         }
 
         .sub-options {
-            margin-top: 10px;
-            padding-top: 10px;
+            margin-top: 12px;
+            padding-top: 12px;
             border-top: 1px solid #e8e8ed;
             display: none;
         }
@@ -121,21 +121,28 @@
             display: block;
         }
 
-        .compact-grid {
+        /* 卡片内部左右双栏：左协议(上下排)，右凭证(上下排) */
+        .inner-split {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1.05fr 0.95fr;
+            gap: 14px;
+            align-items: start;
+        }
+
+        .stack-col {
+            display: flex;
+            flex-direction: column;
             gap: 8px;
-            margin-bottom: 8px;
         }
 
         .proto-port-box {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 6px;
+            gap: 8px;
             background: #ffffff;
-            padding: 5px 8px;
-            border-radius: 6px;
+            padding: 7px 10px;
+            border-radius: 7px;
             border: 1px solid #e8e8ed;
         }
 
@@ -143,24 +150,25 @@
             display: inline-flex;
             align-items: center;
             margin: 0;
-            font-size: 12px;
+            font-size: 13px;
             font-weight: 600;
             color: var(--text-main);
             cursor: pointer;
+            white-space: nowrap;
         }
 
         .proto-port-box input[type="checkbox"] {
-            margin-right: 4px;
+            margin-right: 6px;
             accent-color: var(--accent);
             cursor: pointer;
         }
 
         .proto-port-box input[type="text"] {
-            width: 100px;
-            padding: 4px 6px;
-            font-size: 11px;
+            width: 130px;
+            padding: 5px 8px;
+            font-size: 12px;
             border: 1px solid var(--border);
-            border-radius: 4px;
+            border-radius: 5px;
             background: #fcfcfd;
         }
 
@@ -170,19 +178,19 @@
 
         label.field-label {
             display: block;
-            margin-bottom: 3px;
+            margin-bottom: 4px;
             font-weight: 500;
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-secondary);
         }
 
         input[type="text"], select {
             width: 100%;
-            padding: 6px 8px;
+            padding: 7px 10px;
             box-sizing: border-box;
             border: 1px solid var(--border);
             border-radius: 6px;
-            font-size: 12px;
+            font-size: 13px;
             background: #fff;
             color: var(--text-main);
             outline: none;
@@ -195,32 +203,36 @@
         }
 
         .output-box {
-            margin-top: 16px;
+            margin-top: 14px;
             border-top: 1px solid #e8e8ed;
-            padding-top: 16px;
+            padding-top: 14px;
         }
 
         pre {
             background: #1d1d1f;
             color: #f5f5f7;
-            padding: 12px 14px;
+            padding: 13px 16px;
             border-radius: 8px;
             overflow-x: auto;
             font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, monospace;
-            font-size: 11px;
+            font-size: 12px;
             line-height: 1.5;
             word-break: break-all;
             white-space: pre-wrap;
             margin-bottom: 14px;
         }
 
-        /* 底部按钮与提示居中 */
+        /* 底部按钮居中，已复制提示在右侧 */
         .btn-container {
             display: flex;
-            flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 6px;
+        }
+
+        .btn-wrapper {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
         }
 
         .btn {
@@ -240,16 +252,29 @@
         }
 
         .toast {
-            font-size: 12px;
+            position: absolute;
+            left: 100%;
+            margin-left: 12px;
+            white-space: nowrap;
+            font-size: 13px;
             color: #34c759;
-            font-weight: 500;
-            height: 16px;
+            font-weight: 600;
             opacity: 0;
             transition: opacity 0.25s ease;
+            pointer-events: none;
         }
 
         .toast.show {
             opacity: 1;
+        }
+
+        @media (max-width: 600px) {
+            .protocols-grid {
+                grid-template-columns: 1fr;
+            }
+            .inner-split {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -274,25 +299,29 @@
                 <input type="checkbox" id="chkNaive" class="proto-toggle"> 1. NaiveProxy
             </label>
             <div class="sub-options">
-                <label class="field-label" style="margin-bottom: 5px;">传输模式与端口 (留空 = 随机):</label>
-                <div class="compact-grid">
-                    <div class="proto-port-box">
-                        <label><input type="checkbox" id="naiveH2" checked> H2</label>
-                        <input type="text" id="naiveH2Port" placeholder="留空随机">
+                <div class="inner-split">
+                    <!-- 左侧：H2在上，H3在下 -->
+                    <div class="stack-col">
+                        <label class="field-label" style="margin-bottom: 0;">传输模式与端口 (留空 = 随机端口):</label>
+                        <div class="proto-port-box">
+                            <label><input type="checkbox" id="naiveH2" checked> H2</label>
+                            <input type="text" id="naiveH2Port" placeholder="端口 (留空随机)">
+                        </div>
+                        <div class="proto-port-box">
+                            <label><input type="checkbox" id="naiveH3" checked> H3</label>
+                            <input type="text" id="naiveH3Port" placeholder="端口 (留空随机)">
+                        </div>
                     </div>
-                    <div class="proto-port-box">
-                        <label><input type="checkbox" id="naiveH3" checked> H3</label>
-                        <input type="text" id="naiveH3Port" placeholder="留空随机">
-                    </div>
-                </div>
-                <div class="compact-grid" style="margin-top: 6px;">
-                    <div class="form-group">
-                        <label class="field-label">绑定域名 (必填):</label>
-                        <input type="text" id="naiveDomain" placeholder="naive.example.com">
-                    </div>
-                    <div class="form-group">
-                        <label class="field-label">API Token (必填):</label>
-                        <input type="text" id="naiveApi" placeholder="CF API Token">
+                    <!-- 右侧：绑定域名在上，API Token在下 -->
+                    <div class="stack-col">
+                        <div class="form-group">
+                            <label class="field-label">绑定域名 (必填):</label>
+                            <input type="text" id="naiveDomain" placeholder="naive.example.com">
+                        </div>
+                        <div class="form-group">
+                            <label class="field-label">API Token (必填):</label>
+                            <input type="text" id="naiveApi" placeholder="CF API Token">
+                        </div>
                     </div>
                 </div>
             </div>
@@ -304,25 +333,29 @@
                 <input type="checkbox" id="chkXhttp" class="proto-toggle"> 2. xHTTP 直连
             </label>
             <div class="sub-options">
-                <label class="field-label" style="margin-bottom: 5px;">传输模式与端口 (留空 = 随机):</label>
-                <div class="compact-grid">
-                    <div class="proto-port-box">
-                        <label><input type="checkbox" id="xhttpH2" checked> H2</label>
-                        <input type="text" id="xhttpH2Port" placeholder="留空随机">
+                <div class="inner-split">
+                    <!-- 左侧：H2在上，H3在下 -->
+                    <div class="stack-col">
+                        <label class="field-label" style="margin-bottom: 0;">传输模式与端口 (留空 = 随机端口):</label>
+                        <div class="proto-port-box">
+                            <label><input type="checkbox" id="xhttpH2" checked> H2</label>
+                            <input type="text" id="xhttpH2Port" placeholder="端口 (留空随机)">
+                        </div>
+                        <div class="proto-port-box">
+                            <label><input type="checkbox" id="xhttpH3" checked> H3</label>
+                            <input type="text" id="xhttpH3Port" placeholder="端口 (留空随机)">
+                        </div>
                     </div>
-                    <div class="proto-port-box">
-                        <label><input type="checkbox" id="xhttpH3" checked> H3</label>
-                        <input type="text" id="xhttpH3Port" placeholder="留空随机">
-                    </div>
-                </div>
-                <div class="compact-grid" style="margin-top: 6px;">
-                    <div class="form-group">
-                        <label class="field-label">域名 (可选，默认自签):</label>
-                        <input type="text" id="xhttpDomain" placeholder="example.com">
-                    </div>
-                    <div class="form-group">
-                        <label class="field-label">API Token (可选):</label>
-                        <input type="text" id="xhttpApi" placeholder="CF API Token">
+                    <!-- 右侧：域名在上，API Token在下 -->
+                    <div class="stack-col">
+                        <div class="form-group">
+                            <label class="field-label">绑定域名 (可选，默认自签):</label>
+                            <input type="text" id="xhttpDomain" placeholder="example.com">
+                        </div>
+                        <div class="form-group">
+                            <label class="field-label">API Token (可选):</label>
+                            <input type="text" id="xhttpApi" placeholder="CF API Token">
+                        </div>
                     </div>
                 </div>
             </div>
@@ -334,27 +367,31 @@
                 <input type="checkbox" id="chkArgo" class="proto-toggle"> 3. xHTTP-Argo
             </label>
             <div class="sub-options">
-                <div class="compact-grid">
-                    <div class="form-group">
-                        <label class="field-label">Argo 协议:</label>
-                        <select id="argoProtocol">
-                            <option value="http2" selected>http2</option>
-                            <option value="quic">quic</option>
-                        </select>
+                <div class="inner-split">
+                    <!-- 左侧：Argo协议在上，端口在下 -->
+                    <div class="stack-col">
+                        <div class="form-group">
+                            <label class="field-label">Argo 协议 (必填):</label>
+                            <select id="argoProtocol">
+                                <option value="http2" selected>http2</option>
+                                <option value="quic">quic</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="field-label">本地监听端口 (必填):</label>
+                            <input type="text" id="argoPort" value="8001">
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label class="field-label">本地端口:</label>
-                        <input type="text" id="argoPort" value="8001">
-                    </div>
-                </div>
-                <div class="compact-grid" style="margin-top: 6px;">
-                    <div class="form-group">
-                        <label class="field-label">Argo 域名 (必填):</label>
-                        <input type="text" id="argoDomain" placeholder="argo.example.com">
-                    </div>
-                    <div class="form-group">
-                        <label class="field-label">Argo Token (必填):</label>
-                        <input type="text" id="argoToken" placeholder="Tunnel Token">
+                    <!-- 右侧：域名在上，Token在下 -->
+                    <div class="stack-col">
+                        <div class="form-group">
+                            <label class="field-label">Argo 域名 (必填):</label>
+                            <input type="text" id="argoDomain" placeholder="argo.example.com">
+                        </div>
+                        <div class="form-group">
+                            <label class="field-label">Argo Token (必填):</label>
+                            <input type="text" id="argoToken" placeholder="Tunnel Token">
+                        </div>
                     </div>
                 </div>
             </div>
@@ -377,11 +414,13 @@
 
     <!-- 专属安装命令输出 -->
     <div class="output-box">
-        <label style="font-size: 12px; font-weight: 600; color: var(--text-main); margin-bottom: 6px; display: block;">专属安装命令 (复制并在您的 VPS 终端运行):</label>
+        <label style="font-size: 13px; font-weight: 600; color: var(--text-main); margin-bottom: 8px; display: block;">专属安装命令 (复制并在您的 VPS 终端运行):</label>
         <pre id="cmdOutput">bash &lt;(curl -Ls https://raw.githubusercontent.com/easonhunt7/singboXray/main/install.sh)</pre>
         <div class="btn-container">
-            <button type="button" class="btn" id="copyBtn">📋 一键复制安装命令</button>
-            <span id="copyToast" class="toast">已复制</span>
+            <div class="btn-wrapper">
+                <button type="button" class="btn" id="copyBtn">📋 一键复制安装命令</button>
+                <span id="copyToast" class="toast">✓ 已复制</span>
+            </div>
         </div>
     </div>
 </div>
