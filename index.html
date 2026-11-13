@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Xray-go 智能一键部署</title>
+    <title>Xray-go 快速一键部署</title>
     <link rel="icon" href="logo.png" type="image/png">
     <style>
         :root {
@@ -35,12 +35,8 @@
             border: 1px solid rgba(0, 0, 0, 0.02);
         }
 
-        /* 顶部标题与Logo居中 */
-        .header-center {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            text-align: center;
+        /* 标题居中，副标题靠左 */
+        .header-box {
             margin-bottom: 22px;
         }
 
@@ -49,7 +45,7 @@
             align-items: center;
             justify-content: center;
             gap: 10px;
-            margin-bottom: 6px;
+            margin-bottom: 12px;
         }
 
         .title-row img {
@@ -72,6 +68,7 @@
             font-size: 13px;
             margin: 0;
             line-height: 1.4;
+            text-align: left;
         }
 
         /* 协议双列网格容器 */
@@ -102,6 +99,7 @@
             font-size: 14px;
             cursor: pointer;
             color: var(--text-main);
+            user-select: none;
         }
 
         .checkbox-label input[type="checkbox"] {
@@ -247,7 +245,7 @@
             font-weight: 500;
             height: 16px;
             opacity: 0;
-            transition: opacity 0.3s ease;
+            transition: opacity 0.25s ease;
         }
 
         .toast.show {
@@ -258,119 +256,119 @@
 <body>
 
 <div class="container">
-    <!-- 居中头部 -->
-    <div class="header-center">
+    <!-- 头部：标题居中，提示语靠左 -->
+    <div class="header-box">
         <div class="title-row">
             <img src="logo.png" alt="Xray-go Logo">
-            <h2>Xray-go 智能部署</h2>
+            <h2>Xray-go 快速一键部署</h2>
         </div>
-        <p class="desc">按需勾选下方协议模块，系统将为你实时生成定制化的 VPS 一键安装命令。</p>
+        <p class="desc">按需勾选下方协议，生成一键安装命令。</p>
     </div>
     
     <!-- 协议双列网格容器 -->
     <div class="protocols-grid">
         
         <!-- 1. NaiveProxy -->
-        <div class="protocol-section" id-sec="naive">
+        <div class="protocol-section" data-sec="naive">
             <label class="checkbox-label">
-                <input type="checkbox" id="chkNaive" onchange="toggleSection('naive'); updateCommand();"> 1. NaiveProxy
+                <input type="checkbox" id="chkNaive" class="proto-toggle"> 1. NaiveProxy
             </label>
             <div class="sub-options">
                 <label class="field-label" style="margin-bottom: 5px;">传输模式与端口 (留空 = 随机):</label>
                 <div class="compact-grid">
                     <div class="proto-port-box">
-                        <label><input type="checkbox" id="naiveH2" checked onchange="updateCommand()"> H2</label>
-                        <input type="text" id="naiveH2Port" placeholder="留空随机" oninput="updateCommand()">
+                        <label><input type="checkbox" id="naiveH2" checked> H2</label>
+                        <input type="text" id="naiveH2Port" placeholder="留空随机">
                     </div>
                     <div class="proto-port-box">
-                        <label><input type="checkbox" id="naiveH3" checked onchange="updateCommand()"> H3</label>
-                        <input type="text" id="naiveH3Port" placeholder="留空随机" oninput="updateCommand()">
+                        <label><input type="checkbox" id="naiveH3" checked> H3</label>
+                        <input type="text" id="naiveH3Port" placeholder="留空随机">
                     </div>
                 </div>
                 <div class="compact-grid" style="margin-top: 6px;">
                     <div class="form-group">
                         <label class="field-label">绑定域名 (必填):</label>
-                        <input type="text" id="naiveDomain" placeholder="naive.example.com" oninput="updateCommand()">
+                        <input type="text" id="naiveDomain" placeholder="naive.example.com">
                     </div>
                     <div class="form-group">
                         <label class="field-label">API Token (必填):</label>
-                        <input type="text" id="naiveApi" placeholder="CF API Token" oninput="updateCommand()">
+                        <input type="text" id="naiveApi" placeholder="CF API Token">
                     </div>
                 </div>
             </div>
         </div>
 
         <!-- 2. xHTTP 直连 -->
-        <div class="protocol-section" id-sec="xhttp">
+        <div class="protocol-section" data-sec="xhttp">
             <label class="checkbox-label">
-                <input type="checkbox" id="chkXhttp" onchange="toggleSection('xhttp'); updateCommand();"> 2. xHTTP 直连
+                <input type="checkbox" id="chkXhttp" class="proto-toggle"> 2. xHTTP 直连
             </label>
             <div class="sub-options">
                 <label class="field-label" style="margin-bottom: 5px;">传输模式与端口 (留空 = 随机):</label>
                 <div class="compact-grid">
                     <div class="proto-port-box">
-                        <label><input type="checkbox" id="xhttpH2" checked onchange="updateCommand()"> H2</label>
-                        <input type="text" id="xhttpH2Port" placeholder="留空随机" oninput="updateCommand()">
+                        <label><input type="checkbox" id="xhttpH2" checked> H2</label>
+                        <input type="text" id="xhttpH2Port" placeholder="留空随机">
                     </div>
                     <div class="proto-port-box">
-                        <label><input type="checkbox" id="xhttpH3" checked onchange="updateCommand()"> H3</label>
-                        <input type="text" id="xhttpH3Port" placeholder="留空随机" oninput="updateCommand()">
+                        <label><input type="checkbox" id="xhttpH3" checked> H3</label>
+                        <input type="text" id="xhttpH3Port" placeholder="留空随机">
                     </div>
                 </div>
                 <div class="compact-grid" style="margin-top: 6px;">
                     <div class="form-group">
                         <label class="field-label">域名 (可选，默认自签):</label>
-                        <input type="text" id="xhttpDomain" placeholder="example.com" oninput="updateCommand()">
+                        <input type="text" id="xhttpDomain" placeholder="example.com">
                     </div>
                     <div class="form-group">
                         <label class="field-label">API Token (可选):</label>
-                        <input type="text" id="xhttpApi" placeholder="CF API Token" oninput="updateCommand()">
+                        <input type="text" id="xhttpApi" placeholder="CF API Token">
                     </div>
                 </div>
             </div>
         </div>
 
         <!-- 3. xHTTP-Argo -->
-        <div class="protocol-section" id-sec="argo">
+        <div class="protocol-section" data-sec="argo">
             <label class="checkbox-label">
-                <input type="checkbox" id="chkArgo" onchange="toggleSection('argo'); updateCommand();"> 3. xHTTP-Argo
+                <input type="checkbox" id="chkArgo" class="proto-toggle"> 3. xHTTP-Argo
             </label>
             <div class="sub-options">
                 <div class="compact-grid">
                     <div class="form-group">
                         <label class="field-label">Argo 协议:</label>
-                        <select id="argoProtocol" onchange="updateCommand()">
+                        <select id="argoProtocol">
                             <option value="http2" selected>http2</option>
                             <option value="quic">quic</option>
                         </select>
                     </div>
                     <div class="form-group">
                         <label class="field-label">本地端口:</label>
-                        <input type="text" id="argoPort" value="8001" oninput="updateCommand()">
+                        <input type="text" id="argoPort" value="8001">
                     </div>
                 </div>
                 <div class="compact-grid" style="margin-top: 6px;">
                     <div class="form-group">
                         <label class="field-label">Argo 域名 (必填):</label>
-                        <input type="text" id="argoDomain" placeholder="argo.example.com" oninput="updateCommand()">
+                        <input type="text" id="argoDomain" placeholder="argo.example.com">
                     </div>
                     <div class="form-group">
                         <label class="field-label">Argo Token (必填):</label>
-                        <input type="text" id="argoToken" placeholder="Tunnel Token" oninput="updateCommand()">
+                        <input type="text" id="argoToken" placeholder="Tunnel Token">
                     </div>
                 </div>
             </div>
         </div>
 
         <!-- 4. VLESS-TCP-Reality -->
-        <div class="protocol-section" id-sec="reality">
+        <div class="protocol-section" data-sec="reality">
             <label class="checkbox-label">
-                <input type="checkbox" id="chkReality" onchange="toggleSection('reality'); updateCommand();"> 4. VLESS-TCP-Reality
+                <input type="checkbox" id="chkReality" class="proto-toggle"> 4. VLESS-TCP-Reality
             </label>
             <div class="sub-options">
                 <div class="form-group">
                     <label class="field-label">回落目标域名 (Dest):</label>
-                    <input type="text" id="realityDest" value="microsoft.com" oninput="updateCommand()">
+                    <input type="text" id="realityDest" value="microsoft.com">
                 </div>
             </div>
         </div>
@@ -382,39 +380,49 @@
         <label style="font-size: 12px; font-weight: 600; color: var(--text-main); margin-bottom: 6px; display: block;">专属安装命令 (复制并在您的 VPS 终端运行):</label>
         <pre id="cmdOutput">bash &lt;(curl -Ls https://raw.githubusercontent.com/easonhunt7/singboXray/main/install.sh)</pre>
         <div class="btn-container">
-            <button class="btn" onclick="copyCommand()">📋 一键复制安装命令</button>
+            <button type="button" class="btn" id="copyBtn">📋 一键复制安装命令</button>
             <span id="copyToast" class="toast">已复制</span>
         </div>
     </div>
 </div>
 
 <script>
-    function toggleSection(secName) {
-        const chk = document.getElementById('chk' + capitalize(secName));
-        const sec = document.querySelector(`[id-sec="${secName}"]`);
-        if (chk.checked) {
-            sec.classList.add('active');
-            if (secName === 'naive') {
-                document.getElementById('naiveH2').checked = true;
-                document.getElementById('naiveH3').checked = true;
-            } else if (secName === 'xhttp') {
-                document.getElementById('xhttpH2').checked = true;
-                document.getElementById('xhttpH3').checked = true;
+document.addEventListener('DOMContentLoaded', function() {
+    // 1. 绑定所有协议主开关的展开/收起逻辑
+    const toggles = document.querySelectorAll('.proto-toggle');
+    toggles.forEach(function(chk) {
+        chk.addEventListener('change', function() {
+            const section = this.closest('.protocol-section');
+            const secName = section.getAttribute('data-sec');
+            if (this.checked) {
+                section.classList.add('active');
+                if (secName === 'naive') {
+                    document.getElementById('naiveH2').checked = true;
+                    document.getElementById('naiveH3').checked = true;
+                } else if (secName === 'xhttp') {
+                    document.getElementById('xhttpH2').checked = true;
+                    document.getElementById('xhttpH3').checked = true;
+                }
+            } else {
+                section.classList.remove('active');
             }
-        } else {
-            sec.classList.remove('active');
-        }
-    }
+            updateCommand();
+        });
+    });
 
-    function capitalize(str) {
-        return str.charAt(0).toUpperCase() + str.slice(1);
-    }
+    // 2. 监听所有输入框和下拉菜单的实时变化
+    const allInputs = document.querySelectorAll('input, select');
+    allInputs.forEach(function(el) {
+        el.addEventListener('input', updateCommand);
+        el.addEventListener('change', updateCommand);
+    });
 
+    // 3. 实时生成命令函数
     function updateCommand() {
         let cmd = "bash <(curl -Ls https://raw.githubusercontent.com/easonhunt7/singboXray/main/install.sh)";
         let params = [];
 
-        // 1. NaiveProxy
+        // NaiveProxy
         if (document.getElementById('chkNaive').checked) {
             let nh2 = document.getElementById('naiveH2').checked;
             let nh3 = document.getElementById('naiveH3').checked;
@@ -432,13 +440,12 @@
                 nParam += ` --naive-h3=true`;
                 if (nh3Port) nParam += ` --naive-h3-port="${nh3Port}"`;
             }
-
             if (nDomain) nParam += ` --naive-domain="${nDomain}"`;
             if (nApi) nParam += ` --naive-api="${nApi}"`;
             params.push(nParam);
         }
 
-        // 2. xHTTP 直连
+        // xHTTP 直连
         if (document.getElementById('chkXhttp').checked) {
             let xh2 = document.getElementById('xhttpH2').checked;
             let xh3 = document.getElementById('xhttpH3').checked;
@@ -456,13 +463,12 @@
                 xParam += ` --xhttp-h3=true`;
                 if (xh3Port) xParam += ` --xhttp-h3-port="${xh3Port}"`;
             }
-
             if (xDomain) xParam += ` --xhttp-domain="${xDomain}"`;
             if (xApi) xParam += ` --xhttp-api="${xApi}"`;
             params.push(xParam);
         }
 
-        // 3. xHTTP-Argo
+        // xHTTP-Argo
         if (document.getElementById('chkArgo').checked) {
             let aProto = document.getElementById('argoProtocol').value;
             let aPort = document.getElementById('argoPort').value.trim() || '8001';
@@ -475,7 +481,7 @@
             params.push(aParam);
         }
 
-        // 4. VLESS-TCP-Reality
+        // VLESS-TCP-Reality
         if (document.getElementById('chkReality').checked) {
             const dest = document.getElementById('realityDest').value.trim() || 'microsoft.com';
             params.push(`--reality --reality-dest="${dest}"`);
@@ -488,16 +494,50 @@
         document.getElementById('cmdOutput').innerText = cmd;
     }
 
-    function copyCommand() {
-        const text = document.getElementById('cmdOutput').innerText;
-        navigator.clipboard.writeText(text).then(() => {
-            const toast = document.getElementById('copyToast');
-            toast.classList.add('show');
-            setTimeout(() => {
-                toast.classList.remove('show');
-            }, 1500);
-        });
+    // 4. 一键复制逻辑（带兼容性兜底）
+    const copyBtn = document.getElementById('copyBtn');
+    const toast = document.getElementById('copyToast');
+    let toastTimer = null;
+
+    function showToast() {
+        toast.classList.add('show');
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = setTimeout(function() {
+            toast.classList.remove('show');
+        }, 1500);
     }
+
+    copyBtn.addEventListener('click', function() {
+        const text = document.getElementById('cmdOutput').innerText;
+        
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(function() {
+                showToast();
+            }).catch(function() {
+                fallbackCopy(text);
+            });
+        } else {
+            fallbackCopy(text);
+        }
+    });
+
+    function fallbackCopy(text) {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            showToast();
+        } catch (err) {
+            console.error('复制失败:', err);
+        }
+        document.body.removeChild(textArea);
+    }
+});
 </script>
 
 </body>
