@@ -18,7 +18,7 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
-            max-width: 820px; /* 稍微加宽，完美适配双列网格 */
+            max-width: 860px;
             margin: 40px auto;
             padding: 20px;
             background: var(--bg-color);
@@ -49,12 +49,13 @@
             line-height: 1.5;
         }
 
-        /* 协议网格布局：自动两列，减少上下滚动 */
+        /* 双列网格布局 */
         .protocols-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
             gap: 16px;
             margin-bottom: 24px;
+            align-items: start;
         }
 
         .protocol-section {
@@ -97,6 +98,44 @@
             display: block;
         }
 
+        /* 协议与端口并排样式 */
+        .proto-port-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 8px;
+            background: #ffffff;
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 1px solid #e8e8ed;
+        }
+
+        .proto-port-row label {
+            display: inline-flex;
+            align-items: center;
+            margin: 0;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-main);
+            cursor: pointer;
+            min-width: 55px;
+        }
+
+        .proto-port-row input[type="checkbox"] {
+            margin-right: 6px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
+        .proto-port-row input[type="text"] {
+            width: 125px;
+            padding: 5px 8px;
+            font-size: 12px;
+            border: 1px solid var(--border);
+            border-radius: 5px;
+        }
+
         .form-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -112,7 +151,7 @@
             grid-column: span 2;
         }
 
-        label {
+        label.field-label {
             display: block;
             margin-bottom: 4px;
             font-weight: 500;
@@ -136,26 +175,6 @@
         input[type="text"]:focus, select:focus {
             border-color: var(--accent);
             box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.12);
-        }
-
-        .inline-checkboxes {
-            display: flex;
-            gap: 16px;
-            margin-top: 6px;
-            font-size: 13px;
-        }
-
-        .inline-checkboxes label {
-            display: inline-flex;
-            align-items: center;
-            color: var(--text-main);
-            font-weight: 400;
-            cursor: pointer;
-        }
-
-        .inline-checkboxes input {
-            margin-right: 5px;
-            accent-color: var(--accent);
         }
 
         .output-box {
@@ -219,96 +238,106 @@
     <h2>🚀 Xray-go 智能部署</h2>
     <p class="desc">按需勾选下方协议模块，系统将为你实时生成定制化的 VPS 一键安装命令。</p>
     
-    <!-- 协议双列网格容器 -->
+    <!-- 双列网格容器：第一行 NaiveProxy & xHTTP直连；第二行 xHTTP-Argo & Reality -->
     <div class="protocols-grid">
         
-        <!-- 1. VLESS-TCP-Reality -->
-        <div class="protocol-section" id-sec="reality">
-            <label class="checkbox-label">
-                <input type="checkbox" id="chkReality" onchange="toggleSection('reality'); updateCommand();"> 1. VLESS-TCP-Reality
-            </label>
-            <div class="sub-options">
-                <div class="form-group full">
-                    <label>回落目标域名 (Dest):</label>
-                    <input type="text" id="realityDest" value="microsoft.com" oninput="updateCommand()">
-                </div>
-            </div>
-        </div>
-
-        <!-- 2. xHTTP -->
-        <div class="protocol-section" id-sec="xhttp">
-            <label class="checkbox-label">
-                <input type="checkbox" id="chkXhttp" onchange="toggleSection('xhttp'); updateCommand();"> 2. xHTTP 协议
-            </label>
-            <div class="sub-options">
-                <div class="form-group full">
-                    <label>传输模式:</label>
-                    <div class="inline-checkboxes">
-                        <label><input type="checkbox" id="xhttpH2" checked onchange="updateCommand()"> H2</label>
-                        <label><input type="checkbox" id="xhttpH3" onchange="updateCommand()"> H3</label>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>域名 (可选):</label>
-                    <input type="text" id="xhttpDomain" placeholder="example.com" oninput="updateCommand()">
-                </div>
-                <div class="form-group">
-                    <label>API Token (可选):</label>
-                    <input type="text" id="xhttpApi" placeholder="Token" oninput="updateCommand()">
-                </div>
-            </div>
-        </div>
-
-        <!-- 3. NaiveProxy -->
+        <!-- 1. NaiveProxy (第一行左) -->
         <div class="protocol-section" id-sec="naive">
             <label class="checkbox-label">
-                <input type="checkbox" id="chkNaive" onchange="toggleSection('naive'); updateCommand();"> 3. NaiveProxy
+                <input type="checkbox" id="chkNaive" onchange="toggleSection('naive'); updateCommand();"> 1. NaiveProxy
             </label>
             <div class="sub-options">
-                <div class="form-group full">
-                    <label>传输模式:</label>
-                    <div class="inline-checkboxes">
-                        <label><input type="checkbox" id="naiveH2" checked onchange="updateCommand()"> H2</label>
-                        <label><input type="checkbox" id="naiveH3" onchange="updateCommand()"> H3</label>
+                <label class="field-label">传输模式与端口 (留空 = 随机端口):</label>
+                <div class="proto-port-row">
+                    <label><input type="checkbox" id="naiveH2" checked onchange="updateCommand()"> H2</label>
+                    <input type="text" id="naiveH2Port" placeholder="端口 (留空随机)" oninput="updateCommand()">
+                </div>
+                <div class="proto-port-row">
+                    <label><input type="checkbox" id="naiveH3" checked onchange="updateCommand()"> H3</label>
+                    <input type="text" id="naiveH3Port" placeholder="端口 (留空随机)" oninput="updateCommand()">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="field-label">绑定域名 (必填):</label>
+                        <input type="text" id="naiveDomain" placeholder="naive.example.com" oninput="updateCommand()">
                     </div>
-                </div>
-                <div class="form-group">
-                    <label>绑定域名 (必填):</label>
-                    <input type="text" id="naiveDomain" placeholder="naive.com" oninput="updateCommand()">
-                </div>
-                <div class="form-group">
-                    <label>API Token (必填):</label>
-                    <input type="text" id="naiveApi" placeholder="Token" oninput="updateCommand()">
+                    <div class="form-group">
+                        <label class="field-label">API Token (必填):</label>
+                        <input type="text" id="naiveApi" placeholder="CF API Token" oninput="updateCommand()">
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- 4. xHTTP-Argo -->
+        <!-- 2. xHTTP 直连 (第一行右) -->
+        <div class="protocol-section" id-sec="xhttp">
+            <label class="checkbox-label">
+                <input type="checkbox" id="chkXhttp" onchange="toggleSection('xhttp'); updateCommand();"> 2. xHTTP 直连
+            </label>
+            <div class="sub-options">
+                <label class="field-label">传输模式与端口 (留空 = 随机端口):</label>
+                <div class="proto-port-row">
+                    <label><input type="checkbox" id="xhttpH2" checked onchange="updateCommand()"> H2</label>
+                    <input type="text" id="xhttpH2Port" placeholder="端口 (留空随机)" oninput="updateCommand()">
+                </div>
+                <div class="proto-port-row">
+                    <label><input type="checkbox" id="xhttpH3" checked onchange="updateCommand()"> H3</label>
+                    <input type="text" id="xhttpH3Port" placeholder="端口 (留空随机)" oninput="updateCommand()">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="field-label">域名 (可选，默认自签):</label>
+                        <input type="text" id="xhttpDomain" placeholder="example.com" oninput="updateCommand()">
+                    </div>
+                    <div class="form-group">
+                        <label class="field-label">API Token (可选):</label>
+                        <input type="text" id="xhttpApi" placeholder="CF API Token" oninput="updateCommand()">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. xHTTP-Argo (第二行左) -->
         <div class="protocol-section" id-sec="argo">
             <label class="checkbox-label">
-                <input type="checkbox" id="chkArgo" onchange="toggleSection('argo'); updateCommand();"> 4. xHTTP-Argo
+                <input type="checkbox" id="chkArgo" onchange="toggleSection('argo'); updateCommand();"> 3. xHTTP-Argo
             </label>
             <div class="sub-options">
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Argo 协议:</label>
+                        <label class="field-label">Argo 协议 (必填):</label>
                         <select id="argoProtocol" onchange="updateCommand()">
                             <option value="http2" selected>http2</option>
                             <option value="quic">quic</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>监听端口:</label>
+                        <label class="field-label">本地监听端口 (必填):</label>
                         <input type="text" id="argoPort" value="8001" oninput="updateCommand()">
                     </div>
                 </div>
-                <div class="form-group">
-                    <label>Argo 域名 (必填):</label>
-                    <input type="text" id="argoDomain" placeholder="argo.com" oninput="updateCommand()">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="field-label">Argo 域名 (必填):</label>
+                        <input type="text" id="argoDomain" placeholder="argo.example.com" oninput="updateCommand()">
+                    </div>
+                    <div class="form-group">
+                        <label class="field-label">Argo Token (必填):</label>
+                        <input type="text" id="argoToken" placeholder="Tunnel Token" oninput="updateCommand()">
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Argo Token (必填):</label>
-                    <input type="text" id="argoToken" placeholder="Tunnel Token" oninput="updateCommand()">
+            </div>
+        </div>
+
+        <!-- 4. VLESS-TCP-Reality (第二行右) -->
+        <div class="protocol-section" id-sec="reality">
+            <label class="checkbox-label">
+                <input type="checkbox" id="chkReality" onchange="toggleSection('reality'); updateCommand();"> 4. VLESS-TCP-Reality
+            </label>
+            <div class="sub-options">
+                <div class="form-group full">
+                    <label class="field-label">回落目标域名 (Dest):</label>
+                    <input type="text" id="realityDest" value="microsoft.com" oninput="updateCommand()">
                 </div>
             </div>
         </div>
@@ -317,7 +346,7 @@
 
     <!-- 专属安装命令输出 -->
     <div class="output-box">
-        <label style="font-size: 13px; font-weight: 600; color: var(--text-main); margin-bottom: 8px;">专属安装命令 (复制并在您的 VPS 终端运行):</label>
+        <label style="font-size: 13px; font-weight: 600; color: var(--text-main); margin-bottom: 8px; display: block;">专属安装命令 (复制并在您的 VPS 终端运行):</label>
         <pre id="cmdOutput">bash &lt;(curl -Ls https://raw.githubusercontent.com/easonhunt7/singboXray/main/install.sh)</pre>
         <div class="btn-container">
             <button class="btn" onclick="copyCommand()">📋 一键复制安装命令</button>
@@ -332,6 +361,14 @@
         const sec = document.querySelector(`[id-sec="${secName}"]`);
         if (chk.checked) {
             sec.classList.add('active');
+            // 每次勾选 NaiveProxy 或 xHTTP 时，确保 H2 和 H3 默认处于勾选状态
+            if (secName === 'naive') {
+                document.getElementById('naiveH2').checked = true;
+                document.getElementById('naiveH3').checked = true;
+            } else if (secName === 'xhttp') {
+                document.getElementById('xhttpH2').checked = true;
+                document.getElementById('xhttpH3').checked = true;
+            }
         } else {
             sec.classList.remove('active');
         }
@@ -345,32 +382,46 @@
         let cmd = "bash <(curl -Ls https://raw.githubusercontent.com/easonhunt7/singboXray/main/install.sh)";
         let params = [];
 
-        if (document.getElementById('chkReality').checked) {
-            const dest = document.getElementById('realityDest').value.trim() || 'microsoft.com';
-            params.push(`--reality --reality-dest="${dest}"`);
+        // 1. NaiveProxy
+        if (document.getElementById('chkNaive').checked) {
+            let nh2 = document.getElementById('naiveH2').checked ? 'true' : 'false';
+            let nh3 = document.getElementById('naiveH3').checked ? 'true' : 'false';
+            let nh2Port = document.getElementById('naiveH2Port').value.trim();
+            let nh3Port = document.getElementById('naiveH3Port').value.trim();
+            let nDomain = document.getElementById('naiveDomain').value.trim();
+            let nApi = document.getElementById('naiveApi').value.trim();
+            
+            let nParam = `--naive --naive-h2=${nh2}`;
+            if (nh2 === 'true' && nh2Port) nParam += ` --naive-h2-port="${nh2Port}"`;
+            
+            nParam += ` --naive-h3=${nh3}`;
+            if (nh3 === 'true' && nh3Port) nParam += ` --naive-h3-port="${nh3Port}"`;
+
+            nParam += ` --naive-domain="${nDomain}" --naive-api="${nApi}"`;
+            params.push(nParam);
         }
 
+        // 2. xHTTP 直连
         if (document.getElementById('chkXhttp').checked) {
             let xh2 = document.getElementById('xhttpH2').checked ? 'true' : 'false';
             let xh3 = document.getElementById('xhttpH3').checked ? 'true' : 'false';
+            let xh2Port = document.getElementById('xhttpH2Port').value.trim();
+            let xh3Port = document.getElementById('xhttpH3Port').value.trim();
             let xDomain = document.getElementById('xhttpDomain').value.trim();
             let xApi = document.getElementById('xhttpApi').value.trim();
             
-            let xParam = `--xhttp --xhttp-h2=${xh2} --xhttp-h3=${xh3}`;
+            let xParam = `--xhttp --xhttp-h2=${xh2}`;
+            if (xh2 === 'true' && xh2Port) xParam += ` --xhttp-h2-port="${xh2Port}"`;
+
+            xParam += ` --xhttp-h3=${xh3}`;
+            if (xh3 === 'true' && xh3Port) xParam += ` --xhttp-h3-port="${xh3Port}"`;
+
             if (xDomain) xParam += ` --xhttp-domain="${xDomain}"`;
             if (xApi) xParam += ` --xhttp-api="${xApi}"`;
             params.push(xParam);
         }
 
-        if (document.getElementById('chkNaive').checked) {
-            let nh2 = document.getElementById('naiveH2').checked ? 'true' : 'false';
-            let nh3 = document.getElementById('naiveH3').checked ? 'true' : 'false';
-            let nDomain = document.getElementById('naiveDomain').value.trim();
-            let nApi = document.getElementById('naiveApi').value.trim();
-            
-            params.push(`--naive --naive-h2=${nh2} --naive-h3=${nh3} --naive-domain="${nDomain}" --naive-api="${nApi}"`);
-        }
-
+        // 3. xHTTP-Argo
         if (document.getElementById('chkArgo').checked) {
             let aProto = document.getElementById('argoProtocol').value;
             let aPort = document.getElementById('argoPort').value.trim() || '8001';
@@ -378,6 +429,12 @@
             let aToken = document.getElementById('argoToken').value.trim();
 
             params.push(`--argo --argo-protocol="${aProto}" --argo-port="${aPort}" --argo-domain="${aDomain}" --argo-token="${aToken}"`);
+        }
+
+        // 4. VLESS-TCP-Reality
+        if (document.getElementById('chkReality').checked) {
+            const dest = document.getElementById('realityDest').value.trim() || 'microsoft.com';
+            params.push(`--reality --reality-dest="${dest}"`);
         }
 
         if (params.length > 0) {
