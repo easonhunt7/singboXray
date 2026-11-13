@@ -457,4 +457,48 @@
                 if (xh3Port) xParam += ` --xhttp-h3-port="${xh3Port}"`;
             }
 
-            if (xDomain) xParam +=
+            if (xDomain) xParam += ` --xhttp-domain="${xDomain}"`;
+            if (xApi) xParam += ` --xhttp-api="${xApi}"`;
+            params.push(xParam);
+        }
+
+        // 3. xHTTP-Argo
+        if (document.getElementById('chkArgo').checked) {
+            let aProto = document.getElementById('argoProtocol').value;
+            let aPort = document.getElementById('argoPort').value.trim() || '8001';
+            let aDomain = document.getElementById('argoDomain').value.trim();
+            let aToken = document.getElementById('argoToken').value.trim();
+
+            let aParam = `--argo --argo-protocol="${aProto}" --argo-port="${aPort}"`;
+            if (aDomain) aParam += ` --argo-domain="${aDomain}"`;
+            if (aToken) aParam += ` --argo-token="${aToken}"`;
+            params.push(aParam);
+        }
+
+        // 4. VLESS-TCP-Reality
+        if (document.getElementById('chkReality').checked) {
+            const dest = document.getElementById('realityDest').value.trim() || 'microsoft.com';
+            params.push(`--reality --reality-dest="${dest}"`);
+        }
+
+        if (params.length > 0) {
+            cmd += " " + params.join(" ");
+        }
+
+        document.getElementById('cmdOutput').innerText = cmd;
+    }
+
+    function copyCommand() {
+        const text = document.getElementById('cmdOutput').innerText;
+        navigator.clipboard.writeText(text).then(() => {
+            const toast = document.getElementById('copyToast');
+            toast.classList.add('show');
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 1500);
+        });
+    }
+</script>
+
+</body>
+</html>
