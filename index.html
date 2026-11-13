@@ -3,62 +3,397 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Xray-go 一键部署</title>
+    <title>Xray-go 智能一键部署</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 650px; margin: 40px auto; padding: 20px; background: #f4f6f8; color: #333; }
-        .card { background: #fff; padding: 30px; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
-        h2 { margin-top: 0; color: #1a202c; }
-        p { color: #4a5568; font-size: 14px; }
-        .form-group { margin-bottom: 20px; }
-        label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 13px; color: #2d3748; }
-        input { width: 100%; padding: 10px 12px; box-sizing: border-box; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 14px; outline: none; transition: border-color 0.2s; }
-        input:focus { border-color: #3182ce; box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15); }
-        pre { background: #1a202c; color: #e2e8f0; padding: 15px; border-radius: 6px; overflow-x: auto; font-size: 12px; line-height: 1.6; word-break: break-all; white-space: pre-wrap; }
-        .btn { background: #3182ce; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; transition: background 0.2s; }
-        .btn:hover { background: #2b6cb0; }
-        .tip { font-size: 12px; color: #718096; margin-top: 5px; }
+        :root {
+            --bg-color: #f5f5f7;
+            --card-bg: #ffffff;
+            --text-main: #1d1d1f;
+            --text-secondary: #86868b;
+            --accent: #0071e3;
+            --accent-hover: #0077ed;
+            --border: #d2d2d7;
+            --radius: 12px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            max-width: 680px;
+            margin: 40px auto;
+            padding: 20px;
+            background: var(--bg-color);
+            color: var(--text-main);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .card {
+            background: var(--card-bg);
+            padding: 36px;
+            border-radius: var(--radius);
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+            border: 1px solid rgba(0, 0, 0, 0.02);
+        }
+
+        h2 {
+            margin-top: 0;
+            font-size: 24px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            color: var(--text-main);
+        }
+
+        p.desc {
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-bottom: 28px;
+            line-height: 1.5;
+        }
+
+        .protocol-section {
+            background: #fafafc;
+            border: 1px solid #e8e8ed;
+            border-radius: 10px;
+            padding: 18px 20px;
+            margin-bottom: 16px;
+            transition: all 0.2s ease;
+        }
+
+        .protocol-section:hover {
+            border-color: #c7c7cc;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            font-weight: 600;
+            font-size: 15px;
+            cursor: pointer;
+            color: var(--text-main);
+        }
+
+        .checkbox-label input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            margin-right: 10px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
+        .sub-options {
+            margin-top: 14px;
+            padding-top: 14px;
+            border-top: 1px solid #e8e8ed;
+            display: none;
+        }
+
+        .protocol-section.active .sub-options {
+            display: block;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .form-group {
+            margin-bottom: 12px;
+        }
+
+        .form-group.full {
+            grid-column: span 2;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        input[type="text"], select {
+            width: 100%;
+            padding: 10px 12px;
+            box-sizing: border-box;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            background: #fff;
+            color: var(--text-main);
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        input[type="text"]:focus, select:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.12);
+        }
+
+        .inline-checkboxes {
+            display: flex;
+            gap: 20px;
+            margin-top: 8px;
+            font-size: 13px;
+        }
+
+        .inline-checkboxes label {
+            display: inline-flex;
+            align-items: center;
+            color: var(--text-main);
+            font-weight: 400;
+            cursor: pointer;
+        }
+
+        .inline-checkboxes input {
+            margin-right: 6px;
+            accent-color: var(--accent);
+        }
+
+        .output-box {
+            margin-top: 28px;
+        }
+
+        pre {
+            background: #1d1d1f;
+            color: #f5f5f7;
+            padding: 16px;
+            border-radius: 10px;
+            overflow-x: auto;
+            font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            word-break: break-all;
+            white-space: pre-wrap;
+            margin-bottom: 12px;
+        }
+
+        .btn-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .btn {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 11px 22px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+
+        .btn:hover {
+            background: var(--accent-hover);
+        }
+
+        .toast {
+            font-size: 13px;
+            color: #34c759;
+            font-weight: 500;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .toast.show {
+            opacity: 1;
+        }
     </style>
 </head>
 <body>
+
 <div class="card">
-    <h2>🚀 Xray-go 一键部署</h2>
-    <p>在下方填入你的 Cloudflare 域名与 API Token，系统将为你实时生成定制化的 VPS 一键安装命令。</p>
+    <h2>🚀 Xray-go 智能部署</h2>
+    <p class="desc">按需勾选下方协议模块并填写必要参数，系统将为你实时生成定制化的 VPS 一键安装命令。</p>
     
-    <div class="form-group">
-        <label>主根域名 (例如 example.com):</label>
-        <input type="text" id="domain" placeholder="example.com" oninput="updateCommand()">
-        <div class="tip">脚本将自动配置 h2.你的域名 和 h3.你的域名</div>
-    </div>
-    
-    <div class="form-group">
-        <label>Cloudflare API Token (需具备 DNS 编辑权限):</label>
-        <input type="text" id="token" placeholder="填入你的 Cloudflare API Token" oninput="updateCommand()">
+    <!-- 1. VLESS-TCP-Reality -->
+    <div class="protocol-section" id-sec="reality">
+        <label class="checkbox-label">
+            <input type="checkbox" id="chkReality" onchange="toggleSection('reality'); updateCommand();"> 1. VLESS-TCP-Reality
+        </label>
+        <div class="sub-options">
+            <div class="form-group">
+                <label>回落目标域名 (Dest):</label>
+                <input type="text" id="realityDest" value="microsoft.com" oninput="updateCommand()">
+            </div>
+        </div>
     </div>
 
-    <div class="form-group">
-        <label>专属安装命令 (复制并在你的 VPS 终端中运行):</label>
-        <pre id="cmdOutput">DOMAIN="example.com" CF_TOKEN="你的Token" bash &lt;(curl -Ls https://raw.githubusercontent.com/easonhunt7/singboXray/main/install.sh)</pre>
-        <br>
-        <button class="btn" onclick="copyCommand()">📋 一键复制安装命令</button>
+    <!-- 2. xHTTP -->
+    <div class="protocol-section" id-sec="xhttp">
+        <label class="checkbox-label">
+            <input type="checkbox" id="chkXhttp" onchange="toggleSection('xhttp'); updateCommand();"> 2. xHTTP 协议
+        </label>
+        <div class="sub-options">
+            <div class="form-group">
+                <label>传输模式选择:</label>
+                <div class="inline-checkboxes">
+                    <label><input type="checkbox" id="xhttpH2" checked onchange="updateCommand()"> H2</label>
+                    <label><input type="checkbox" id="xhttpH3" onchange="updateCommand()"> H3</label>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>域名 (可选，填入后启用域名+API模式):</label>
+                    <input type="text" id="xhttpDomain" placeholder="example.com" oninput="updateCommand()">
+                </div>
+                <div class="form-group">
+                    <label>Cloudflare API Token (可选):</label>
+                    <input type="text" id="xhttpApi" placeholder="API Token" oninput="updateCommand()">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. NaiveProxy -->
+    <div class="protocol-section" id-sec="naive">
+        <label class="checkbox-label">
+            <input type="checkbox" id="chkNaive" onchange="toggleSection('naive'); updateCommand();"> 3. NaiveProxy 协议
+        </label>
+        <div class="sub-options">
+            <div class="form-group">
+                <label>传输模式选择 (可单选或全选):</label>
+                <div class="inline-checkboxes">
+                    <label><input type="checkbox" id="naiveH2" checked onchange="updateCommand()"> H2</label>
+                    <label><input type="checkbox" id="naiveH3" onchange="updateCommand()"> H3</label>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>绑定域名 (必填):</label>
+                    <input type="text" id="naiveDomain" placeholder="naive.example.com" oninput="updateCommand()">
+                </div>
+                <div class="form-group">
+                    <label>Cloudflare API Token (必填):</label>
+                    <input type="text" id="naiveApi" placeholder="API Token" oninput="updateCommand()">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. xHTTP-Argo -->
+    <div class="protocol-section" id-sec="argo">
+        <label class="checkbox-label">
+            <input type="checkbox" id="chkArgo" onchange="toggleSection('argo'); updateCommand();"> 4. xHTTP-Argo 隧道
+        </label>
+        <div class="sub-options">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Argo 协议 (必填):</label>
+                    <select id="argoProtocol" onchange="updateCommand()">
+                        <option value="http2" selected>http2</option>
+                        <option value="quic">quic</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>本地监听端口 (必填):</label>
+                    <input type="text" id="argoPort" value="8001" oninput="updateCommand()">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Argo 域名 (必填):</label>
+                    <input type="text" id="argoDomain" placeholder="argo.example.com" oninput="updateCommand()">
+                </div>
+                <div class="form-group">
+                    <label>Argo Token (必填):</label>
+                    <input type="text" id="argoToken" placeholder="Tunnel Token" oninput="updateCommand()">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 专属安装命令输出 -->
+    <div class="output-box">
+        <label style="font-size: 13px; font-weight: 600; color: var(--text-main); margin-bottom: 8px;">专属安装命令 (复制并在您的 VPS 终端运行):</label>
+        <pre id="cmdOutput">bash &lt;(curl -Ls https://raw.githubusercontent.com/easonhunt7/singboXray/main/install.sh)</pre>
+        <div class="btn-container">
+            <button class="btn" onclick="copyCommand()">📋 一键复制安装命令</button>
+            <span id="copyToast" class="toast">已复制</span>
+        </div>
     </div>
 </div>
 
 <script>
+    function toggleSection(secName) {
+        const chk = document.getElementById('chk' + capitalize(secName));
+        const sec = document.querySelector(`[id-sec="${secName}"]`);
+        if (chk.checked) {
+            sec.classList.add('active');
+        } else {
+            sec.classList.remove('active');
+        }
+    }
+
+    function capitalize(str) {
+        return str.charAt(0).toUpperCase() + str.slice(1);
+    }
+
     function updateCommand() {
-        const domain = document.getElementById('domain').value.trim() || 'example.com';
-        const token = document.getElementById('token').value.trim() || '你的Token';
-        
-        const fullCmd = `DOMAIN="${domain}" CF_TOKEN="${token}" bash <(curl -Ls https://raw.githubusercontent.com/easonhunt7/singboXray/main/install.sh)`;
-        
-        document.getElementById('cmdOutput').innerText = fullCmd;
+        let cmd = "bash <(curl -Ls https://raw.githubusercontent.com/easonhunt7/singboXray/main/install.sh)";
+        let params = [];
+
+        // 1. Reality
+        if (document.getElementById('chkReality').checked) {
+            const dest = document.getElementById('realityDest').value.trim() || 'microsoft.com';
+            params.push(`--reality --reality-dest="${dest}"`);
+        }
+
+        // 2. xHTTP
+        if (document.getElementById('chkXhttp').checked) {
+            let xh2 = document.getElementById('xhttpH2').checked ? 'true' : 'false';
+            let xh3 = document.getElementById('xhttpH3').checked ? 'true' : 'false';
+            let xDomain = document.getElementById('xhttpDomain').value.trim();
+            let xApi = document.getElementById('xhttpApi').value.trim();
+            
+            let xParam = `--xhttp --xhttp-h2=${xh2} --xhttp-h3=${xh3}`;
+            if (xDomain) xParam += ` --xhttp-domain="${xDomain}"`;
+            if (xApi) xParam += ` --xhttp-api="${xApi}"`;
+            params.push(xParam);
+        }
+
+        // 3. NaiveProxy
+        if (document.getElementById('chkNaive').checked) {
+            let nh2 = document.getElementById('naiveH2').checked ? 'true' : 'false';
+            let nh3 = document.getElementById('naiveH3').checked ? 'true' : 'false';
+            let nDomain = document.getElementById('naiveDomain').value.trim();
+            let nApi = document.getElementById('naiveApi').value.trim();
+            
+            params.push(`--naive --naive-h2=${nh2} --naive-h3=${nh3} --naive-domain="${nDomain}" --naive-api="${nApi}"`);
+        }
+
+        // 4. xHTTP-Argo
+        if (document.getElementById('chkArgo').checked) {
+            let aProto = document.getElementById('argoProtocol').value;
+            let aPort = document.getElementById('argoPort').value.trim() || '8001';
+            let aDomain = document.getElementById('argoDomain').value.trim();
+            let aToken = document.getElementById('argoToken').value.trim();
+
+            params.push(`--argo --argo-protocol="${aProto}" --argo-port="${aPort}" --argo-domain="${aDomain}" --argo-token="${aToken}"`);
+        }
+
+        if (params.length > 0) {
+            cmd += " " + params.join(" ");
+        }
+
+        document.getElementById('cmdOutput').innerText = cmd;
     }
 
     function copyCommand() {
         const text = document.getElementById('cmdOutput').innerText;
         navigator.clipboard.writeText(text).then(() => {
-            alert('命令已成功复制！请前往你的 VPS 终端粘贴运行。');
+            const toast = document.getElementById('copyToast');
+            toast.classList.add('show');
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 1500);
         });
     }
 </script>
+
 </body>
 </html>
