@@ -7,18 +7,22 @@ yellow() { echo -e "\033[33m$1\033[0m"; }
 
 [[ $EUID -ne 0 ]] && red "必须以 root 用户运行此脚本！" && exit 1
 
-port_arg="y"
+h2_arg="y"
+h3_arg="y"
 naive_domain=""
 cf_token=""
 
-# 智能解析无等号紧凑参数
+# 智能解析紧凑参数 (naive-h2, naive-h3, naivedomain, api)
 for arg in "$@"; do
     clean_arg="${arg//\"/}"
     clean_arg="${clean_arg//\'/}"
     
     case "${clean_arg,,}" in
-        naive*)
-            port_arg="${clean_arg#naive}"
+        naive-h2*)
+            h2_arg="${clean_arg#naive-h2}"
+            ;;
+        naive-h3*)
+            h3_arg="${clean_arg#naive-h3}"
             ;;
         naivedomain*)
             naive_domain="${clean_arg#naivedomain}"
@@ -43,14 +47,38 @@ if [ -z "$cf_token" ]; then
 fi
 
 [[ -z "${naive_domain}" ]] && red "错误: 未检测到有效的域名参数！" && exit 1
-[[ -z "${cf_token}" ]] && red "错误: 未检测到有效的 Cloudflare API Token！" && exit 1
+[[ -z "${cf_token}" ]] && red "错误: 未检测 to 有效的 Cloudflare API Token！" && exit 1
 
-if [ "$port_arg" = "y" ] || [ "$port_arg" = "Y" ] || [ -z "$port_arg" ]; then
-    naive_port=$(shuf -i 10000-65000 -n 1)
-elif [[ "$port_arg" =~ ^[0-9]+$ ]]; then
-    naive_port="$port_arg"
-else
-    naive_port=$(shuf -i 10000-65000 -n 1)
+# 检查开关：是否至少启用了一个
+run_h2=false
+run_h3=false
+[[ "$h2_arg" =~ ^([yY][eE][sS]|[yY])$ ]] && run_h2=true
+[[ "$h3_arg" =~ ^([yY][eE][sS]|[yY])$ ]] && run_h3=true
+
+if [ "$run_h2" = false ] && [ "$run_h3" = false ]; then
+    red "错误: naive-h2 和 naive-h3 均未启用（或填了 n/空），请至少开启其中一个！"
+    exit 1
+fi
+
+# 分别为 H2 和 H3 分配独立随机端口（如果需要的话，也可以自定义）
+if [ "$run_h2" = true ]; then
+    if [[ "$h2_arg" =~ ^[0-9]+$ ]]; then
+        h2_port="$h2_arg"
+    else
+        h2_port=$(shuf -i 10000-65000 -n 1)
+    fi
+fi
+
+if [ "$run_h3" = true ]; then
+    if [[ "$h3_arg" =~ ^[0-9]+$ ]]; then
+        h3_port="$h3_arg"
+    else
+        # 确保 H3 端口不与 H2 端口冲突
+        while : ; do
+            h3_port=$(shuf -i 10000-65000 -n 1)
+            [ "$h3_port" != "$h2_port" ] && break
+        done
+    fi
 fi
 
 SBX_DIR="/usr/local/singbox_naive"
@@ -83,7 +111,7 @@ else
     naive_uuid=$(cat "$uuid_file")
 fi
 
-green "---> 正在使用 Cloudflare DNS-01 申请/配置 SSL 证书（完全不占用 80 端口）..."
+green "---> 正在使用 Cloudflare DNS-01 申请/配置共享 SSL 证书（完全不占用 80 端口）..."
 export CF_Token="${cf_token}"
 
 if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
@@ -129,7 +157,61 @@ rm -rf /tmp/sing-box*
 
 [[ ! -f "${SBX_DIR}/sing-box" ]] && red "错误: Sing-box 核心未成功生成！" && exit 1
 
-green "---> 正在生成 Sing-box 原生 Naive 配置文件..."
+green "---> 正在生成 Sing-box 原生多节点 Naive 配置文件..."
+
+# 动态组装 inbounds
+inbounds_json=""
+
+if [ "$run_h2" = true ]; then
+    inbounds_json+='    {
+      "type": "naive",
+      "tag": "naive-h2-in",
+      "listen": "::",
+      "listen_port": '"$h2_port"',
+      "users": [
+        {
+          "username": "'"$naive_uuid"'",
+          "password": "'"$naive_uuid"'"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "certificate_path": "'"$CERT_DIR"'/fullchain.cer",
+        "key_path": "'"$CERT_DIR"'/private.key"
+      }
+    }'
+fi
+
+if [ "$run_h3" = true ]; then
+    if [ -n "$inbounds_json" ]; then
+        inbounds_json+=','
+    fi
+    inbounds_json+='    {
+      "type": "naive",
+      "tag": "naive-h3-in",
+      "listen": "::",
+      "listen_port": '"$h3_port"',
+      "users": [
+        {
+          "username": "'"$naive_uuid"'",
+          "password": "'"$naive_uuid"'"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "alpn": [
+          "h3"
+        ],
+        "certificate_path": "'"$CERT_DIR"'/fullchain.cer",
+        "key_path": "'"$CERT_DIR"'/private.key"
+      }
+    }'
+fi
+
 cat > "${SBX_DIR}/config.json" << EOF
 {
   "log": {
@@ -138,23 +220,7 @@ cat > "${SBX_DIR}/config.json" << EOF
     "timestamp": true
   },
   "inbounds": [
-    {
-      "type": "naive",
-      "tag": "naive-in",
-      "listen": "::",
-      "listen_port": ${naive_port},
-      "users": [
-        {
-          "username": "${naive_uuid}",
-          "password": "${naive_uuid}"
-        }
-      ],
-      "tls": {
-        "enabled": true,
-        "certificate_path": "${CERT_DIR}/fullchain.cer",
-        "key_path": "${CERT_DIR}/private.key"
-      }
-    }
+$inbounds_json
   ]
 }
 EOF
@@ -180,27 +246,27 @@ EOF
 systemctl daemon-reload
 systemctl enable --now naive >/dev/null 2>&1
 
+# 放行对应的防火墙端口
 if command -v iptables >/dev/null 2>&1; then
-    iptables -I INPUT -p tcp --dport $naive_port -j ACCEPT 2>/dev/null
-    iptables -I INPUT -p udp --dport $naive_port -j ACCEPT 2>/dev/null
+    [ "$run_h2" = true ] && iptables -I INPUT -p tcp --dport $h2_port -j ACCEPT 2>/dev/null
+    [ "$run_h3" = true ] && iptables -I INPUT -p udp --dport $h3_port -j ACCEPT 2>/dev/null
 fi
 if command -v ip6tables >/dev/null 2>&1; then
-    ip6tables -I INPUT -p tcp --dport $naive_port -j ACCEPT 2>/dev/null
-    ip6tables -I INPUT -p udp --dport $naive_port -j ACCEPT 2>/dev/null
+    [ "$run_h2" = true ] && ip6tables -I INPUT -p tcp --dport $h2_port -j ACCEPT 2>/dev/null
+    [ "$run_h3" = true ] && ip6tables -I INPUT -p udp --dport $h3_port -j ACCEPT 2>/dev/null
 fi
 
 clear
 green "=========================================================================================="
-green " Sing-box 原生 NaïveProxy 服务端部署成功！"
+green " Sing-box 原生独立端口 NaïveProxy 服务端部署成功！"
 green "=========================================================================================="
 green "👉 核心架构: Sing-box Native (轻量无编译)"
 green "👉 验证方式: Cloudflare DNS-01 (免 80 端口)"
-green "👉 证书存放路径: ${CERT_DIR}/"
+green "👉 共享证书路径: ${CERT_DIR}/"
 green "👉 绑定的域名: ${naive_domain}"
-green "👉 服务端口: ${naive_port}"
 green "------------------------------------------------------------------------------------------"
 green "👉 客户端分享链接 (可在 v2rayN / v2rayNG / Hiddify 中直接导入)："
 green "------------------------------------------------------------------------------------------"
-echo -e "\e[1;33mnaive+quic://${naive_uuid}:${naive_uuid}@${naive_domain}:${naive_port}?congestion_control=bbr&security=tls&sni=${naive_domain}#Naive-SingBox-QUIC\e[0m"
-echo -e "\e[1;33mnaive+https://${naive_uuid}:${naive_uuid}@${naive_domain}:${naive_port}?security=tls&sni=${naive_domain}#Naive-SingBox-H2\e[0m"
+[ "$run_h3" = true ] && echo -e "\e[1;33mnaive+quic://${naive_uuid}:${naive_uuid}@${naive_domain}:${h3_port}?congestion_control=bbr&security=tls&sni=${naive_domain}#Naive-H3-${h3_port}\e[0m"
+[ "$run_h2" = true ] && echo -e "\e[1;33mnaive+https://${naive_uuid}:${naive_uuid}@${naive_domain}:${h2_port}?security=tls&sni=${naive_domain}#Naive-H2-${h2_port}\e[0m"
 green "=========================================================================================="
