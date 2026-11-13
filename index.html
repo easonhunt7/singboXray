@@ -19,9 +19,9 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
-            max-width: 1140px;
+            max-width: 1100px;
             margin: 0 auto;
-            padding: 0 24px 24px 24px;
+            padding: 0 16px 16px 16px;
             background: var(--bg-color);
             color: var(--text-main);
             -webkit-font-smoothing: antialiased;
@@ -29,7 +29,7 @@
 
         .container {
             background: var(--card-bg);
-            padding: 28px 36px;
+            padding: 18px 28px;
             border-radius: 0 0 var(--radius) var(--radius);
             box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
             border: 1px solid rgba(0, 0, 0, 0.02);
@@ -37,27 +37,27 @@
         }
 
         .header-box {
-            margin-bottom: 22px;
+            margin-bottom: 12px;
         }
 
         .title-row {
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
-            margin-bottom: 8px;
+            gap: 8px;
+            margin-bottom: 4px;
         }
 
         .title-row img {
-            width: 36px;
-            height: 36px;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+            width: 30px;
+            height: 30px;
+            border-radius: 7px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
         }
 
         h2 {
             margin: 0;
-            font-size: 23px;
+            font-size: 20px;
             font-weight: 600;
             letter-spacing: -0.01em;
             color: var(--text-main);
@@ -65,26 +65,26 @@
 
         p.desc {
             color: var(--text-secondary);
-            font-size: 13.5px;
+            font-size: 12.5px;
             margin: 0;
-            line-height: 1.4;
+            line-height: 1.3;
             text-align: left;
         }
 
-        /* 修复后的双列网格 */
+        /* 紧凑的双列网格 */
         .protocols-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 18px;
-            margin-bottom: 22px;
+            gap: 12px;
+            margin-bottom: 12px;
             align-items: start;
         }
 
         .protocol-section {
             background: #fafafc;
             border: 1px solid #e8e8ed;
-            border-radius: 10px;
-            padding: 16px 18px;
+            border-radius: 9px;
+            padding: 10px 14px;
             transition: all 0.2s ease;
         }
 
@@ -96,23 +96,23 @@
             display: flex;
             align-items: center;
             font-weight: 600;
-            font-size: 15px;
+            font-size: 14px;
             cursor: pointer;
             color: var(--text-main);
             user-select: none;
         }
 
         .checkbox-label input[type="checkbox"] {
-            width: 17px;
-            height: 17px;
-            margin-right: 9px;
+            width: 15px;
+            height: 15px;
+            margin-right: 8px;
             accent-color: var(--accent);
             cursor: pointer;
         }
 
         .sub-options {
-            margin-top: 14px;
-            padding-top: 14px;
+            margin-top: 8px;
+            padding-top: 8px;
             border-top: 1px solid #e8e8ed;
             display: none;
         }
@@ -124,32 +124,35 @@
         .inner-split {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 14px;
+            gap: 10px;
             align-items: start;
         }
 
         .stack-col {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 6px;
         }
 
+        /* 统一输入框与复选框容器高度和尺寸 */
         .proto-port-box {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 8px;
+            gap: 6px;
             background: #ffffff;
-            padding: 7px 10px;
-            border-radius: 7px;
+            padding: 4px 8px;
+            border-radius: 6px;
             border: 1px solid #e8e8ed;
+            height: 30px;
+            box-sizing: border-box;
         }
 
         .proto-port-box label {
             display: inline-flex;
             align-items: center;
             margin: 0;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 600;
             color: var(--text-main);
             cursor: pointer;
@@ -157,18 +160,20 @@
         }
 
         .proto-port-box input[type="checkbox"] {
-            margin-right: 6px;
+            margin-right: 5px;
             accent-color: var(--accent);
             cursor: pointer;
         }
 
         .proto-port-box input[type="text"] {
-            width: 120px;
-            padding: 5px 8px;
-            font-size: 12px;
+            width: 100px;
+            padding: 3px 6px;
+            font-size: 11.5px;
+            height: 22px;
             border: 1px solid var(--border);
-            border-radius: 5px;
+            border-radius: 4px;
             background: #fcfcfd;
+            box-sizing: border-box;
         }
 
         .form-group {
@@ -177,19 +182,20 @@
 
         label.field-label {
             display: block;
-            margin-bottom: 5px;
+            margin-bottom: 3px;
             font-weight: 500;
-            font-size: 12px;
+            font-size: 11.5px;
             color: var(--text-secondary);
         }
 
         input[type="text"], select {
             width: 100%;
-            padding: 8px 10px;
+            height: 30px;
+            padding: 4px 8px;
             box-sizing: border-box;
             border: 1px solid var(--border);
             border-radius: 6px;
-            font-size: 13px;
+            font-size: 12px;
             background: #fff;
             color: var(--text-main);
             outline: none;
@@ -202,23 +208,23 @@
         }
 
         .output-box {
-            margin-top: 18px;
+            margin-top: 10px;
             border-top: 1px solid #e8e8ed;
-            padding-top: 16px;
+            padding-top: 10px;
         }
 
         pre {
             background: #1d1d1f;
             color: #f5f5f7;
-            padding: 14px 16px;
-            border-radius: 8px;
+            padding: 10px 14px;
+            border-radius: 7px;
             overflow-x: auto;
             font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, monospace;
-            font-size: 12px;
-            line-height: 1.5;
+            font-size: 11.5px;
+            line-height: 1.4;
             word-break: break-all;
             white-space: pre-wrap;
-            margin-bottom: 16px;
+            margin-bottom: 10px;
         }
 
         .btn-container {
@@ -237,10 +243,10 @@
             background: var(--accent);
             color: white;
             border: none;
-            padding: 10px 26px;
-            border-radius: 8px;
+            padding: 8px 22px;
+            border-radius: 7px;
             cursor: pointer;
-            font-size: 13.5px;
+            font-size: 13px;
             font-weight: 500;
             transition: background 0.2s;
         }
@@ -252,9 +258,9 @@
         .toast {
             position: absolute;
             left: 100%;
-            margin-left: 12px;
+            margin-left: 10px;
             white-space: nowrap;
-            font-size: 13px;
+            font-size: 12.5px;
             color: #34c759;
             font-weight: 600;
             opacity: 0;
@@ -393,7 +399,7 @@
                 <input type="checkbox" id="chkReality" class="proto-toggle"> 4. VLESS-TCP-Reality
             </label>
             <div class="sub-options">
-                <div class="stack-col">
+                <div class="stack-col" style="gap: 8px;">
                     <div class="form-group">
                         <label class="field-label">指定端口 (可选):</label>
                         <input type="text" id="realityPort" placeholder="端口 (留空随机)">
@@ -410,7 +416,7 @@
 
     <!-- 专属安装命令输出 -->
     <div class="output-box">
-        <label style="font-size: 13px; font-weight: 600; color: var(--text-main); margin-bottom: 8px; display: block;">专属安装命令 (复制并在您的 VPS 终端运行):</label>
+        <label style="font-size: 12px; font-weight: 600; color: var(--text-main); margin-bottom: 6px; display: block;">专属安装命令 (复制并在您的 VPS 终端运行):</label>
         <pre id="cmdOutput">bash &lt;(curl -Ls https://raw.githubusercontent.com/easonhunt7/singboXray/main/install.sh)</pre>
         <div class="btn-container">
             <div class="btn-wrapper">
