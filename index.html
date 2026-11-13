@@ -20,8 +20,8 @@
         body {
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
             max-width: 1120px;
-            margin: 16px auto;
-            padding: 12px 20px;
+            margin: 0 auto; /* 顶部顶格，左右居中 */
+            padding: 0 20px 20px 20px; /* 顶部 padding 设为 0，直接贴顶 */
             background: var(--bg-color);
             color: var(--text-main);
             -webkit-font-smoothing: antialiased;
@@ -30,9 +30,10 @@
         .container {
             background: var(--card-bg);
             padding: 24px 32px;
-            border-radius: var(--radius);
+            border-radius: 0 0 var(--radius) var(--radius); /* 顶部圆角去掉或保留，让其完美贴顶 */
             box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
             border: 1px solid rgba(0, 0, 0, 0.02);
+            border-top: none; /* 顶部无边框，融于页面 */
         }
 
         /* 标题居中，副标题靠左 */
