@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Xray-go 智能一键部署</title>
+    <link rel="icon" href="logo.png" type="image/png">
     <style>
         :root {
             --bg-color: #f5f5f7;
@@ -34,19 +35,42 @@
             border: 1px solid rgba(0, 0, 0, 0.02);
         }
 
+        /* 顶部标题与Logo居中 */
+        .header-center {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            margin-bottom: 22px;
+        }
+
+        .title-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 6px;
+        }
+
+        .title-row img {
+            width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+        }
+
         h2 {
-            margin-top: 0;
+            margin: 0;
             font-size: 22px;
             font-weight: 600;
             letter-spacing: -0.01em;
             color: var(--text-main);
-            margin-bottom: 6px;
         }
 
         p.desc {
             color: var(--text-secondary);
             font-size: 13px;
-            margin-bottom: 20px;
+            margin: 0;
             line-height: 1.4;
         }
 
@@ -99,16 +123,11 @@
             display: block;
         }
 
-        /* 极紧凑的双列网格，用于容纳 H2/H3 及 Domain/Token */
         .compact-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 8px;
             margin-bottom: 8px;
-        }
-
-        .compact-grid.full {
-            grid-column: span 2;
         }
 
         .proto-port-box {
@@ -194,21 +213,24 @@
             line-height: 1.5;
             word-break: break-all;
             white-space: pre-wrap;
-            margin-bottom: 10px;
+            margin-bottom: 14px;
         }
 
+        /* 底部按钮与提示居中 */
         .btn-container {
             display: flex;
+            flex-direction: column;
             align-items: center;
-            gap: 12px;
+            justify-content: center;
+            gap: 6px;
         }
 
         .btn {
             background: var(--accent);
             color: white;
             border: none;
-            padding: 8px 18px;
-            border-radius: 6px;
+            padding: 9px 24px;
+            border-radius: 8px;
             cursor: pointer;
             font-size: 13px;
             font-weight: 500;
@@ -223,6 +245,7 @@
             font-size: 12px;
             color: #34c759;
             font-weight: 500;
+            height: 16px;
             opacity: 0;
             transition: opacity 0.3s ease;
         }
@@ -235,8 +258,14 @@
 <body>
 
 <div class="container">
-    <h2>🚀 Xray-go 智能部署</h2>
-    <p class="desc">按需勾选下方协议模块，系统将为你实时生成定制化的 VPS 一键安装命令。</p>
+    <!-- 居中头部 -->
+    <div class="header-center">
+        <div class="title-row">
+            <img src="logo.png" alt="Xray-go Logo">
+            <h2>Xray-go 智能部署</h2>
+        </div>
+        <p class="desc">按需勾选下方协议模块，系统将为你实时生成定制化的 VPS 一键安装命令。</p>
+    </div>
     
     <!-- 协议双列网格容器 -->
     <div class="protocols-grid">
@@ -247,8 +276,7 @@
                 <input type="checkbox" id="chkNaive" onchange="toggleSection('naive'); updateCommand();"> 1. NaiveProxy
             </label>
             <div class="sub-options">
-                <label.field-label style="margin-bottom: 5px; font-size: 11px; color: var(--text-secondary);">传输模式与端口 (留空 = 随机):</label.field-label>
-                <!-- H2 / H3 左右横排 -->
+                <label class="field-label" style="margin-bottom: 5px;">传输模式与端口 (留空 = 随机):</label>
                 <div class="compact-grid">
                     <div class="proto-port-box">
                         <label><input type="checkbox" id="naiveH2" checked onchange="updateCommand()"> H2</label>
@@ -259,7 +287,6 @@
                         <input type="text" id="naiveH3Port" placeholder="留空随机" oninput="updateCommand()">
                     </div>
                 </div>
-                <!-- Domain / Token 左右横排 -->
                 <div class="compact-grid" style="margin-top: 6px;">
                     <div class="form-group">
                         <label class="field-label">绑定域名 (必填):</label>
@@ -279,8 +306,7 @@
                 <input type="checkbox" id="chkXhttp" onchange="toggleSection('xhttp'); updateCommand();"> 2. xHTTP 直连
             </label>
             <div class="sub-options">
-                <label class="field-label" style="margin-bottom: 5px; font-size: 11px; color: var(--text-secondary);">传输模式与端口 (留空 = 随机):</label>
-                <!-- H2 / H3 左右横排 -->
+                <label class="field-label" style="margin-bottom: 5px;">传输模式与端口 (留空 = 随机):</label>
                 <div class="compact-grid">
                     <div class="proto-port-box">
                         <label><input type="checkbox" id="xhttpH2" checked onchange="updateCommand()"> H2</label>
@@ -291,7 +317,6 @@
                         <input type="text" id="xhttpH3Port" placeholder="留空随机" oninput="updateCommand()">
                     </div>
                 </div>
-                <!-- Domain / Token 左右横排 -->
                 <div class="compact-grid" style="margin-top: 6px;">
                     <div class="form-group">
                         <label class="field-label">域名 (可选，默认自签):</label>
@@ -389,75 +414,47 @@
         let cmd = "bash <(curl -Ls https://raw.githubusercontent.com/easonhunt7/singboXray/main/install.sh)";
         let params = [];
 
+        // 1. NaiveProxy
         if (document.getElementById('chkNaive').checked) {
-            let nh2 = document.getElementById('naiveH2').checked ? 'true' : 'false';
-            let nh3 = document.getElementById('naiveH3').checked ? 'true' : 'false';
+            let nh2 = document.getElementById('naiveH2').checked;
+            let nh3 = document.getElementById('naiveH3').checked;
             let nh2Port = document.getElementById('naiveH2Port').value.trim();
             let nh3Port = document.getElementById('naiveH3Port').value.trim();
             let nDomain = document.getElementById('naiveDomain').value.trim();
             let nApi = document.getElementById('naiveApi').value.trim();
             
-            let nParam = `--naive --naive-h2=${nh2}`;
-            if (nh2 === 'true' && nh2Port) nParam += ` --naive-h2-port="${nh2Port}"`;
-            
-            nParam += ` --naive-h3=${nh3}`;
-            if (nh3 === 'true' && nh3Port) nParam += ` --naive-h3-port="${nh3Port}"`;
+            let nParam = `--naive`;
+            if (nh2) {
+                nParam += ` --naive-h2=true`;
+                if (nh2Port) nParam += ` --naive-h2-port="${nh2Port}"`;
+            }
+            if (nh3) {
+                nParam += ` --naive-h3=true`;
+                if (nh3Port) nParam += ` --naive-h3-port="${nh3Port}"`;
+            }
 
-            nParam += ` --naive-domain="${nDomain}" --naive-api="${nApi}"`;
+            if (nDomain) nParam += ` --naive-domain="${nDomain}"`;
+            if (nApi) nParam += ` --naive-api="${nApi}"`;
             params.push(nParam);
         }
 
+        // 2. xHTTP 直连
         if (document.getElementById('chkXhttp').checked) {
-            let xh2 = document.getElementById('xhttpH2').checked ? 'true' : 'false';
-            let xh3 = document.getElementById('xhttpH3').checked ? 'true' : 'false';
+            let xh2 = document.getElementById('xhttpH2').checked;
+            let xh3 = document.getElementById('xhttpH3').checked;
             let xh2Port = document.getElementById('xhttpH2Port').value.trim();
             let xh3Port = document.getElementById('xhttpH3Port').value.trim();
             let xDomain = document.getElementById('xhttpDomain').value.trim();
             let xApi = document.getElementById('xhttpApi').value.trim();
             
-            let xParam = `--xhttp --xhttp-h2=${xh2}`;
-            if (xh2 === 'true' && xh2Port) xParam += ` --xhttp-h2-port="${xh2Port}"`;
+            let xParam = `--xhttp`;
+            if (xh2) {
+                xParam += ` --xhttp-h2=true`;
+                if (xh2Port) xParam += ` --xhttp-h2-port="${xh2Port}"`;
+            }
+            if (xh3) {
+                xParam += ` --xhttp-h3=true`;
+                if (xh3Port) xParam += ` --xhttp-h3-port="${xh3Port}"`;
+            }
 
-            xParam += ` --xhttp-h3=${xh3}`;
-            if (xh3 === 'true' && xh3Port) xParam += ` --xhttp-h3-port="${xh3Port}"`;
-
-            if (xDomain) xParam += ` --xhttp-domain="${xDomain}"`;
-            if (xApi) xParam += ` --xhttp-api="${xApi}"`;
-            params.push(xParam);
-        }
-
-        if (document.getElementById('chkArgo').checked) {
-            let aProto = document.getElementById('argoProtocol').value;
-            let aPort = document.getElementById('argoPort').value.trim() || '8001';
-            let aDomain = document.getElementById('argoDomain').value.trim();
-            let aToken = document.getElementById('argoToken').value.trim();
-
-            params.push(`--argo --argo-protocol="${aProto}" --argo-port="${aPort}" --argo-domain="${aDomain}" --argo-token="${aToken}"`);
-        }
-
-        if (document.getElementById('chkReality').checked) {
-            const dest = document.getElementById('realityDest').value.trim() || 'microsoft.com';
-            params.push(`--reality --reality-dest="${dest}"`);
-        }
-
-        if (params.length > 0) {
-            cmd += " " + params.join(" ");
-        }
-
-        document.getElementById('cmdOutput').innerText = cmd;
-    }
-
-    function copyCommand() {
-        const text = document.getElementById('cmdOutput').innerText;
-        navigator.clipboard.writeText(text).then(() => {
-            const toast = document.getElementById('copyToast');
-            toast.classList.add('show');
-            setTimeout(() => {
-                toast.classList.remove('show');
-            }, 1500);
-        });
-    }
-</script>
-
-</body>
-</html>
+            if (xDomain) xParam +=
