@@ -20,8 +20,8 @@
         body {
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
             max-width: 1140px;
-            margin: 0 auto; /* 顶部顶格，左右居中 */
-            padding: 0 24px 24px 24px; /* 顶部 padding 设为 0，直接贴顶 */
+            margin: 0 auto;
+            padding: 0 24px 24px 24px;
             background: var(--bg-color);
             color: var(--text-main);
             -webkit-font-smoothing: antialiased;
@@ -36,7 +36,6 @@
             border-top: none;
         }
 
-        /* 标题居中，副标题靠左 */
         .header-box {
             margin-bottom: 22px;
         }
@@ -72,10 +71,10 @@
             text-align: left;
         }
 
-        /* 协议双列网格容器（宽松排列） */
+        /* 修复后的双列网格 */
         .protocols-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
+            grid-template-columns: repeat(2, 1fr);
             gap: 18px;
             margin-bottom: 22px;
             align-items: start;
@@ -122,7 +121,6 @@
             display: block;
         }
 
-        /* 卡片内部左右双栏：宽松排列 */
         .inner-split {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -223,7 +221,6 @@
             margin-bottom: 16px;
         }
 
-        /* 底部按钮居中，已复制提示在右侧 */
         .btn-container {
             display: flex;
             align-items: center;
@@ -269,7 +266,7 @@
             opacity: 1;
         }
 
-        @media (max-width: 700px) {
+        @media (max-width: 900px) {
             .protocols-grid {
                 grid-template-columns: 1fr;
             }
@@ -282,7 +279,6 @@
 <body>
 
 <div class="container">
-    <!-- 头部：标题居中，提示语靠左 -->
     <div class="header-box">
         <div class="title-row">
             <img src="logo.png" alt="Xray-go Logo">
@@ -291,7 +287,6 @@
         <p class="desc">按需勾选下方协议，生成一键安装命令。</p>
     </div>
     
-    <!-- 协议双列网格容器 -->
     <div class="protocols-grid">
         
         <!-- 1. NaiveProxy -->
@@ -301,7 +296,6 @@
             </label>
             <div class="sub-options">
                 <div class="inner-split">
-                    <!-- 左侧：H2在上，H3在下 -->
                     <div class="stack-col">
                         <label class="field-label">传输模式与端口 (留空 = 随机):</label>
                         <div class="proto-port-box">
@@ -313,7 +307,6 @@
                             <input type="text" id="naiveH3Port" placeholder="端口 (留空随机)">
                         </div>
                     </div>
-                    <!-- 右侧：绑定域名在上，API Token在下 -->
                     <div class="stack-col">
                         <div class="form-group">
                             <label class="field-label">绑定域名 (必填):</label>
@@ -335,7 +328,6 @@
             </label>
             <div class="sub-options">
                 <div class="inner-split">
-                    <!-- 左侧：H2在上，H3在下 -->
                     <div class="stack-col">
                         <label class="field-label">传输模式与端口 (留空 = 随机):</label>
                         <div class="proto-port-box">
@@ -347,7 +339,6 @@
                             <input type="text" id="xhttpH3Port" placeholder="端口 (留空随机)">
                         </div>
                     </div>
-                    <!-- 右侧：域名在上，API Token在下 -->
                     <div class="stack-col">
                         <div class="form-group">
                             <label class="field-label">绑定域名 (可选，默认自签):</label>
@@ -369,7 +360,6 @@
             </label>
             <div class="sub-options">
                 <div class="inner-split">
-                    <!-- 左侧：Argo协议在上，端口在下 -->
                     <div class="stack-col">
                         <div class="form-group">
                             <label class="field-label">Argo 协议 (必填):</label>
@@ -383,9 +373,202 @@
                             <input type="text" id="argoPort" value="8001">
                         </div>
                     </div>
-                    <!-- 右侧：域名在上，Token在下 -->
                     <div class="stack-col">
                         <div class="form-group">
                             <label class="field-label">Argo 域名 (必填):</label>
                             <input type="text" id="argoDomain" placeholder="argo.example.com">
                         </div>
+                        <div class="form-group">
+                            <label class="field-label">Argo Token (必填):</label>
+                            <input type="text" id="argoToken" placeholder="Tunnel Token">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. VLESS-TCP-Reality -->
+        <div class="protocol-section" data-sec="reality">
+            <label class="checkbox-label">
+                <input type="checkbox" id="chkReality" class="proto-toggle"> 4. VLESS-TCP-Reality
+            </label>
+            <div class="sub-options">
+                <div class="stack-col">
+                    <div class="form-group">
+                        <label class="field-label">指定端口 (可选):</label>
+                        <input type="text" id="realityPort" placeholder="端口 (留空随机)">
+                    </div>
+                    <div class="form-group">
+                        <label class="field-label">回落目标域名 (Dest):</label>
+                        <input type="text" id="realityDest" value="microsoft.com">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- 专属安装命令输出 -->
+    <div class="output-box">
+        <label style="font-size: 13px; font-weight: 600; color: var(--text-main); margin-bottom: 8px; display: block;">专属安装命令 (复制并在您的 VPS 终端运行):</label>
+        <pre id="cmdOutput">bash &lt;(curl -Ls https://raw.githubusercontent.com/easonhunt7/singboXray/main/install.sh)</pre>
+        <div class="btn-container">
+            <div class="btn-wrapper">
+                <button type="button" class="btn" id="copyBtn">📋 一键复制安装命令</button>
+                <span id="copyToast" class="toast">✓ 已复制</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const toggles = document.querySelectorAll('.proto-toggle');
+    toggles.forEach(function(chk) {
+        chk.addEventListener('change', function() {
+            const section = this.closest('.protocol-section');
+            const secName = section.getAttribute('data-sec');
+            if (this.checked) {
+                section.classList.add('active');
+                if (secName === 'naive') {
+                    document.getElementById('naiveH2').checked = true;
+                    document.getElementById('naiveH3').checked = true;
+                } else if (secName === 'xhttp') {
+                    document.getElementById('xhttpH2').checked = true;
+                    document.getElementById('xhttpH3').checked = true;
+                }
+            } else {
+                section.classList.remove('active');
+            }
+            updateCommand();
+        });
+    });
+
+    const allInputs = document.querySelectorAll('input, select');
+    allInputs.forEach(function(el) {
+        el.addEventListener('input', updateCommand);
+        el.addEventListener('change', updateCommand);
+    });
+
+    function updateCommand() {
+        let cmd = "bash <(curl -Ls https://raw.githubusercontent.com/easonhunt7/singboXray/main/install.sh)";
+        let params = [];
+
+        if (document.getElementById('chkNaive').checked) {
+            let nh2 = document.getElementById('naiveH2').checked;
+            let nh3 = document.getElementById('naiveH3').checked;
+            let nh2Port = document.getElementById('naiveH2Port').value.trim();
+            let nh3Port = document.getElementById('naiveH3Port').value.trim();
+            let nDomain = document.getElementById('naiveDomain').value.trim();
+            let nApi = document.getElementById('naiveApi').value.trim();
+            
+            let nParam = `--naive`;
+            if (nh2) {
+                nParam += ` --naive-h2=true`;
+                if (nh2Port) nParam += ` --naive-h2-port="${nh2Port}"`;
+            }
+            if (nh3) {
+                nParam += ` --naive-h3=true`;
+                if (nh3Port) nParam += ` --naive-h3-port="${nh3Port}"`;
+            }
+            if (nDomain) nParam += ` --naive-domain="${nDomain}"`;
+            if (nApi) nParam += ` --naive-api="${nApi}"`;
+            params.push(nParam);
+        }
+
+        if (document.getElementById('chkXhttp').checked) {
+            let xh2 = document.getElementById('xhttpH2').checked;
+            let xh3 = document.getElementById('xhttpH3').checked;
+            let xh2Port = document.getElementById('xhttpH2Port').value.trim();
+            let xh3Port = document.getElementById('xhttpH3Port').value.trim();
+            let xDomain = document.getElementById('xhttpDomain').value.trim();
+            let xApi = document.getElementById('xhttpApi').value.trim();
+            
+            let xParam = `--xhttp`;
+            if (xh2) {
+                xParam += ` --xhttp-h2=true`;
+                if (xh2Port) xParam += ` --xhttp-h2-port="${xh2Port}"`;
+            }
+            if (xh3) {
+                xParam += ` --xhttp-h3=true`;
+                if (xh3Port) xParam += ` --xhttp-h3-port="${xh3Port}"`;
+            }
+            if (xDomain) xParam += ` --xhttp-domain="${xDomain}"`;
+            if (xApi) xParam += ` --xhttp-api="${xApi}"`;
+            params.push(xParam);
+        }
+
+        if (document.getElementById('chkArgo').checked) {
+            let aProto = document.getElementById('argoProtocol').value;
+            let aPort = document.getElementById('argoPort').value.trim() || '8001';
+            let aDomain = document.getElementById('argoDomain').value.trim();
+            let aToken = document.getElementById('argoToken').value.trim();
+
+            let aParam = `--argo --argo-protocol="${aProto}" --argo-port="${aPort}"`;
+            if (aDomain) aParam += ` --argo-domain="${aDomain}"`;
+            if (aToken) aParam += ` --argo-token="${aToken}"`;
+            params.push(aParam);
+        }
+
+        if (document.getElementById('chkReality').checked) {
+            const dest = document.getElementById('realityDest').value.trim() || 'microsoft.com';
+            const rPort = document.getElementById('realityPort').value.trim();
+            let rParam = `--reality --reality-dest="${dest}"`;
+            if (rPort) rParam += ` --reality-port="${rPort}"`;
+            params.push(rParam);
+        }
+
+        if (params.length > 0) {
+            cmd += " " + params.join(" ");
+        }
+
+        document.getElementById('cmdOutput').innerText = cmd;
+    }
+
+    const copyBtn = document.getElementById('copyBtn');
+    const toast = document.getElementById('copyToast');
+    let toastTimer = null;
+
+    function showToast() {
+        toast.classList.add('show');
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = setTimeout(function() {
+            toast.classList.remove('show');
+        }, 1500);
+    }
+
+    copyBtn.addEventListener('click', function() {
+        const text = document.getElementById('cmdOutput').innerText;
+        
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(function() {
+                showToast();
+            }).catch(function() {
+                fallbackCopy(text);
+            });
+        } else {
+            fallbackCopy(text);
+        }
+    });
+
+    function fallbackCopy(text) {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            showToast();
+        } catch (err) {
+            console.error('复制失败:', err);
+        }
+        document.body.removeChild(textArea);
+    }
+});
+</script>
+
+</body>
+</html>
