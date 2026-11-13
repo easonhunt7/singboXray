@@ -121,20 +121,31 @@
             display: block;
         }
 
-        .inner-split {
+        /* 严格行对齐的内部网格结构 */
+        .row-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 10px;
+            gap: 12px;
             align-items: start;
         }
 
-        .stack-col {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
+        .row-grid + .row-grid {
+            margin-top: 8px;
         }
 
-        /* 统一输入框与复选框容器高度和尺寸 */
+        .form-group {
+            margin-bottom: 0;
+        }
+
+        label.field-label {
+            display: block;
+            margin-bottom: 3px;
+            font-weight: 500;
+            font-size: 11.5px;
+            color: var(--text-secondary);
+        }
+
+        /* 统一的输入框与端口组件容器样式（高度统一为 32px） */
         .proto-port-box {
             display: flex;
             align-items: center;
@@ -143,8 +154,8 @@
             background: #ffffff;
             padding: 4px 8px;
             border-radius: 6px;
-            border: 1px solid #e8e8ed;
-            height: 30px;
+            border: 1px solid var(--border);
+            height: 32px;
             box-sizing: border-box;
         }
 
@@ -174,23 +185,12 @@
             border-radius: 4px;
             background: #fcfcfd;
             box-sizing: border-box;
-        }
-
-        .form-group {
-            margin-bottom: 0;
-        }
-
-        label.field-label {
-            display: block;
-            margin-bottom: 3px;
-            font-weight: 500;
-            font-size: 11.5px;
-            color: var(--text-secondary);
+            outline: none;
         }
 
         input[type="text"], select {
             width: 100%;
-            height: 30px;
+            height: 32px;
             padding: 4px 8px;
             box-sizing: border-box;
             border: 1px solid var(--border);
@@ -202,7 +202,7 @@
             transition: all 0.2s;
         }
 
-        input[type="text"]:focus, select:focus {
+        input[type="text"]:focus, select:focus, .proto-port-box:focus-within {
             border-color: var(--accent);
             box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.12);
         }
@@ -276,7 +276,7 @@
             .protocols-grid {
                 grid-template-columns: 1fr;
             }
-            .inner-split {
+            .row-grid {
                 grid-template-columns: 1fr;
             }
         }
@@ -301,27 +301,32 @@
                 <input type="checkbox" id="chkNaive" class="proto-toggle"> 1. NaiveProxy
             </label>
             <div class="sub-options">
-                <div class="inner-split">
-                    <div class="stack-col">
-                        <label class="field-label">传输模式与端口 (留空 = 随机):</label>
+                <!-- 第一行：H2 与 绑定域名 -->
+                <div class="row-grid">
+                    <div class="form-group">
+                        <label class="field-label">H2 传输与端口 (留空随机):</label>
                         <div class="proto-port-box">
                             <label><input type="checkbox" id="naiveH2" checked> H2</label>
                             <input type="text" id="naiveH2Port" placeholder="端口 (留空随机)">
                         </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="field-label">绑定域名 (必填):</label>
+                        <input type="text" id="naiveDomain" placeholder="naive.example.com">
+                    </div>
+                </div>
+                <!-- 第二行：H3 与 API Token -->
+                <div class="row-grid">
+                    <div class="form-group">
+                        <label class="field-label">H3 传输与端口 (留空随机):</label>
                         <div class="proto-port-box">
                             <label><input type="checkbox" id="naiveH3" checked> H3</label>
                             <input type="text" id="naiveH3Port" placeholder="端口 (留空随机)">
                         </div>
                     </div>
-                    <div class="stack-col">
-                        <div class="form-group">
-                            <label class="field-label">绑定域名 (必填):</label>
-                            <input type="text" id="naiveDomain" placeholder="naive.example.com">
-                        </div>
-                        <div class="form-group">
-                            <label class="field-label">API Token (必填):</label>
-                            <input type="text" id="naiveApi" placeholder="CF API Token">
-                        </div>
+                    <div class="form-group">
+                        <label class="field-label">API Token (必填):</label>
+                        <input type="text" id="naiveApi" placeholder="CF API Token">
                     </div>
                 </div>
             </div>
@@ -333,27 +338,32 @@
                 <input type="checkbox" id="chkXhttp" class="proto-toggle"> 2. xHTTP 直连
             </label>
             <div class="sub-options">
-                <div class="inner-split">
-                    <div class="stack-col">
-                        <label class="field-label">传输模式与端口 (留空 = 随机):</label>
+                <!-- 第一行：H2 与 绑定域名 -->
+                <div class="row-grid">
+                    <div class="form-group">
+                        <label class="field-label">H2 传输与端口 (留空随机):</label>
                         <div class="proto-port-box">
                             <label><input type="checkbox" id="xhttpH2" checked> H2</label>
                             <input type="text" id="xhttpH2Port" placeholder="端口 (留空随机)">
                         </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="field-label">绑定域名 (可选，默认自签):</label>
+                        <input type="text" id="xhttpDomain" placeholder="example.com">
+                    </div>
+                </div>
+                <!-- 第二行：H3 与 API Token -->
+                <div class="row-grid">
+                    <div class="form-group">
+                        <label class="field-label">H3 传输与端口 (留空随机):</label>
                         <div class="proto-port-box">
                             <label><input type="checkbox" id="xhttpH3" checked> H3</label>
                             <input type="text" id="xhttpH3Port" placeholder="端口 (留空随机)">
                         </div>
                     </div>
-                    <div class="stack-col">
-                        <div class="form-group">
-                            <label class="field-label">绑定域名 (可选，默认自签):</label>
-                            <input type="text" id="xhttpDomain" placeholder="example.com">
-                        </div>
-                        <div class="form-group">
-                            <label class="field-label">API Token (可选):</label>
-                            <input type="text" id="xhttpApi" placeholder="CF API Token">
-                        </div>
+                    <div class="form-group">
+                        <label class="field-label">API Token (可选):</label>
+                        <input type="text" id="xhttpApi" placeholder="CF API Token">
                     </div>
                 </div>
             </div>
@@ -365,29 +375,27 @@
                 <input type="checkbox" id="chkArgo" class="proto-toggle"> 3. xHTTP-Argo
             </label>
             <div class="sub-options">
-                <div class="inner-split">
-                    <div class="stack-col">
-                        <div class="form-group">
-                            <label class="field-label">Argo 协议 (必填):</label>
-                            <select id="argoProtocol">
-                                <option value="http2" selected>http2</option>
-                                <option value="quic">quic</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label class="field-label">本地监听端口 (必填):</label>
-                            <input type="text" id="argoPort" value="8001">
-                        </div>
+                <div class="row-grid">
+                    <div class="form-group">
+                        <label class="field-label">Argo 协议 (必填):</label>
+                        <select id="argoProtocol">
+                            <option value="http2" selected>http2</option>
+                            <option value="quic">quic</option>
+                        </select>
                     </div>
-                    <div class="stack-col">
-                        <div class="form-group">
-                            <label class="field-label">Argo 域名 (必填):</label>
-                            <input type="text" id="argoDomain" placeholder="argo.example.com">
-                        </div>
-                        <div class="form-group">
-                            <label class="field-label">Argo Token (必填):</label>
-                            <input type="text" id="argoToken" placeholder="Tunnel Token">
-                        </div>
+                    <div class="form-group">
+                        <label class="field-label">Argo 域名 (必填):</label>
+                        <input type="text" id="argoDomain" placeholder="argo.example.com">
+                    </div>
+                </div>
+                <div class="row-grid" style="margin-top: 8px;">
+                    <div class="form-group">
+                        <label class="field-label">本地监听端口 (必填):</label>
+                        <input type="text" id="argoPort" value="8001">
+                    </div>
+                    <div class="form-group">
+                        <label class="field-label">Argo Token (必填):</label>
+                        <input type="text" id="argoToken" placeholder="Tunnel Token">
                     </div>
                 </div>
             </div>
@@ -399,15 +407,13 @@
                 <input type="checkbox" id="chkReality" class="proto-toggle"> 4. VLESS-TCP-Reality
             </label>
             <div class="sub-options">
-                <div class="stack-col" style="gap: 8px;">
-                    <div class="form-group">
-                        <label class="field-label">指定端口 (可选):</label>
-                        <input type="text" id="realityPort" placeholder="端口 (留空随机)">
-                    </div>
-                    <div class="form-group">
-                        <label class="field-label">回落目标域名 (Dest):</label>
-                        <input type="text" id="realityDest" value="microsoft.com">
-                    </div>
+                <div class="form-group" style="margin-bottom: 8px;">
+                    <label class="field-label">指定端口 (可选):</label>
+                    <input type="text" id="realityPort" placeholder="端口 (留空随机)">
+                </div>
+                <div class="form-group">
+                    <label class="field-label">回落目标域名 (Dest):</label>
+                    <input type="text" id="realityDest" value="microsoft.com">
                 </div>
             </div>
         </div>
