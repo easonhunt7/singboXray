@@ -301,10 +301,10 @@
                 <!-- 第一行：H2 与 域名 -->
                 <div class="row-grid">
                     <div class="form-group">
-                        <label class="field-label">H2 传输与端口 :</label>
+                        <label class="field-label">H2 传输（TCP） :</label>
                         <div class="proto-port-box">
                             <label><input type="checkbox" id="naiveH2" checked> H2</label>
-                            <input type="text" id="naiveH2Port" placeholder="端口号 (留空=随机)">
+                            <input type="text" id="naiveH2Port" placeholder="端口 (留空=随机)">
                         </div>
                     </div>
                     <div class="form-group">
@@ -315,10 +315,10 @@
                 <!-- 第二行：H3 与 API Token -->
                 <div class="row-grid">
                     <div class="form-group">
-                        <label class="field-label">H3 传输与端口 :</label>
+                        <label class="field-label">H3 传输（UDP） :</label>
                         <div class="proto-port-box">
                             <label><input type="checkbox" id="naiveH3" checked> H3</label>
-                            <input type="text" id="naiveH3Port" placeholder="端口号 (留空=随机)">
+                            <input type="text" id="naiveH3Port" placeholder="端口 (留空=随机)">
                         </div>
                     </div>
                     <div class="form-group">
@@ -338,10 +338,10 @@
                 <!-- 第一行：H2 与 域名 -->
                 <div class="row-grid">
                     <div class="form-group">
-                        <label class="field-label">H2 传输与端口 :</label>
+                        <label class="field-label">H2 传输(TCP） :</label>
                         <div class="proto-port-box">
                             <label><input type="checkbox" id="xhttpH2" checked> H2</label>
-                            <input type="text" id="xhttpH2Port" placeholder="端口号 (留空=随机)">
+                            <input type="text" id="xhttpH2Port" placeholder="端口 (留空=随机)">
                         </div>
                     </div>
                     <div class="form-group">
@@ -352,10 +352,10 @@
                 <!-- 第二行：H3 与 API Token -->
                 <div class="row-grid">
                     <div class="form-group">
-                        <label class="field-label">H3 传输与端口 :</label>
+                        <label class="field-label">H3 传输（UDP） :</label>
                         <div class="proto-port-box">
                             <label><input type="checkbox" id="xhttpH3" checked> H3</label>
-                            <input type="text" id="xhttpH3Port" placeholder="端口号 (留空=随机)">
+                            <input type="text" id="xhttpH3Port" placeholder="端口 (留空=随机)">
                         </div>
                     </div>
                     <div class="form-group">
@@ -366,7 +366,7 @@
             </div>
         </div>
 
-        <!-- 3. xHTTP-Argo -->
+        <!-- 3. xHTTP-Argo （TCP+UDP） -->
         <div class="protocol-section" data-sec="argo">
             <label class="checkbox-label">
                 <input type="checkbox" id="chkArgo" class="proto-toggle"> 3. xHTTP-Argo
@@ -387,7 +387,7 @@
                 </div>
                 <div class="row-grid" style="margin-top: 8px;">
                     <div class="form-group">
-                        <label class="field-label">服务URL端口 (必填):</label>
+                        <label class="field-label">服务URL端口号 (必填):</label>
                         <input type="text" id="argoPort" value="8001">
                     </div>
                     <div class="form-group">
@@ -405,8 +405,8 @@
             </label>
             <div class="sub-options">
                 <div class="form-group" style="margin-bottom: 8px;">
-                    <label class="field-label">指定端口 (可选):</label>
-                    <input type="text" id="realityPort" placeholder="端口号 (留空=随机)">
+                    <label class="field-label">指定端口号 (可选):</label>
+                    <input type="text" id="realityPort" placeholder="端口 (留空=随机)">
                 </div>
                 <div class="form-group">
                     <label class="field-label">回落目标域名 (Dest):</label>
