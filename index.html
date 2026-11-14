@@ -287,7 +287,7 @@
             <img src="logo.png" alt="Xray-go Logo">
             <h2>Xray-go 快速一键部署</h2>
         </div>
-        <p class="desc">勾选协议并设置变量，可自动生成一键安装命令。</p>
+        <p class="desc">勾选协议并设置变量 可自动生成一键安装命令</p>
     </div>
     
     <div class="protocols-grid">
@@ -346,7 +346,7 @@
                     </div>
                     <div class="form-group">
                         <label class="field-label">域名（自签留空；若选，须关闭小黄云）:</label>
-                        <input type="text" id="xhttpDomain" placeholder="example.com">
+                        <input type="text" id="xhttpDomain" placeholder="xhttp.example.com">
                     </div>
                 </div>
                 <!-- 第二行：H3 与 API Token -->
@@ -359,7 +359,7 @@
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="field-label">API Token（留空：自签证书；可与NaiveProxy共用）:</label>
+                        <label class="field-label">API Token（自签留空；可与NaiveProxy共用）:</label>
                         <input type="text" id="xhttpApi" placeholder="CF API Token">
                     </div>
                 </div>
@@ -387,7 +387,7 @@
                 </div>
                 <div class="row-grid" style="margin-top: 8px;">
                     <div class="form-group">
-                        <label class="field-label">CF 服务URL端口（必填）:</label>
+                        <label class="field-label">CF服务URL端口（必填）:</label>
                         <input type="text" id="argoPort" value="8001">
                     </div>
                     <div class="form-group">
@@ -409,7 +409,7 @@
                     <input type="text" id="realityPort" placeholder="留空：端口随机">
                 </div>
                 <div class="form-group">
-                    <label class="field-label">SNI 域名（Dest）:</label>
+                    <label class="field-label">SNI域名（Dest）:</label>
                     <input type="text" id="realityDest" value="microsoft.com">
                 </div>
             </div>
@@ -417,7 +417,7 @@
 
     </div>
 
-    <!-- 专属安装命令输出 -->
+    <!-- 安装命令输出 -->
     <div class="output-box">
         <label style="font-size: 12px; font-weight: 600; color: var(--text-main); margin-bottom: 6px; display: block;">请先登录终端后再复制以下:</label>
         <pre id="cmdOutput">bash &lt;(curl -Ls https://raw.githubusercontent.com/easonhunt7/singboXray/main/install.sh)</pre>
