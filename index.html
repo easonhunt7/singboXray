@@ -298,7 +298,6 @@
                 <input type="checkbox" id="chkNaive" class="proto-toggle"> 1. NaiveProxy
             </label>
             <div class="sub-options">
-                <!-- 第一行：H2 与 域名 -->
                 <div class="row-grid">
                     <div class="form-group">
                         <label class="field-label">H2传输&端口号（TCP） :</label>
@@ -312,7 +311,6 @@
                         <input type="text" id="naiveDomain" placeholder="naive.example.com">
                     </div>
                 </div>
-                <!-- 第二行：H3 与 API Token -->
                 <div class="row-grid">
                     <div class="form-group">
                         <label class="field-label">H3传输&端口号（UDP） :</label>
@@ -335,7 +333,6 @@
                 <input type="checkbox" id="chkXhttp" class="proto-toggle"> 2. xHTTP 直连
             </label>
             <div class="sub-options">
-                <!-- 第一行：H2 与 域名 -->
                 <div class="row-grid">
                     <div class="form-group">
                         <label class="field-label">H2传输&端口号（TCP）:</label>
@@ -349,7 +346,6 @@
                         <input type="text" id="xhttpDomain" placeholder="xhttp.example.com">
                     </div>
                 </div>
-                <!-- 第二行：H3 与 API Token -->
                 <div class="row-grid">
                     <div class="form-group">
                         <label class="field-label">H3传输&端口号（UDP）:</label>
@@ -366,7 +362,7 @@
             </div>
         </div>
 
-        <!-- 3. xHTTP-Argo （TCP+UDP） -->
+        <!-- 3. xHTTP-Argo -->
         <div class="protocol-section" data-sec="argo">
             <label class="checkbox-label">
                 <input type="checkbox" id="chkArgo" class="proto-toggle"> 3. xHTTP-Argo
@@ -463,6 +459,7 @@ document.addEventListener('DOMContentLoaded', function() {
         let cmd = "bash <(curl -Ls https://raw.githubusercontent.com/easonhunt7/singboXray/main/install.sh)";
         let params = [];
 
+        // 1. NaiveProxy
         if (document.getElementById('chkNaive').checked) {
             let nh2 = document.getElementById('naiveH2').checked;
             let nh3 = document.getElementById('naiveH3').checked;
@@ -471,20 +468,21 @@ document.addEventListener('DOMContentLoaded', function() {
             let nDomain = document.getElementById('naiveDomain').value.trim();
             let nApi = document.getElementById('naiveApi').value.trim();
             
-            let nParam = `--naive`;
             if (nh2) {
-                nParam += ` --naive-h2=true`;
-                if (nh2Port) nParam += ` --naive-h2-port="${nh2Port}"`;
+                params.push(`naive-h2"${nh2Port}"`);
             }
             if (nh3) {
-                nParam += ` --naive-h3=true`;
-                if (nh3Port) nParam += ` --naive-h3-port="${nh3Port}"`;
+                params.push(`naive-h3"${nh3Port}"`);
             }
-            if (nDomain) nParam += ` --naive-domain="${nDomain}"`;
-            if (nApi) nParam += ` --naive-api="${nApi}"`;
-            params.push(nParam);
+            if (nDomain) {
+                params.push(`naive-domain="${nDomain}"`);
+            }
+            if (nApi) {
+                params.push(`naive-api="${nApi}"`);
+            }
         }
 
+        // 2. xHTTP 直连
         if (document.getElementById('chkXhttp').checked) {
             let xh2 = document.getElementById('xhttpH2').checked;
             let xh3 = document.getElementById('xhttpH3').checked;
@@ -493,38 +491,39 @@ document.addEventListener('DOMContentLoaded', function() {
             let xDomain = document.getElementById('xhttpDomain').value.trim();
             let xApi = document.getElementById('xhttpApi').value.trim();
             
-            let xParam = `--xhttp`;
             if (xh2) {
-                xParam += ` --xhttp-h2=true`;
-                if (xh2Port) xParam += ` --xhttp-h2-port="${xh2Port}"`;
+                params.push(`xhttp-h2"${xh2Port}"`);
             }
             if (xh3) {
-                xParam += ` --xhttp-h3=true`;
-                if (xh3Port) xParam += ` --xhttp-h3-port="${xh3Port}"`;
+                params.push(`xhttp-h3"${xh3Port}"`);
             }
-            if (xDomain) xParam += ` --xhttp-domain="${xDomain}"`;
-            if (xApi) xParam += ` --xhttp-api="${xApi}"`;
-            params.push(xParam);
+            if (xDomain) {
+                params.push(`xhttp-domain="${xDomain}"`);
+            }
+            if (xApi) {
+                params.push(`xhttp-api="${xApi}"`);
+            }
         }
 
+        // 3. xHTTP-Argo
         if (document.getElementById('chkArgo').checked) {
             let aProto = document.getElementById('argoProtocol').value;
             let aPort = document.getElementById('argoPort').value.trim() || '8001';
             let aDomain = document.getElementById('argoDomain').value.trim();
             let aToken = document.getElementById('argoToken').value.trim();
 
-            let aParam = `--argo --argo-protocol="${aProto}" --argo-port="${aPort}"`;
-            if (aDomain) aParam += ` --argo-domain="${aDomain}"`;
-            if (aToken) aParam += ` --argo-token="${aToken}"`;
-            params.push(aParam);
+            params.push(`argo-protocol="${aProto}"`);
+            params.push(`argo-port="${aPort}"`);
+            if (aDomain) params.push(`argo-domain="${aDomain}"`);
+            if (aToken) params.push(`argo-token="${aToken}"`);
         }
 
+        // 4. VLESS-TCP-Reality
         if (document.getElementById('chkReality').checked) {
             const dest = document.getElementById('realityDest').value.trim() || 'microsoft.com';
             const rPort = document.getElementById('realityPort').value.trim();
-            let rParam = `--reality --reality-dest="${dest}"`;
-            if (rPort) rParam += ` --reality-port="${rPort}"`;
-            params.push(rParam);
+            params.push(`reality-dest="${dest}"`);
+            params.push(`reality-port="${rPort}"`);
         }
 
         if (params.length > 0) {
