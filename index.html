@@ -287,7 +287,7 @@
             <img src="logo.png" alt="Xray-go Logo">
             <h2>Xray-go 快速一键部署</h2>
         </div>
-        <p class="desc">勾选协议并设置变量，自动生成一键安装命令。</p>
+        <p class="desc">勾选协议并设置变量，可自动生成一键安装命令。</p>
     </div>
     
     <div class="protocols-grid">
@@ -301,28 +301,28 @@
                 <!-- 第一行：H2 与 域名 -->
                 <div class="row-grid">
                     <div class="form-group">
-                        <label class="field-label">H2 传输（TCP） :</label>
+                        <label class="field-label">H2传输&端口号（TCP） :</label>
                         <div class="proto-port-box">
                             <label><input type="checkbox" id="naiveH2" checked> H2</label>
                             <input type="text" id="naiveH2Port" placeholder="留空：端口随机">
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="field-label">域名（必填；必须关闭小黄云）:</label>
+                        <label class="field-label">域名（必填；须关闭小黄云）:</label>
                         <input type="text" id="naiveDomain" placeholder="naive.example.com">
                     </div>
                 </div>
                 <!-- 第二行：H3 与 API Token -->
                 <div class="row-grid">
                     <div class="form-group">
-                        <label class="field-label">H3 传输（UDP） :</label>
+                        <label class="field-label">H3传输&端口号（UDP） :</label>
                         <div class="proto-port-box">
                             <label><input type="checkbox" id="naiveH3" checked> H3</label>
                             <input type="text" id="naiveH3Port" placeholder="留空：端口随机">
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="field-label">API Token（必填）:</label>
+                        <label class="field-label">API Token（必填；可与XHTTP共用）:</label>
                         <input type="text" id="naiveApi" placeholder="CF API Token">
                     </div>
                 </div>
@@ -338,28 +338,28 @@
                 <!-- 第一行：H2 与 域名 -->
                 <div class="row-grid">
                     <div class="form-group">
-                        <label class="field-label">H2 传输（TCP）:</label>
+                        <label class="field-label">H2传输&端口号（TCP）:</label>
                         <div class="proto-port-box">
                             <label><input type="checkbox" id="xhttpH2" checked> H2</label>
                             <input type="text" id="xhttpH2Port" placeholder="留空：端口随机">
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="field-label">域名（留空：自签证书；若选择，必须关闭小黄云；）:</label>
+                        <label class="field-label">域名（自签留空；若选，须关闭小黄云）:</label>
                         <input type="text" id="xhttpDomain" placeholder="example.com">
                     </div>
                 </div>
                 <!-- 第二行：H3 与 API Token -->
                 <div class="row-grid">
                     <div class="form-group">
-                        <label class="field-label">H3 传输（UDP）:</label>
+                        <label class="field-label">H3传输&端口号（UDP）:</label>
                         <div class="proto-port-box">
                             <label><input type="checkbox" id="xhttpH3" checked> H3</label>
                             <input type="text" id="xhttpH3Port" placeholder="留空：端口随机">
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="field-label">API Token（留空：自签证书）:</label>
+                        <label class="field-label">API Token（留空：自签证书；可与NaiveProxy共用）:</label>
                         <input type="text" id="xhttpApi" placeholder="CF API Token">
                     </div>
                 </div>
