@@ -296,7 +296,7 @@
             <img src="logo.png" alt="Xray-go Logo">
             <h2>Xray-go 快速一键部署</h2>
         </div>
-        <p class="desc">勾选协议并设置变量 可自动生成一键安装命令</p>
+        <p class="desc">勾选协议并设置变量 自动生成一键安装命令</p>
     </div>
     
     <div class="protocols-grid">
@@ -316,20 +316,20 @@
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="field-label">域名（<span class="badge-req">必填</span>；须关闭小黄云）:</label>
+                        <label class="field-label">域名（<span class="badge-req">必填</span> 须关闭小黄云）</label>
                         <input type="text" id="naiveDomain" placeholder="naive.example.com">
                     </div>
                 </div>
                 <div class="row-grid">
                     <div class="form-group">
-                        <label class="field-label">H3传输&端口号（UDP） :</label>
+                        <label class="field-label">H3传输&端口号（UDP）:</label>
                         <div class="proto-port-box">
                             <label><input type="checkbox" id="naiveH3" checked> H3</label>
                             <input type="text" id="naiveH3Port" placeholder="留空：端口随机">
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="field-label">API（<span class="badge-req">必填</span>；可与XHTTP共用）:</label>
+                        <label class="field-label">API（<span class="badge-req">必填</span> 可与XHTTP共用）</label>
                         <input type="text" id="naiveApi" placeholder="CF API Token">
                     </div>
                 </div>
@@ -364,7 +364,7 @@
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="field-label">API（自签留空；可与NaiveProxy共用）:</label>
+                        <label class="field-label">API（自签留空；可与NaiveProxy共用）</label>
                         <input type="text" id="xhttpApi" placeholder="CF API Token">
                     </div>
                 </div>
@@ -379,24 +379,24 @@
             <div class="sub-options">
                 <div class="row-grid">
                     <div class="form-group">
-                        <label class="field-label">Protocol（<span class="badge-req">必填</span>；CF与服务器连接协议）:</label>
+                        <label class="field-label">Protocol（<span class="badge-req">必填</span> CF与服务器连接协议）</label>
                         <select id="argoProtocol">
                             <option value="http2" selected>http2</option>
                             <option value="quic">quic</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label class="field-label">Argo 域名（<span class="badge-req">必填</span>）:</label>
+                        <label class="field-label">Argo 域名（<span class="badge-req">必填</span>）</label>
                         <input type="text" id="argoDomain" placeholder="argo.example.com">
                     </div>
                 </div>
                 <div class="row-grid" style="margin-top: 8px;">
                     <div class="form-group">
-                        <label class="field-label">CF服务URL端口（<span class="badge-req">必填</span>）:</label>
+                        <label class="field-label">CF服务URL端口（<span class="badge-req">必填</span>）</label>
                         <input type="text" id="argoPort" value="8001">
                     </div>
                     <div class="form-group">
-                        <label class="field-label">Token（<span class="badge-req">必填</span>）:</label>
+                        <label class="field-label">Token（<span class="badge-req">必填</span>）</label>
                         <input type="text" id="argoToken" placeholder="Tunnel Token">
                     </div>
                 </div>
@@ -414,8 +414,8 @@
                     <input type="text" id="realityPort" placeholder="留空：端口随机">
                 </div>
                 <div class="form-group">
-                    <label class="field-label">SNI域名（Dest）:</label>
-                    <input type="text" id="realityDest" value="microsoft.com">
+                    <label class="field-label">SNI域名:</label>
+                    <input type="text" id="realityDest" value="addons.mozilla.org">
                 </div>
             </div>
         </div>
@@ -424,7 +424,7 @@
 
     <!-- 安装命令输出 -->
     <div class="output-box">
-        <label style="font-size: 12px; font-weight: 600; color: var(--text-main); margin-bottom: 6px; display: block;">请先登录终端后再复制以下:</label>
+        <label style="font-size: 12px; font-weight: 600; color: var(--text-main); margin-bottom: 6px; display: block;">请先登录终端再复制以下！:</label>
         <pre id="cmdOutput">bash &lt;(curl -Ls https://raw.githubusercontent.com/easonhunt7/singboXray/main/install.sh)</pre>
         <div class="btn-container">
             <div class="btn-wrapper">
