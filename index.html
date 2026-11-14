@@ -287,7 +287,7 @@
             <img src="logo.png" alt="Xray-go Logo">
             <h2>Xray-go 快速一键部署</h2>
         </div>
-        <p class="desc">勾选协议并设置变量，生成一键安装命令。</p>
+        <p class="desc">勾选协议并设置变量，自动生成一键安装命令。</p>
     </div>
     
     <div class="protocols-grid">
@@ -304,11 +304,11 @@
                         <label class="field-label">H2 传输（TCP） :</label>
                         <div class="proto-port-box">
                             <label><input type="checkbox" id="naiveH2" checked> H2</label>
-                            <input type="text" id="naiveH2Port" placeholder="端口留空=随机">
+                            <input type="text" id="naiveH2Port" placeholder="留空：端口随机">
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="field-label">域名（关闭小黄云，必填）:</label>
+                        <label class="field-label">域名（必填；必须关闭小黄云）:</label>
                         <input type="text" id="naiveDomain" placeholder="naive.example.com">
                     </div>
                 </div>
@@ -318,7 +318,7 @@
                         <label class="field-label">H3 传输（UDP） :</label>
                         <div class="proto-port-box">
                             <label><input type="checkbox" id="naiveH3" checked> H3</label>
-                            <input type="text" id="naiveH3Port" placeholder="端口留空=随机">
+                            <input type="text" id="naiveH3Port" placeholder="留空：端口随机">
                         </div>
                     </div>
                     <div class="form-group">
@@ -341,11 +341,11 @@
                         <label class="field-label">H2 传输（TCP）:</label>
                         <div class="proto-port-box">
                             <label><input type="checkbox" id="xhttpH2" checked> H2</label>
-                            <input type="text" id="xhttpH2Port" placeholder="端口留空=随机">
+                            <input type="text" id="xhttpH2Port" placeholder="留空：端口随机">
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="field-label">域名（关闭小黄云；留空=自签证书）:</label>
+                        <label class="field-label">域名（留空：自签证书；若选择，必须关闭小黄云；）:</label>
                         <input type="text" id="xhttpDomain" placeholder="example.com">
                     </div>
                 </div>
@@ -355,11 +355,11 @@
                         <label class="field-label">H3 传输（UDP）:</label>
                         <div class="proto-port-box">
                             <label><input type="checkbox" id="xhttpH3" checked> H3</label>
-                            <input type="text" id="xhttpH3Port" placeholder="端口留空=随机">
+                            <input type="text" id="xhttpH3Port" placeholder="留空：端口随机">
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="field-label">API Token（留空=自签证书）:</label>
+                        <label class="field-label">API Token（留空：自签证书）:</label>
                         <input type="text" id="xhttpApi" placeholder="CF API Token">
                     </div>
                 </div>
@@ -387,7 +387,7 @@
                 </div>
                 <div class="row-grid" style="margin-top: 8px;">
                     <div class="form-group">
-                        <label class="field-label">服务URL端口号（必填）:</label>
+                        <label class="field-label">CF 服务URL端口（必填）:</label>
                         <input type="text" id="argoPort" value="8001">
                     </div>
                     <div class="form-group">
@@ -406,10 +406,10 @@
             <div class="sub-options">
                 <div class="form-group" style="margin-bottom: 8px;">
                     <label class="field-label">指定端口号（可选）:</label>
-                    <input type="text" id="realityPort" placeholder="端口（留空=随机）">
+                    <input type="text" id="realityPort" placeholder="留空：端口随机">
                 </div>
                 <div class="form-group">
-                    <label class="field-label">回落目标域名（Dest）:</label>
+                    <label class="field-label">SNI 域名（Dest）:</label>
                     <input type="text" id="realityDest" value="microsoft.com">
                 </div>
             </div>
