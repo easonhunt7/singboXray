@@ -143,6 +143,15 @@
             color: var(--text-secondary);
         }
 
+        /* 必填项黄底高亮样式 */
+        .badge-req {
+            background-color: #fef08a;
+            color: #854d0e;
+            padding: 0 4px;
+            border-radius: 3px;
+            font-weight: 600;
+        }
+
         .proto-port-box {
             display: flex;
             align-items: center;
@@ -307,7 +316,7 @@
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="field-label">域名（必填；须关闭小黄云）:</label>
+                        <label class="field-label">域名（<span class="badge-req">必填</span>；须关闭小黄云）:</label>
                         <input type="text" id="naiveDomain" placeholder="naive.example.com">
                     </div>
                 </div>
@@ -320,7 +329,7 @@
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="field-label">API（必填；可与XHTTP共用）:</label>
+                        <label class="field-label">API（<span class="badge-req">必填</span>；可与XHTTP共用）:</label>
                         <input type="text" id="naiveApi" placeholder="CF API Token">
                     </div>
                 </div>
@@ -370,24 +379,24 @@
             <div class="sub-options">
                 <div class="row-grid">
                     <div class="form-group">
-                        <label class="field-label">Protocol（必填；CF与服务器连接协议）:</label>
+                        <label class="field-label">Protocol（<span class="badge-req">必填</span>；CF与服务器连接协议）:</label>
                         <select id="argoProtocol">
                             <option value="http2" selected>http2</option>
                             <option value="quic">quic</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label class="field-label">Argo 域名（必填）:</label>
+                        <label class="field-label">Argo 域名（<span class="badge-req">必填</span>）:</label>
                         <input type="text" id="argoDomain" placeholder="argo.example.com">
                     </div>
                 </div>
                 <div class="row-grid" style="margin-top: 8px;">
                     <div class="form-group">
-                        <label class="field-label">CF服务URL端口（必填）:</label>
+                        <label class="field-label">CF服务URL端口（<span class="badge-req">必填</span>）:</label>
                         <input type="text" id="argoPort" value="8001">
                     </div>
                     <div class="form-group">
-                        <label class="field-label">Token（必填）:</label>
+                        <label class="field-label">Token（<span class="badge-req">必填</span>）:</label>
                         <input type="text" id="argoToken" placeholder="Tunnel Token">
                     </div>
                 </div>
@@ -406,7 +415,7 @@
                 </div>
                 <div class="form-group">
                     <label class="field-label">SNI域名（Dest）:</label>
-                    <input type="text" id="realityDest" value="addons.mozilla.org">
+                    <input type="text" id="realityDest" value="microsoft.com">
                 </div>
             </div>
         </div>
