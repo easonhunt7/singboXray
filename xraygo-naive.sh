@@ -292,6 +292,7 @@ issue_cf_cert() {
         --cert-file "${dest_dir}/cert.crt" \
         --key-file "${dest_dir}/private.key" \
         --fullchain-file "${dest_dir}/fullchain.cer" >/dev/null 2>&1
+        --reloadcmd "systemctl restart xray naive >/dev/null 2>&1" >/dev/null 2>&1
         
     [[ ! -f "${dest_dir}/fullchain.cer" ]] && red "错误：证书安装至 ${dest_dir} 失败！" && exit 1
     green "域名 [${domain}] 证书申请并配置成功！"
