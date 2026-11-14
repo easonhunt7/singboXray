@@ -291,7 +291,7 @@ issue_cf_cert() {
     "$HOME/.acme.sh/acme.sh" --install-cert -d "${domain}" \
         --cert-file "${dest_dir}/cert.crt" \
         --key-file "${dest_dir}/private.key" \
-        --fullchain-file "${dest_dir}/fullchain.cer" >/dev/null 2>&1
+        --fullchain-file "${dest_dir}/fullchain.cer" \
         --reloadcmd "systemctl restart xray naive >/dev/null 2>&1" >/dev/null 2>&1
         
     [[ ! -f "${dest_dir}/fullchain.cer" ]] && red "错误：证书安装至 ${dest_dir} 失败！" && exit 1
