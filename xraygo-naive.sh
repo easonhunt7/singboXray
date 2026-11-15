@@ -222,7 +222,7 @@ if [ "$ENABLE_REALITY" = true ]; then
 fi
 
 if [ "$enable_naive" = false ] && [ "$enable_xhttp_direct" = false ] && [ "$enable_argo" = false ] && [ "$ENABLE_REALITY" = false ]; then
-    yellow "提示：未检测到有效协议及变量 脚本未启动。"
+    yellow "提示：未检测到有效协议及变量，脚本未启动！"
     exit 0
 fi
 
