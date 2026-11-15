@@ -211,9 +211,9 @@ if [ "$ENABLE_XHTTP_H2" = true ] || [ "$ENABLE_XHTTP_H3" = true ]; then
 fi
 
 enable_argo=false
-if [ -n "$ARGO_PORT" ] || [ -n "$ARGO_DOMAIN" ] || [ -n "$ARGO_TOKEN" ] || [ -n "$ARGO_PROTOCOL" ]; then
+if [ -n "$ARGO_DOMAIN" ] || [ -n "$ARGO_TOKEN" ]; then
     if [ -z "$ARGO_PORT" ] || [ -z "$ARGO_DOMAIN" ] || [ -z "$ARGO_TOKEN" ] || [ -z "$ARGO_PROTOCOL" ]; then
-        yellow "错误：Argo隧道缺少必填变量！"
+        yellow "错误：xHTTP Argo协议缺少必填变量"
         exit 1
     fi
     enable_argo=true
