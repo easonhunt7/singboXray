@@ -67,7 +67,7 @@ download_file() {
     done
 
     # 3. 全部失败
-    red "下载或校验失败，请检查网络，稍后再试！"
+    red "下载或校验失败，请检查网络或稍后再试！"
     clean_garbage
     return 1
 }
@@ -195,7 +195,7 @@ get_free_port() {
 enable_naive=false
 if [ "$ENABLE_NAIVE_H2" = true ] || [ "$ENABLE_NAIVE_H3" = true ]; then
     if [ -z "$NAIVE_DOMAIN" ] || [ -z "$NAIVE_API" ]; then
-        red "错误：已勾选 NaiveProxy，但缺少必填的 naive-domain 或 naive-api 参数！"
+        red "错误：NaiveProxy协议缺少必填的 naive-domain 或 naive-api ！"
         exit 1
     fi
     enable_naive=true
@@ -222,7 +222,7 @@ if [ "$ENABLE_REALITY" = true ]; then
 fi
 
 if [ "$enable_naive" = false ] && [ "$enable_xhttp_direct" = false ] && [ "$enable_argo" = false ] && [ "$ENABLE_REALITY" = false ]; then
-    yellow "提示：未检测到任何有效协议参数（NaiveProxy、xHTTP直连、Argo隧道、Reality 均未启用）。"
+    yellow "提示：未检测到有效协议及变量 脚本未启动。"
     exit 0
 fi
 
@@ -284,7 +284,7 @@ issue_cf_cert() {
     
     "$HOME/.acme.sh/acme.sh" --set-default-ca --server letsencrypt >/dev/null 2>&1
     "$HOME/.acme.sh/acme.sh" --issue --dns dns_cf -d "${domain}" --force || {
-        red "错误：域名 [${domain}] 证书申请失败，请检查 Cloudflare API Token 权限或域名解析！"
+        red "错误：域名 [${domain}] 证书申请失败，请检查 Cloudflare API 或 DNS 设置！"
         exit 1
     }
     
@@ -332,7 +332,7 @@ if [ "$enable_xhttp_direct" = true ] || [ "$enable_argo" = true ] || [ "$ENABLE_
             xhttp_insecure="0"
             xhttp_use_acme=true
         else
-            echo "xHTTP 未填写完整域名与 API，自动生成自签证书..."
+            echo "xHTTP 未填写完整域名与 API，生成自签证书..."
             openssl ecparam -genkey -name prime256v1 -out "${work_dir}/private.key"
             openssl req -new -x509 -days 3650 -key "${work_dir}/private.key" -out "${work_dir}/cert.pem" -subj "/CN=bing.com"
             xhttp_cert_file="${work_dir}/cert.pem"
@@ -547,7 +547,7 @@ fi
 # 5. 部署 NaiveProxy (基于 Sing-box 原生内核)
 # ==============================================================================
 if [ "$enable_naive" = true ]; then
-    green "---> 开始部署 NaiveProxy (Sing-box 原生内核)..."
+    green "---> 开始部署 NaiveProxy (基于全新 Sing-box 内核)..."
     mkdir -p "${SBX_DIR}"
     
     uuid_file="${SBX_DIR}/uuid"
@@ -562,7 +562,7 @@ if [ "$enable_naive" = true ]; then
     issue_cf_cert "$NAIVE_DOMAIN" "$NAIVE_API" "$NAIVE_CERT_DIR"
 
     # 下载 Sing-box 内核 (优先 GitHub 直连，超时切换 CF 代理)
-    echo "正在获取 Sing-box 最新版本号..."
+    echo "正在下载 Sing-box 内核..."
     SB_VERSION=$(curl -s --connect-timeout 10 "https://api.github.com/repos/SagerNet/sing-box/releases/latest" | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
     [ -z "$SB_VERSION" ] && SB_VERSION="1.11.4"
 
@@ -711,7 +711,7 @@ cfport="443"
 
 clear
 green "=========================================================================================="
-green " 部署完成！以下是您的节点配置信息"
+green " 部署完成！请查看以下节点链接"
 green "=========================================================================================="
 
 if [ "$enable_xray" = true ]; then
@@ -731,17 +731,17 @@ if [ "$enable_xray" = true ]; then
     fi
 
     base64_str=$(cat "${work_dir}/url.txt" | base64 | tr -d '\n' | tr -d '\r')
-    green "👉 [Xray-core] Base64 订阅链接 (包含 Reality / xHTTP直连 / Argo)："
+    green "👉 [Xray-core] Base64 链接 (包含 Reality / xHTTP直连 / Argo)："
     echo -e "\e[1;33m$base64_str\e[0m"
     green "------------------------------------------------------------------------------------------"
 fi
 
 if [ "$enable_naive" = true ]; then
-    green "👉 [NaiveProxy] 客户端分享链接 (支持 v2rayN / v2rayNG / Hiddify 直接导入)："
+    green "👉 [NaiveProxy] 链接 (支持 v2rayN / v2rayNG / Hiddify 直接导入)："
     [ "$ENABLE_NAIVE_H2" = true ] && echo -e "\e[1;33mnaive+https://${naive_uuid}:${naive_uuid}@${NAIVE_DOMAIN}:${naive_h2_port}?security=tls&sni=${NAIVE_DOMAIN}#${isp}%20Naive-H2-${naive_h2_port}%20${ESS}\e[0m"
     [ "$ENABLE_NAIVE_H3" = true ] && echo -e "\e[1;33mnaive+quic://${naive_uuid}:${naive_uuid}@${NAIVE_DOMAIN}:${naive_h3_port}?congestion_control=bbr&security=tls&sni=${NAIVE_DOMAIN}#${isp}%20Naive-H3-${naive_h3_port}%20${ESS}\e[0m"
     green "------------------------------------------------------------------------------------------"
 fi
 
-echo "一键卸载 (如需移除 Xray，请执行)："
-yellow " bash <(curl -Ls https://raw.githubusercontent.com/eishare/Xray-go/main/uninstall.sh)"
+echo"一键卸载 (如需移除 Xray / sing-box，请执行)："
+yellow "bash <(curl -Ls https://raw.githubusercontent.com/eishare/Xray-go/main/uninstall.sh)"
