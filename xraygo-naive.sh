@@ -99,7 +99,7 @@ REALITY_PORT_ARG=""
 REALITY_DEST="addons.mozilla.org"
 
 for arg in "$@"; do
-    # 去除双引号、单引号以及开头的等号
+    # 自动过滤双引号、单引号，保留等号用于精准截取
     clean_arg="${arg//\"/}"
     clean_arg="${clean_arg//\'/}"
     
