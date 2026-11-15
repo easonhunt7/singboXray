@@ -195,7 +195,7 @@ get_free_port() {
 enable_naive=false
 if [ "$ENABLE_NAIVE_H2" = true ] || [ "$ENABLE_NAIVE_H3" = true ]; then
     if [ -z "$NAIVE_DOMAIN" ] || [ -z "$NAIVE_API" ]; then
-       red "错误：NaiveProxy协议缺少必填的 naive-domain 或 naive-api ！"
+    red "错误：NaiveProxy协议缺少必填的 naive-domain 或 naive-api ！"
         exit 1
     fi
     enable_naive=true
