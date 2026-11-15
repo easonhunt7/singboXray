@@ -195,7 +195,7 @@ get_free_port() {
 enable_naive=false
 if [ "$ENABLE_NAIVE_H2" = true ] || [ "$ENABLE_NAIVE_H3" = true ]; then
     if [ -z "$NAIVE_DOMAIN" ] || [ -z "$NAIVE_API" ]; then
-        yellow "[错误] NaiveProxy: 缺少必填参数（domain 或 api），部署已中止。"
+        yellow "错误：NaiveProxy缺少必填参数（domain/api），部署已中止！"
         exit 1
     fi
     enable_naive=true
@@ -207,7 +207,7 @@ fi
 enable_argo=false
 if [ -n "$ARGO_DOMAIN" ] || [ -n "$ARGO_TOKEN" ]; then
     if [ -z "$ARGO_PORT" ] || [ -z "$ARGO_DOMAIN" ] || [ -z "$ARGO_TOKEN" ] || [ -z "$ARGO_PROTOCOL" ]; then
-        yellow "[错误] xHTTP Argo: 缺少必填参数（domain 或 token），部署已中止。"
+        yellow "错误：xHTTP Argo缺少必填参数（port/domain/token），部署已中止！"
         exit 1
     fi
     enable_argo=true
