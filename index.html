@@ -296,7 +296,7 @@
             <img src="logo.png" alt="Xray-go Logo">
             <h2>Xray-go 快速一键部署</h2>
         </div>
-        <p class="desc">勾选协议并设置变量 自动生成一键安装命令</p>
+        <p class="desc">勾选协议并设置变量 即时生成一键安装命令</p>
     </div>
     
     <div class="protocols-grid">
@@ -309,20 +309,20 @@
             <div class="sub-options">
                 <div class="row-grid">
                     <div class="form-group">
-                        <label class="field-label">H2传输&端口号（TCP）</label>
+                        <label class="field-label">H2（TCP协议）</label>
                         <div class="proto-port-box">
                             <label><input type="checkbox" id="naiveH2" checked> H2</label>
                             <input type="text" id="naiveH2Port" placeholder="留空：端口随机">
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="field-label">域名（<span class="badge-req">必填</span> CF须关闭小黄云）</label>
+                        <label class="field-label">域名（<span class="badge-req">必填</span> CF 须关闭小黄云）</label>
                         <input type="text" id="naiveDomain" placeholder="naive.example.com">
                     </div>
                 </div>
                 <div class="row-grid">
                     <div class="form-group">
-                        <label class="field-label">H3传输&端口号（UDP）</label>
+                        <label class="field-label">H3（UDP协议）</label>
                         <div class="proto-port-box">
                             <label><input type="checkbox" id="naiveH3" checked> H3</label>
                             <input type="text" id="naiveH3Port" placeholder="留空：端口随机">
@@ -344,20 +344,20 @@
             <div class="sub-options">
                 <div class="row-grid">
                     <div class="form-group">
-                        <label class="field-label">H2传输&端口号（TCP）</label>
+                        <label class="field-label">H2（TCP协议）</label>
                         <div class="proto-port-box">
                             <label><input type="checkbox" id="xhttpH2" checked> H2</label>
                             <input type="text" id="xhttpH2Port" placeholder="留空：端口随机">
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="field-label">域名（自签留空;若选,CF须关闭小黄云）</label>
+                        <label class="field-label">域名（自签留空;若选,CF 须关闭小黄云）</label>
                         <input type="text" id="xhttpDomain" placeholder="xhttp.example.com">
                     </div>
                 </div>
                 <div class="row-grid">
                     <div class="form-group">
-                        <label class="field-label">H3传输&端口号（UDP）</label>
+                        <label class="field-label">H3（UDP协议）</label>
                         <div class="proto-port-box">
                             <label><input type="checkbox" id="xhttpH3" checked> H3</label>
                             <input type="text" id="xhttpH3Port" placeholder="留空：端口随机">
@@ -379,7 +379,7 @@
             <div class="sub-options">
                 <div class="row-grid">
                     <div class="form-group">
-                        <label class="field-label">Protocol（<span class="badge-req">必填</span> CF与服务器连接协议）</label>
+                        <label class="field-label">Protocol（<span class="badge-req">必填</span> CF 与服务器连接协议）</label>
                         <select id="argoProtocol">
                             <option value="http2" selected>http2</option>
                             <option value="quic">quic</option>
@@ -392,7 +392,7 @@
                 </div>
                 <div class="row-grid" style="margin-top: 8px;">
                     <div class="form-group">
-                        <label class="field-label">CF服务URL端口（<span class="badge-req">必填</span>）</label>
+                        <label class="field-label">CF 服务URL端口（<span class="badge-req">必填</span>）</label>
                         <input type="text" id="argoPort" value="8001">
                     </div>
                     <div class="form-group">
