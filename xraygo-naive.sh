@@ -195,7 +195,7 @@ get_free_port() {
 enable_naive=false
 if [ "$ENABLE_NAIVE_H2" = true ] || [ "$ENABLE_NAIVE_H3" = true ]; then
     if [ -z "$NAIVE_DOMAIN" ] || [ -z "$NAIVE_API" ]; then
-        red "错误：NaiveProxy协议缺少必填项 naive-domain 或 naive-api ！"
+        yellow "错误：NaiveProxy协议缺少必填变量 ！"
         exit 1
     fi
     enable_naive=true
@@ -203,10 +203,11 @@ if [ "$ENABLE_NAIVE_H2" = true ] || [ "$ENABLE_NAIVE_H3" = true ]; then
     [ "$ENABLE_NAIVE_H3" = true ] && naive_h3_port=$(get_free_port "$NAIVE_H3_PORT_ARG")
 fi
 
+# 2. 严格校验 Argo 隧道必填参数
 enable_argo=false
 if [ -n "$ARGO_DOMAIN" ] || [ -n "$ARGO_TOKEN" ]; then
     if [ -z "$ARGO_PORT" ] || [ -z "$ARGO_DOMAIN" ] || [ -z "$ARGO_TOKEN" ] || [ -z "$ARGO_PROTOCOL" ]; then
-        red "错误：xHTTP Argo协议缺少必填变量！"
+        yellow "错误：xHTTP Argo协议缺少必填变量！"
         exit 1
     fi
     enable_argo=true
