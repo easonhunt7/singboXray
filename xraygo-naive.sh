@@ -644,12 +644,7 @@ if [ "$enable_naive" = true ]; then
   "inbounds": [
 $naive_inbounds
   ]
-    {
-      "type": "direct",
-      "tag": "direct"
     }
-  ]
-}
 EOF
 
     cat > /etc/systemd/system/naive.service << EOF
