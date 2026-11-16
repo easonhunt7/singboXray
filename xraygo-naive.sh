@@ -715,9 +715,9 @@ cfip_h3="www.teamviewer.com"
 cfport="443"
 
 clear
-green "=========================================================================================="
-green " 部署完成！请查看以下节点链接"
-green "=========================================================================================="
+echo "=========================================================================================="
+echo " 部署完成！请查看以下节点链接"
+echo "=========================================================================================="
 
 if [ "$enable_xray" = true ]; then
     > "${work_dir}/url.txt"
@@ -736,17 +736,18 @@ if [ "$enable_xray" = true ]; then
     fi
 
     base64_str=$(cat "${work_dir}/url.txt" | base64 | tr -d '\n' | tr -d '\r')
-    green "👉 [Xray-core] Base64 链接 (包含 Reality / xHTTP直连 / Argo)："
+    green "[Xray-core] Base64 链接 (包含 Reality / xHTTP直连 / Argo)："
+    green "------------------------------------------------------------------------------------------"
     echo -e "\e[1;33m$base64_str\e[0m"
     green "------------------------------------------------------------------------------------------"
 fi
 
 if [ "$enable_naive" = true ]; then
-    green "👉 [NaiveProxy] 链接 (支持 v2rayN / v2rayNG / Hiddify 直接导入)："
+    green "[sing-box] NaiveProxy 链接 (支持 v2rayN / v2rayNG / Hiddify)："
     [ "$ENABLE_NAIVE_H2" = true ] && echo -e "\e[1;33mnaive+https://${naive_uuid}:${naive_uuid}@${NAIVE_DOMAIN}:${naive_h2_port}?security=tls&sni=${NAIVE_DOMAIN}#${isp}%20Naive-H2-${naive_h2_port}%20${ESS}\e[0m"
     [ "$ENABLE_NAIVE_H3" = true ] && echo -e "\e[1;33mnaive+quic://${naive_uuid}:${naive_uuid}@${NAIVE_DOMAIN}:${naive_h3_port}?congestion_control=bbr&security=tls&sni=${NAIVE_DOMAIN}#${isp}%20Naive-H3-${naive_h3_port}%20${ESS}\e[0m"
-    green "------------------------------------------------------------------------------------------"
+    green "=========================================================================================="
 fi
 
-echo"一键卸载 (如需移除 Xray / sing-box，请执行)："
+echo "一键卸载 (如需移除 Xray / sing-box，请执行)："
 yellow "bash <(curl -Ls https://raw.githubusercontent.com/eishare/Xray-go/main/uninstall.sh)"
