@@ -733,12 +733,12 @@ if [ "$enable_xray" = true ]; then
     [ "$xhttp_use_acme" = true ] && xhttp_connect_host="$XHTTP_DOMAIN"
 
     [ "$ENABLE_REALITY" = true ] && echo "vless://${uuid}@${server_ip}:${reality_port}?encryption=none&security=reality&sni=${REALITY_DEST}&fp=chrome&pbk=${public_key_x}&sid=${short_id_x}&type=tcp&flow=xtls-rprx-vision#${isp}%20Reality-Vision%20${ESS}" >> "${work_dir}/url.txt"
-    [ "$ENABLE_XHTTP_H2" = true ] && echo "vless://${uuid}@${xhttp_connect_host}:${xhttp_h2_port}?encryption=none&security=tls&sni=${xhttp_sni}&alpn=h2&fp=chrome&type=xhttp&mode=auto&path=/${xhttp_h2_path}&allowInsecure=${xhttp_insecure}#${isp}%20H2-XHTTP%20${ESS}" >> "${work_dir}/url.txt"
-    [ "$ENABLE_XHTTP_H3" = true ] && echo "vless://${uuid}@${xhttp_connect_host}:${xhttp_h3_port}?encryption=none&security=tls&sni=${xhttp_sni}&alpn=h3&fp=chrome&type=xhttp&mode=auto&path=/${xhttp_h3_path}&allowInsecure=${xhttp_insecure}#${isp}%20H3-XHTTP%20${ESS}" >> "${work_dir}/url.txt"
+    [ "$ENABLE_XHTTP_H2" = true ] && echo "vless://${uuid}@${xhttp_connect_host}:${xhttp_h2_port}?encryption=none&security=tls&sni=${xhttp_sni}&alpn=h2&fp=chrome&type=xhttp&mode=auto&path=/${xhttp_h2_path}&allowInsecure=${xhttp_insecure}#${isp}%20XHTTP-H2%20${ESS}" >> "${work_dir}/url.txt"
+    [ "$ENABLE_XHTTP_H3" = true ] && echo "vless://${uuid}@${xhttp_connect_host}:${xhttp_h3_port}?encryption=none&security=tls&sni=${xhttp_sni}&alpn=h3&fp=chrome&type=xhttp&mode=auto&path=/${xhttp_h3_path}&allowInsecure=${xhttp_insecure}#${isp}%20XHTTP-H3%20${ESS}" >> "${work_dir}/url.txt"
     
     if [ "$enable_argo" = true ]; then
-        echo "vless://${uuid}@${cfip_h2}:${cfport}?encryption=none&security=tls&alpn=h2&sni=${ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=auto&host=${ARGO_DOMAIN}&path=/${argo_path}#${isp}%20H2-Argo-XHTTP%20${ESS}" >> "${work_dir}/url.txt"
-        echo "vless://${uuid}@${cfip_h3}:${cfport}?encryption=none&security=tls&alpn=h3&sni=${ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=auto&host=${ARGO_DOMAIN}&path=/${argo_path}#${isp}%20H3-Argo-XHTTP%20${ESS}" >> "${work_dir}/url.txt"
+        echo "vless://${uuid}@${cfip_h2}:${cfport}?encryption=none&security=tls&alpn=h2&sni=${ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=auto&host=${ARGO_DOMAIN}&path=/${argo_path}#${isp}%20Argo-H2-XHTTP%20${ESS}" >> "${work_dir}/url.txt"
+        echo "vless://${uuid}@${cfip_h3}:${cfport}?encryption=none&security=tls&alpn=h3&sni=${ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=auto&host=${ARGO_DOMAIN}&path=/${argo_path}#${isp}%20Argo-H3-XHTTP%20${ESS}" >> "${work_dir}/url.txt"
     fi
 
     base64_str=$(cat "${work_dir}/url.txt" | base64 | tr -d '\n' | tr -d '\r')
@@ -750,8 +750,8 @@ fi
 
 if [ "$enable_naive" = true ]; then
     green "[sing-box] NaiveProxy 链接 (支持 v2rayN / v2rayNG / Hiddify)："
-    [ "$ENABLE_NAIVE_H2" = true ] && echo -e "\e[1;33mnaive+https://${naive_uuid}:${naive_uuid}@${NAIVE_DOMAIN}:${naive_h2_port}?security=tls&sni=${NAIVE_DOMAIN}#${isp}%20Naive-H2-${naive_h2_port}%20${ESS}\e[0m"
-    [ "$ENABLE_NAIVE_H3" = true ] && echo -e "\e[1;33mnaive+quic://${naive_uuid}:${naive_uuid}@${NAIVE_DOMAIN}:${naive_h3_port}?congestion_control=bbr&security=tls&sni=${NAIVE_DOMAIN}#${isp}%20Naive-H3-${naive_h3_port}%20${ESS}\e[0m"
+    [ "$ENABLE_NAIVE_H2" = true ] && echo -e "\e[1;33mnaive+https://${naive_uuid}:${naive_uuid}@${NAIVE_DOMAIN}:${naive_h2_port}?security=tls&sni=${NAIVE_DOMAIN}#${isp}%20Naive-H2%{ESS}\e[0m"
+    [ "$ENABLE_NAIVE_H3" = true ] && echo -e "\e[1;33mnaive+quic://${naive_uuid}:${naive_uuid}@${NAIVE_DOMAIN}:${naive_h3_port}?congestion_control=bbr&security=tls&sni=${NAIVE_DOMAIN}#${isp}%20Naive-H3%20${ESS}\e[0m"
     green "=========================================================================================="
 fi
 
