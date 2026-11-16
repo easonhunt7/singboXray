@@ -647,8 +647,7 @@ $naive_inbounds
   "outbounds": [
     {
       "type": "direct",
-      "tag": "direct",
-      "tcp_fast_open": true
+      "tag": "direct"
     }
   ]
 }
