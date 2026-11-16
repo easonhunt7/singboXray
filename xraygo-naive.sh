@@ -5,7 +5,7 @@ export PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 
 green() { echo -e "\e[1;32m$1\033[0m"; }
 yellow() { echo -e "\e[1;33m$1\033[0m"; }
-red() { echo -e "\e[1;91m$1\033[0m"; }
+red() { echo -e "\e[1;31m$1\033[0m"; }
 
 [[ $EUID -ne 0 ]] && red "请在 root 用户下运行此脚本！" && exit 1
 
@@ -195,7 +195,7 @@ get_free_port() {
 enable_naive=false
 if [ "$ENABLE_NAIVE_H2" = true ] || [ "$ENABLE_NAIVE_H3" = true ]; then
     if [ -z "$NAIVE_DOMAIN" ] || [ -z "$NAIVE_API" ]; then
-        yellow "错误：NaiveProxy缺少必填参数（domain/api），部署已中止！"
+        red "错误：NaiveProxy缺少必填参数（domain/api），部署已中止！"
         exit 1
     fi
     enable_naive=true
@@ -207,7 +207,7 @@ fi
 enable_argo=false
 if [ -n "$ARGO_DOMAIN" ] || [ -n "$ARGO_TOKEN" ]; then
     if [ -z "$ARGO_PORT" ] || [ -z "$ARGO_DOMAIN" ] || [ -z "$ARGO_TOKEN" ] || [ -z "$ARGO_PROTOCOL" ]; then
-        yellow "错误：xHTTP Argo缺少必填参数（port/domain/token），部署已中止！"
+        red "错误：xHTTP Argo缺少必填参数（port/domain/token），部署已中止！"
         exit 1
     fi
     enable_argo=true
@@ -253,7 +253,7 @@ elif command -v apk >/dev/null 2>&1; then
     apk update >/dev/null 2>&1
     apk add --no-cache bash curl wget unzip tar openssl iptables coreutils socat jq >/dev/null 2>&1
 else
-    red "未识别的系统包管理器，无法自动安装依赖！"
+    yellow "未识别的系统包管理器，无法自动安装依赖！"
     exit 1
 fi
 
@@ -289,7 +289,7 @@ issue_cf_cert() {
     
     "$HOME/.acme.sh/acme.sh" --set-default-ca --server letsencrypt >/dev/null 2>&1
     "$HOME/.acme.sh/acme.sh" --issue --dns dns_cf -d "${domain}" --force || {
-        red "错误：域名 [${domain}] 证书申请失败，请检查 Cloudflare API 或 DNS 设置！"
+        red "错误：[${domain}] 证书申请失败，请检查CF中 API & DNS 设置；若触发次数限制，请更换域名再试！"
         exit 1
     }
     
