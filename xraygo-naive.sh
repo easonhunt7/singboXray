@@ -638,11 +638,18 @@ if [ "$enable_naive" = true ]; then
 {
   "log": {
     "disabled": false,
-    "level": "info",
+    "level": "warning",
     "timestamp": true
   },
   "inbounds": [
 $naive_inbounds
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct",
+      "tcp_fast_open": true
+    }
   ]
 }
 EOF
