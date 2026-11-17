@@ -284,7 +284,20 @@ issue_cf_cert() {
     export CF_Token="${token}"
     
     if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
-        curl -s https://get.acme.sh | sh -s email=admin@${domain} >/dev/null 2>&1
+        echo "正在安装 acme.sh..."
+        curl -sL --connect-timeout 10 https://get.acme.sh | sh -s email=admin@${domain} --nocron >/dev/null 2>&1
+    fi
+    if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
+        yellow "官方源安装 acme.sh 失败，切换 Cloudflare 代理源安装..."
+        rm -rf /tmp/acme.sh-master
+        download_file "/tmp/acme.zip" "https://github.com/acmesh-official/acme.sh/archive/refs/heads/master.zip"
+        unzip -qo /tmp/acme.zip -d /tmp/ && rm -f /tmp/acme.zip
+        (cd /tmp/acme.sh-master && ./acme.sh --install --nocron --accountemail "admin@${domain}" >/dev/null 2>&1)
+        rm -rf /tmp/acme.sh-master
+    fi
+    if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
+        red "错误：acme.sh 安装失败，请检查服务器网络！"
+        exit 1
     fi
     
     "$HOME/.acme.sh/acme.sh" --set-default-ca --server letsencrypt >/dev/null 2>&1
@@ -297,7 +310,7 @@ issue_cf_cert() {
         --cert-file "${dest_dir}/cert.crt" \
         --key-file "${dest_dir}/private.key" \
         --fullchain-file "${dest_dir}/fullchain.cer" \
-        --reloadcmd "systemctl restart xray naive >/dev/null 2>&1" >/dev/null 2>&1
+        --reloadcmd "rc-service xray restart 2>/dev/null; rc-service naive restart 2>/dev/null; systemctl restart xray naive >/dev/null 2>&1" >/dev/null 2>&1
         
     [[ ! -f "${dest_dir}/fullchain.cer" ]] && red "错误：证书安装至 ${dest_dir} 失败！" && exit 1
     green "域名 [${domain}] 证书申请并配置成功！"
@@ -685,6 +698,7 @@ EOF
         rc-update add naive default
         rc-service naive restart
     fi
+fi
 
 # ==============================================================================
 # 6. 统一防火墙放行
@@ -765,6 +779,27 @@ if [ "$enable_naive" = true ]; then
     [ "$ENABLE_NAIVE_H3" = true ] && echo -e "\e[1;33mnaive+quic://${naive_uuid}:${naive_uuid}@${NAIVE_DOMAIN}:${naive_h3_port}?congestion_control=bbr&security=tls&sni=${NAIVE_DOMAIN}#${isp}%20Naive-H3%20${ESS}\e[0m"
     green "=========================================================================================="
 fi
+
+# ==============================================================================
+# 8. 自动配置跨平台证书续期定时任务 (Cron)
+# ==============================================================================
+echo "正在配置证书自动续期守护任务..."
+if command -v apt >/dev/null 2>&1 || command -v yum >/dev/null 2>&1; then
+    # Debian / Ubuntu / CentOS 系列
+    (crontab -l 2>/dev/null | grep -q "acme.sh") || {
+        (crontab -l 2>/dev/null; echo "0 3 * * * \"/root/.acme.sh\"/acme.sh --cron --home \"/root/.acme.sh\" > /dev/null 2>&1") | crontab -
+    }
+elif command -v apk >/dev/null 2>&1; then
+    # Alpine 系列：确保 crond 服务已安装并启动
+    apk add --no-cache dcron >/dev/null 2>&1 || true
+    rc-update add crond default 2>/dev/null || true
+    rc-service crond start 2>/dev/null || crond 2>/dev/null || true
+    # 写入定时任务
+    (crontab -l 2>/dev/null | grep -q "acme.sh") || {
+        (crontab -l 2>/dev/null; echo "0 3 * * * \"/root/.acme.sh\"/acme.sh --cron --home \"/root/.acme.sh\" > /dev/null 2>&1") | crontab -
+    }
+fi
+green "证书自动续期定时任务已成功配置（每日凌晨 3 点自动检查）！"
 
 echo "一键卸载 (如需移除 Xray / sing-box，请执行)："
 yellow "bash <(curl -Ls https://raw.githubusercontent.com/eishare/Xray-go/main/uninstall.sh)"
