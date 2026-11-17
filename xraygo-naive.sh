@@ -613,7 +613,6 @@ if [ "$enable_naive" = true ]; then
       ],
       "tls": {
         "enabled": true,
-        "quic_congestion_control": "bbr",
         "alpn": [
           "h2",
           "http/1.1"
@@ -631,6 +630,7 @@ if [ "$enable_naive" = true ]; then
       "tag": "naive-h3-in",
       "listen": "::",
       "listen_port": '"$naive_h3_port"',
+      "quic_congestion_control": "bbr",
       "users": [
         {
           "username": "'"$naive_uuid"'",
