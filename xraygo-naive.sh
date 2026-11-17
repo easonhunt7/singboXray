@@ -611,6 +611,7 @@ if [ "$enable_naive" = true ]; then
           "password": "'"$naive_uuid"'"
         }
       ],
+      "quic_congestion_control": "bbr",
       "tls": {
         "enabled": true,
         "alpn": [
