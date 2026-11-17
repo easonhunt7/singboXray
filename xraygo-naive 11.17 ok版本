@@ -648,7 +648,8 @@ $naive_inbounds
     }
 EOF
 
-    cat > /etc/systemd/system/naive.service << EOF
+    if pidof systemd >/dev/null 2>&1 || [ -d /etc/systemd/system ]; then
+        cat > /etc/systemd/system/naive.service << EOF
 [Unit]
 Description=Sing-box NaiveProxy Service
 After=network.target nss-lookup.target
@@ -665,10 +666,25 @@ LimitNOFILE=infinity
 [Install]
 WantedBy=multi-user.target
 EOF
+        systemctl daemon-reload
+        systemctl enable --now naive >/dev/null 2>&1
+    else
+        cat > /etc/init.d/naive << 'EOF'
+#!/sbin/openrc-run
+description="Sing-box NaiveProxy Service"
+command="/usr/local/singbox_naive/sing-box"
+command_args="run -c /usr/local/singbox_naive/config.json"
+pidfile="/run/naive.pid"
+command_background="yes"
 
-    systemctl daemon-reload
-    systemctl enable --now naive >/dev/null 2>&1
-fi
+depend() {
+    need net
+}
+EOF
+        chmod +x /etc/init.d/naive
+        rc-update add naive default
+        rc-service naive restart
+    fi
 
 # ==============================================================================
 # 6. 统一防火墙放行
