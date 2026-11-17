@@ -660,7 +660,6 @@ $naive_inbounds
   ]
     }
 EOF
-
     if pidof systemd >/dev/null 2>&1 || [ -d /etc/systemd/system ]; then
         cat > /etc/systemd/system/naive.service << EOF
 [Unit]
