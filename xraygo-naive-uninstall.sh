@@ -10,7 +10,7 @@ red() { echo -e "\e[1;31m$1\033[0m"; }
 [[ $EUID -ne 0 ]] && red "请在 root 用户下运行此卸载脚本！" && exit 1
 
 echo "=========================================================================================="
-yellow " 正在开始完全卸载 Xray-core、Sing-box、Argo 隧道及 acme.sh..."
+yellow " 正在开始完全卸载 Xray-core、Sing-box、Argo 隧道、acme.sh 及定时守护..."
 echo "=========================================================================================="
 
 # 1. 停止并禁用 systemd 服务
@@ -52,18 +52,25 @@ rm -rf /usr/local/singbox_naive
 rm -rf /root/easyshare
 rm -rf /tmp/sing-box* /tmp/xray*
 
-# 5. 彻底卸载 acme.sh 及其定时任务
+# 5. 彻底卸载 acme.sh 及其定时任务与 Alpine crond 守护
 if [ -f "$HOME/.acme.sh/acme.sh" ]; then
     echo "正在卸载 acme.sh 及其系统定时任务..."
     "$HOME/.acme.sh/acme.sh" --uninstall >/dev/null 2>&1
     rm -rf "$HOME/.acme.sh"
-    # 清理可能残留的 crontab 任务
+    
+    # 清理 crontab 任务
     crontab -l 2>/dev/null | grep -v "acme.sh" | crontab - 2>/dev/null || true
+    
+    # 针对 Alpine 清理 crond 服务
+    if command -v rc-service >/dev/null 2>&1 && [ -f /etc/init.d/crond ]; then
+        rc-service crond stop >/dev/null 2>&1
+        rc-update del crond default >/dev/null 2>&1
+    fi
     green "acme.sh 已彻底卸载！"
 else
     yellow "未检测到 acme.sh 安装路径，跳过..."
 fi
 
 echo "=========================================================================================="
-green " 卸载完成！所有节点服务、配置文件、Argo 隧道以及 acme.sh 已全部彻底清除。"
+green " 卸载完成！所有节点服务、配置文件、Argo 隧道、acme.sh 及定时任务已全部彻底清除。"
 echo "=========================================================================================="
