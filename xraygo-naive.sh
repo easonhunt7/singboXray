@@ -800,6 +800,7 @@ elif command -v apk >/dev/null 2>&1; then
     }
 fi
 green "证书自动续期定时任务已成功配置（每日凌晨 3 点自动检查）！"
+green "------------------------------------------------------------------------------------------"
 
 echo "一键卸载 (如需移除 Xray / sing-box，请执行)："
 yellow "bash <(curl -Ls https://raw.githubusercontent.com/eishare/Xray-go/main/uninstall.sh)"
