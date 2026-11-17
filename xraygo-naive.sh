@@ -630,7 +630,6 @@ if [ "$enable_naive" = true ]; then
       "tag": "naive-h3-in",
       "listen": "::",
       "listen_port": '"$naive_h3_port"',
-      "quic_congestion_control": "bbr",
       "users": [
         {
           "username": "'"$naive_uuid"'",
