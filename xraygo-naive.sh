@@ -284,13 +284,13 @@ issue_cf_cert() {
     export CF_Token="${token}"
     
     if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
-        echo "正在安装 acme.sh..."
-        curl -sL --connect-timeout 10 [https://get.acme.sh](https://get.acme.sh) | sh -s email=admin@${domain} --nocron >/dev/null 2>&1
-    fi
+    echo "正在安装 acme.sh..."
+    curl -# -L --connect-timeout 10 https://get.acme.sh | sh -s email=admin@${domain} --nocron >/dev/null 2>&1
+fi
     if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
         yellow "官方源安装 acme.sh 失败，切换 Cloudflare 代理源安装..."
         rm -rf /tmp/acme.sh-master
-        download_file "/tmp/acme.zip" "[https://github.com/acmesh-official/acme.sh/archive/refs/heads/master.zip](https://github.com/acmesh-official/acme.sh/archive/refs/heads/master.zip)"
+        download_file "/tmp/acme.zip" "https://github.com/acmesh-official/acme.sh/archive/refs/heads/master.zip"
         unzip -qo /tmp/acme.zip -d /tmp/ && rm -f /tmp/acme.zip
         (cd /tmp/acme.sh-master && ./acme.sh --install --nocron --accountemail "admin@${domain}" >/dev/null 2>&1)
         rm -rf /tmp/acme.sh-master
