@@ -39,7 +39,7 @@ download_file() {
 
     # 1. 优先尝试：GitHub 官方源
     echo "连接 GitHub 官方源中..."
-    if curl -# -L --connect-timeout 15 --max-time 120 -o "$output_path" "$official_url"; then
+    if curl -# -L --connect-timeout 20 --max-time 180 -o "$output_path" "$official_url"; then
         if validate_file "$output_path"; then
             green "下载+校验成功！"
             return 0
@@ -55,7 +55,7 @@ download_file() {
     # 2. 备选尝试：Cloudflare 安全代理源
     for proxy in "${GITHUB_PROXY[@]}"; do
         local proxy_url="${proxy}${official_url}"
-        if curl -# -L --connect-timeout 15 --max-time 120 -o "$output_path" "$proxy_url"; then
+        if curl -# -L --connect-timeout 30 --max-time 240 -o "$output_path" "$proxy_url"; then
             if validate_file "$output_path"; then
                 green "下载+校验成功！"
                 return 0
@@ -285,7 +285,7 @@ issue_cf_cert() {
     
     if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
     echo "正在安装 acme.sh..."
-    curl -# -L --connect-timeout 10 https://get.acme.sh | sh -s email=admin@${domain} --nocron >/dev/null 2>&1
+    curl -# -L --connect-timeout 20 https://get.acme.sh | sh -s email=admin@${domain} --nocron >/dev/null 2>&1
 fi
     if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
         yellow "官方源安装 acme.sh 失败，切换 Cloudflare 代理源安装..."
@@ -602,7 +602,7 @@ if [ "$enable_naive" = true ]; then
     SB_VERSION=""
     for i in {1..3}; do
         # 尝试通过 GitHub API 获取最新 Release 标签
-        SB_VERSION=$(curl -s --connect-timeout 10 "https://api.github.com/repos/SagerNet/sing-box/releases/latest" | grep '"tag_name":' | head -n 1 | sed -E 's/.*"v([^"]+)".*/\1/' | tr -d '[:space:]')
+        SB_VERSION=$(curl -s --connect-timeout 20 "https://api.github.com/repos/SagerNet/sing-box/releases/latest" | grep '"tag_name":' | head -n 1 | sed -E 's/.*"v([^"]+)".*/\1/' | tr -d '[:space:]')
         [ -n "$SB_VERSION" ] && break
         sleep 2
     done
