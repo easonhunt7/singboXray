@@ -9,7 +9,7 @@ red() { echo -e "\e[1;31m$1\033[0m"; }
 
 [[ $EUID -ne 0 ]] && red "请在 root 用户下运行此脚本！" && exit 1
 
-# Cloudflare 安全代理源（由“易分享”创建）
+# Cloudflare 安全代理源（由“易分享 easysharing”创建）
 GITHUB_PROXY=('https://ess.ieshare.workers.dev/')
 
 download_file() {
@@ -44,11 +44,11 @@ download_file() {
             green "下载+校验成功！"
             return 0
         else
-            yellow "校验失败，切换 Cloudflare 安全代理..."
+            yellow "校验失败，切换至 Cloudflare 安全代理..."
             clean_garbage
         fi
     else
-        yellow "连接超时，切换 Cloudflare 安全代理..."
+        yellow "连接超时，切换至 Cloudflare 安全代理..."
         clean_garbage
     fi
     
@@ -67,7 +67,7 @@ download_file() {
     done
 
     # 3. 全部失败
-    red "下载或校验失败，请检查网络或稍后再试！"
+    red "下载或校验失败，请检查网络，稍后再试！"
     clean_garbage
     return 1
 }
@@ -195,7 +195,7 @@ get_free_port() {
 enable_naive=false
 if [ "$ENABLE_NAIVE_H2" = true ] || [ "$ENABLE_NAIVE_H3" = true ]; then
     if [ -z "$NAIVE_DOMAIN" ] || [ -z "$NAIVE_API" ]; then
-        red "错误：NaiveProxy缺少必填参数（domain/api），部署已中止！"
+        red "错误：NaiveProxy 缺少必填参数（domain/api），部署已中止！"
         exit 1
     fi
     enable_naive=true
@@ -207,7 +207,7 @@ fi
 enable_argo=false
 if [ -n "$ARGO_DOMAIN" ] || [ -n "$ARGO_TOKEN" ]; then
     if [ -z "$ARGO_PORT" ] || [ -z "$ARGO_DOMAIN" ] || [ -z "$ARGO_TOKEN" ] || [ -z "$ARGO_PROTOCOL" ]; then
-        red "错误：xHTTP Argo缺少必填参数（port/domain/token），部署已中止！"
+        red "错误：xHTTP Argo 缺少必填参数（port/domain/token），部署已中止！"
         exit 1
     fi
     enable_argo=true
@@ -296,7 +296,7 @@ fi
         rm -rf /tmp/acme.sh-master
     fi
     if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
-        red "错误：acme.sh 安装失败，请检查服务器网络！"
+        red "错误：acme.sh 安装失败，请检查网络，稍后再试！"
         exit 1
     fi
     
@@ -350,7 +350,7 @@ if [ "$enable_xhttp_direct" = true ] || [ "$enable_argo" = true ] || [ "$ENABLE_
             xhttp_insecure="0"
             xhttp_use_acme=true
         else
-            echo "xHTTP 未填写完整域名与 API，生成自签证书..."
+            echo "xHTTP 未填写域名与 API，将使用自签证书..."
             openssl ecparam -genkey -name prime256v1 -out "${work_dir}/private.key"
             openssl req -new -x509 -days 3650 -key "${work_dir}/private.key" -out "${work_dir}/cert.pem" -subj "/CN=bing.com"
             xhttp_cert_file="${work_dir}/cert.pem"
@@ -540,7 +540,7 @@ EOF
         argo_proto_lower=$(echo "$ARGO_PROTOCOL" | tr '[:upper:]' '[:lower:]')
         [ "$argo_proto_lower" = "http2" ] && argo_connections="4"
 
-        green "正在启动 Cloudflare Argo 固定隧道 (协议: ${ARGO_PROTOCOL}, 连接数: ${argo_connections})..."
+        green "启动 Cloudflare Argo 固定隧道 (协议: ${ARGO_PROTOCOL}, 连接数: ${argo_connections})..."
         
         if pidof systemd >/dev/null 2>&1 || [ -d /etc/systemd/system ]; then
             cat <<EOF > /etc/systemd/system/cloudflared.service
@@ -584,7 +584,7 @@ fi
 # 5. 部署 NaiveProxy (基于 Sing-box 原生内核)
 # ==============================================================================
 if [ "$enable_naive" = true ]; then
-    green "---> 开始部署 NaiveProxy (基于全新 Sing-box 内核)..."
+    green "---> 开始部署 NaiveProxy (Sing-box 内核)..."
     mkdir -p "${SBX_DIR}"
     
     uuid_file="${SBX_DIR}/uuid"
@@ -598,7 +598,7 @@ if [ "$enable_naive" = true ]; then
     # 申请 NaiveProxy 域名证书
     issue_cf_cert "$NAIVE_DOMAIN" "$NAIVE_API" "$NAIVE_CERT_DIR"
 
-    echo "正在获取最新 Sing-box 内核版本..."
+    echo "正在获取最新 Sing-box 内核..."
     SB_VERSION=""
     for i in {1..3}; do
         # 尝试通过 GitHub API 获取最新 Release 标签
@@ -607,7 +607,7 @@ if [ "$enable_naive" = true ]; then
         sleep 2
     done
     
-    # 兜底逻辑：如果 API 获取失败或为空，自动降级并锁定为 1.14.4 稳定版
+    # 兜底逻辑：如果 API 获取失败或为空，锁定为 1.14.4 稳定版
     if [ -z "$SB_VERSION" ]; then
         SB_VERSION="1.14.4"
         yellow "未检测到在线版本，已启用 1.14.4 稳定版。"
@@ -632,17 +632,17 @@ if [ "$enable_naive" = true ]; then
         chmod +x "${SBX_DIR}/sing-box"
         green "Sing-box 内核安装并配置成功！"
     else
-        red "错误: 未能精准定位解压后的 sing-box 二进制文件！"
+        red "错误: 未能定位解压后的 sing-box 二进制文件！"
         exit 1
     fi
     rm -rf /tmp/sing-box* /tmp/sing-box.tar.gz
 
     # ==============================================================================
-    # 核心修复：独立、绝对干净地构建 H2 与 H3 节点配置块
+    # 构建 H2 与 H3 节点配置块
     # ==============================================================================
     naive_inbounds=""
 
-    # 1. 构建 H2 节点（纯净 TCP，绝不包含任何 quic 属性）
+    # 1. 构建 H2 节点（TCP）
     if [ "$ENABLE_NAIVE_H2" = true ]; then
         naive_inbounds='    {
       "type": "naive",
@@ -667,7 +667,7 @@ if [ "$enable_naive" = true ]; then
     }'
     fi
 
-    # 2. 构建 H3 节点（QUIC 专属，安全适配 BBR 拥塞控制）
+    # 2. 构建 H3 节点（QUIC ）
     if [ "$ENABLE_NAIVE_H3" = true ]; then
         h3_block='    {
       "type": "naive",
@@ -691,7 +691,7 @@ if [ "$enable_naive" = true ]; then
       }
     }'
         
-        # 安全拼接：如果前面已有 H2，用逗号隔开；如果只开 H3，则直接作为首个节点
+        # 安全拼接：
         if [ -n "$naive_inbounds" ]; then
             naive_inbounds="${naive_inbounds},"$'\n'"$h3_block"
         else
@@ -699,7 +699,7 @@ if [ "$enable_naive" = true ]; then
         fi
     fi
 
-    # 写入最终合法的 JSON 配置文件
+    # 写入 JSON 配置文件
     cat > "${SBX_DIR}/config.json" << EOF
 {
   "log": {
@@ -827,7 +827,7 @@ if [ "$enable_xray" = true ]; then
 fi
 
 if [ "$enable_naive" = true ]; then
-    green "[sing-box] NaiveProxy 链接 (支持 v2rayN / v2rayNG / Hiddify)："
+    green "[sing-box] NaiveProxy 链接 (支持 v2rayN / Hiddify)："
     [ "$ENABLE_NAIVE_H2" = true ] && echo -e "\e[1;33mnaive+https://${naive_uuid}:${naive_uuid}@${NAIVE_DOMAIN}:${naive_h2_port}?security=tls&sni=${NAIVE_DOMAIN}#${isp}%20Naive-H2%20${ESS}\e[0m"
     [ "$ENABLE_NAIVE_H3" = true ] && echo -e "\e[1;33mnaive+quic://${naive_uuid}:${naive_uuid}@${NAIVE_DOMAIN}:${naive_h3_port}?congestion_control=bbr&security=tls&sni=${NAIVE_DOMAIN}#${isp}%20Naive-H3%20${ESS}\e[0m"
     green "=========================================================================================="
@@ -855,5 +855,5 @@ fi
 green "证书自动续期定时任务已成功配置（每日凌晨 3 点自动检查）！"
 green "------------------------------------------------------------------------------------------"
 
-echo "一键卸载 (如需移除 Xray / sing-box，请执行)："
-yellow "bash <(curl -Ls https://raw.githubusercontent.com/eishare/Xray-go/main/uninstall.sh)"
+echo "一键卸载 (如需移除 Xray-go，请执行)："
+yellow "bash <(curl -Ls https://raw.githubusercontent.com/eishare/Xray-go/main/xraygo-uninstall.sh)"
