@@ -39,7 +39,7 @@ download_file() {
 
     # 1. 优先尝试：GitHub 官方源
     echo "连接 GitHub 官方源中..."
-    if curl -# -L --connect-timeout 15 --max-time 120 -o "$output_path" "$official_url"; then
+    if curl --progress-bar -L --connect-timeout 15 --max-time 120 -o "$output_path" "$official_url"; then
         if validate_file "$output_path"; then
             green "下载+校验成功！"
             return 0
@@ -55,7 +55,7 @@ download_file() {
     # 2. 备选尝试：Cloudflare 安全代理源
     for proxy in "${GITHUB_PROXY[@]}"; do
         local proxy_url="${proxy}${official_url}"
-        if curl -# -L --connect-timeout 15 --max-time 120 -o "$output_path" "$proxy_url"; then
+        if curl --progress-bar -L --connect-timeout 15 --max-time 120 -o "$output_path" "$proxy_url"; then
             if validate_file "$output_path"; then
                 green "下载+校验成功！"
                 return 0
@@ -285,7 +285,7 @@ issue_cf_cert() {
     
     if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
     echo "正在安装 acme.sh..."
-    curl -# -L --connect-timeout 10 https://get.acme.sh | sh -s email=admin@${domain} --nocron >/dev/null 2>&1
+    curl --progress-bar -L --connect-timeout 10 https://get.acme.sh | sh -s email=admin@${domain} --nocron >/dev/null 2>&1
 fi
     if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
         yellow "官方源安装 acme.sh 失败，切换 Cloudflare 代理源安装..."
