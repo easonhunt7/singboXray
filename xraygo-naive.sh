@@ -585,7 +585,6 @@ if [ "$enable_naive" = true ]; then
         SB_VERSION=$(curl -s --connect-timeout 10 "https://api.github.com/repos/SagerNet/sing-box/releases/latest" | grep '"tag_name":' | head -n 1 | sed -E 's/.*"v([^"]+)".*/\1/' | tr -d '[:space:]')
         [ -n "$SB_VERSION" ] && break
         sleep 2
-    5
     done
     
     [ -z "$SB_VERSION" ] && SB_VERSION="1.11.4"
@@ -613,7 +612,7 @@ if [ "$enable_naive" = true ]; then
     fi
     rm -rf /tmp/sing-box* /tmp/sing-box.tar.gz
 
-    # 严格隔离构建 H2 与 H3 入站配置块
+    # 严格隔离构建 H2 与 H3 入站配置块（彻底根治字段串位）
     naive_inbounds=""
 
     if [ "$ENABLE_NAIVE_H2" = true ]; then
@@ -663,7 +662,6 @@ if [ "$enable_naive" = true ]; then
       }
     }'
         
-        # 如果 H2 和 H3 同时开启，用逗号安全连接；如果只开 H3，则直接赋值
         if [ -n "$naive_inbounds" ]; then
             naive_inbounds="${naive_inbounds},"$'\n'"$h3_block"
         else
