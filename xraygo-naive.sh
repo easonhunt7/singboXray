@@ -534,14 +534,16 @@ EOF
         rc-service xray restart
     fi
 
-    # 启动 Cloudflared 服务
+    # 启动 Cloudflared 服务（已适配 systemd 与 OpenRC 双系统）
     if [ "$enable_argo" = true ]; then
         argo_connections="1"
         argo_proto_lower=$(echo "$ARGO_PROTOCOL" | tr '[:upper:]' '[:lower:]')
         [ "$argo_proto_lower" = "http2" ] && argo_connections="4"
 
         green "正在启动 Cloudflare Argo 固定隧道 (协议: ${ARGO_PROTOCOL}, 连接数: ${argo_connections})..."
-        cat <<EOF > /etc/systemd/system/cloudflared.service
+        
+        if pidof systemd >/dev/null 2>&1 || [ -d /etc/systemd/system ]; then
+            cat <<EOF > /etc/systemd/system/cloudflared.service
 [Unit]
 Description=Cloudflare Tunnels Service
 After=network.target
@@ -556,10 +558,26 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 EOF
-        systemctl daemon-reload
-        systemctl enable --now cloudflared
+            systemctl daemon-reload
+            systemctl enable --now cloudflared >/dev/null 2>&1
+        else
+            cat > /etc/init.d/cloudflared << EOF
+#!/sbin/openrc-run
+description="Cloudflare Tunnels Service"
+command="${work_dir}/cloudflared"
+command_args="tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol ${ARGO_PROTOCOL} --ha-connections ${argo_connections} run --token ${ARGO_TOKEN}"
+pidfile="/run/cloudflared.pid"
+command_background="yes"
+
+depend() {
+    need net
+}
+EOF
+            chmod +x /etc/init.d/cloudflared
+            rc-update add cloudflared default >/dev/null 2>&1
+            rc-service cloudflared restart
+        fi
     fi
-fi
 
 # ==============================================================================
 # 5. 部署 NaiveProxy (基于 Sing-box 原生内核)
