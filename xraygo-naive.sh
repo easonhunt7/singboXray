@@ -582,13 +582,19 @@ if [ "$enable_naive" = true ]; then
     echo "正在获取最新 Sing-box 内核版本..."
     SB_VERSION=""
     for i in {1..3}; do
+        # 尝试通过 GitHub API 获取最新 Release 标签
         SB_VERSION=$(curl -s --connect-timeout 10 "https://api.github.com/repos/SagerNet/sing-box/releases/latest" | grep '"tag_name":' | head -n 1 | sed -E 's/.*"v([^"]+)".*/\1/' | tr -d '[:space:]')
         [ -n "$SB_VERSION" ] && break
         sleep 2
     done
     
-    [ -z "$SB_VERSION" ] && SB_VERSION="1.11.4"
-    green "检测到 Sing-box 版本: v${SB_VERSION}"
+    # 兜底逻辑：如果 API 获取失败或为空，自动降级并锁定为 1.14.4 稳定版
+    if [ -z "$SB_VERSION" ]; then
+        SB_VERSION="1.14.4"
+        yellow "未检测到在线版本，已启用 1.14.4 稳定版。"
+    else
+        green "检测到 Sing-box 最新版本: v${SB_VERSION}"
+    fi
 
     SB_URL="https://github.com/SagerNet/sing-box/releases/download/v${SB_VERSION}/sing-box-${SB_VERSION}-linux-${GO_ARCH}.tar.gz"
     echo "正在下载 Sing-box v${SB_VERSION}..."
