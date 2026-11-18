@@ -39,7 +39,7 @@ download_file() {
 
     # 1. 优先尝试：GitHub 官方源
     echo "连接 GitHub 官方源中..."
-    if curl --progress-bar -L --connect-timeout 15 --max-time 120 -o "$output_path" "$official_url"; then
+    if curl -# -L --connect-timeout 15 --max-time 120 -o "$output_path" "$official_url"; then
         if validate_file "$output_path"; then
             green "下载+校验成功！"
             return 0
@@ -55,7 +55,7 @@ download_file() {
     # 2. 备选尝试：Cloudflare 安全代理源
     for proxy in "${GITHUB_PROXY[@]}"; do
         local proxy_url="${proxy}${official_url}"
-        if curl --progress-bar -L --connect-timeout 15 --max-time 120 -o "$output_path" "$proxy_url"; then
+        if curl -# -L --connect-timeout 15 --max-time 120 -o "$output_path" "$proxy_url"; then
             if validate_file "$output_path"; then
                 green "下载+校验成功！"
                 return 0
@@ -285,7 +285,7 @@ issue_cf_cert() {
     
     if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
     echo "正在安装 acme.sh..."
-    curl --progress-bar -L --connect-timeout 10 https://get.acme.sh | sh -s email=admin@${domain} --nocron >/dev/null 2>&1
+    curl -# -L --connect-timeout 10 https://get.acme.sh | sh -s email=admin@${domain} --nocron >/dev/null 2>&1
 fi
     if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
         yellow "官方源安装 acme.sh 失败，切换 Cloudflare 代理源安装..."
@@ -585,18 +585,16 @@ if [ "$enable_naive" = true ]; then
         SB_VERSION=$(curl -s --connect-timeout 10 "https://api.github.com/repos/SagerNet/sing-box/releases/latest" | grep '"tag_name":' | head -n 1 | sed -E 's/.*"v([^"]+)".*/\1/' | tr -d '[:space:]')
         [ -n "$SB_VERSION" ] && break
         sleep 2
+    5
     done
     
-    # 终极兜底：如果 API 失败，采用安全默认值
     [ -z "$SB_VERSION" ] && SB_VERSION="1.11.4"
     green "检测到 Sing-box 版本: v${SB_VERSION}"
 
-    # 2. 精准拼装下载链接
     SB_URL="https://github.com/SagerNet/sing-box/releases/download/v${SB_VERSION}/sing-box-${SB_VERSION}-linux-${GO_ARCH}.tar.gz"
     echo "正在下载 Sing-box v${SB_VERSION}..."
     download_file "/tmp/sing-box.tar.gz" "$SB_URL" || exit 1
 
-    # 3. 清理旧临时目录并解压
     rm -rf /tmp/sing-box-*
     tar -xzf /tmp/sing-box.tar.gz -C /tmp/ || {
         red "错误: Sing-box 解压失败！"
@@ -604,7 +602,6 @@ if [ "$enable_naive" = true ]; then
         exit 1
     }
 
-    # 4. 动态模糊匹配解压后的真实目录（彻底根治因版本号文件夹名微调导致的 mv 失败）
     extracted_dir=$(ls -d /tmp/sing-box-*-linux-${GO_ARCH} 2>/dev/null | head -n 1)
     if [ -d "$extracted_dir" ] && [ -f "$extracted_dir/sing-box" ]; then
         mv "$extracted_dir/sing-box" "${SBX_DIR}/sing-box"
@@ -614,15 +611,13 @@ if [ "$enable_naive" = true ]; then
         red "错误: 未能精准定位解压后的 sing-box 二进制文件！"
         exit 1
     fi
-    
-    # 清理战场
     rm -rf /tmp/sing-box* /tmp/sing-box.tar.gz
 
+    # 严格隔离构建 H2 与 H3 入站配置块
     naive_inbounds=""
-    inbound_blocks=()
-    
+
     if [ "$ENABLE_NAIVE_H2" = true ]; then
-        inbound_blocks+=( '    {
+        naive_inbounds='    {
       "type": "naive",
       "tag": "naive-h2-in",
       "listen": "::",
@@ -642,11 +637,11 @@ if [ "$enable_naive" = true ]; then
         "certificate_path": "'"$NAIVE_CERT_DIR"'/fullchain.cer",
         "key_path": "'"$NAIVE_CERT_DIR"'/private.key"
       }
-    }' )
+    }'
     fi
 
     if [ "$ENABLE_NAIVE_H3" = true ]; then
-        inbound_blocks+=( '    {
+        h3_block='    {
       "type": "naive",
       "tag": "naive-h3-in",
       "listen": "::",
@@ -666,11 +661,17 @@ if [ "$enable_naive" = true ]; then
         "certificate_path": "'"$NAIVE_CERT_DIR"'/fullchain.cer",
         "key_path": "'"$NAIVE_CERT_DIR"'/private.key"
       }
-    }' )
+    }'
+        
+        # 如果 H2 和 H3 同时开启，用逗号安全连接；如果只开 H3，则直接赋值
+        if [ -n "$naive_inbounds" ]; then
+            naive_inbounds="${naive_inbounds},"$'\n'"$h3_block"
+        else
+            naive_inbounds="$h3_block"
+        fi
     fi
 
-    naive_inbounds=$(IFS=,; echo "${inbound_blocks[*]}")
-
+    # 写入最终合法的 JSON 配置文件
     cat > "${SBX_DIR}/config.json" << EOF
 {
   "log": {
@@ -683,6 +684,7 @@ $naive_inbounds
   ]
 }
 EOF
+
     if pidof systemd >/dev/null 2>&1 || [ -d /etc/systemd/system ]; then
         cat > /etc/systemd/system/naive.service << EOF
 [Unit]
