@@ -609,7 +609,7 @@ if [ "$enable_naive" = true ]; then
     else
         red "错误: 未能精准定位解压后的 sing-box 二进制文件！"
         exit 1
-    }
+    fi
     rm -rf /tmp/sing-box* /tmp/sing-box.tar.gz
 
     # ==============================================================================
