@@ -578,6 +578,7 @@ EOF
             rc-service cloudflared restart
         fi
     fi
+fi
 
 # ==============================================================================
 # 5. 部署 NaiveProxy (基于 Sing-box 原生内核)
