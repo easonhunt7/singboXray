@@ -288,7 +288,6 @@ issue_cf_cert() {
     curl -# -L --connect-timeout 20 https://get.acme.sh | sh -s email=admin@${domain} --nocron >/dev/null 2>&1
 fi
     if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
-        yellow "官方源安装 acme.sh 失败，切换 Cloudflare 代理源安装..."
         rm -rf /tmp/acme.sh-master
         download_file "/tmp/acme.zip" "https://github.com/acmesh-official/acme.sh/archive/refs/heads/master.zip"
         unzip -qo /tmp/acme.zip -d /tmp/ && rm -f /tmp/acme.zip
