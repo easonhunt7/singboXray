@@ -609,12 +609,15 @@ if [ "$enable_naive" = true ]; then
     else
         red "错误: 未能精准定位解压后的 sing-box 二进制文件！"
         exit 1
-    fi
+    }
     rm -rf /tmp/sing-box* /tmp/sing-box.tar.gz
 
-    # 严格隔离构建 H2 与 H3 入站配置块（彻底根治字段串位）
+    # ==============================================================================
+    # 核心修复：独立、绝对干净地构建 H2 与 H3 节点配置块
+    # ==============================================================================
     naive_inbounds=""
 
+    # 1. 构建 H2 节点（纯净 TCP，绝不包含任何 quic 属性）
     if [ "$ENABLE_NAIVE_H2" = true ]; then
         naive_inbounds='    {
       "type": "naive",
@@ -639,6 +642,7 @@ if [ "$enable_naive" = true ]; then
     }'
     fi
 
+    # 2. 构建 H3 节点（QUIC 专属，安全适配 BBR 拥塞控制）
     if [ "$ENABLE_NAIVE_H3" = true ]; then
         h3_block='    {
       "type": "naive",
@@ -662,6 +666,7 @@ if [ "$enable_naive" = true ]; then
       }
     }'
         
+        # 安全拼接：如果前面已有 H2，用逗号隔开；如果只开 H3，则直接作为首个节点
         if [ -n "$naive_inbounds" ]; then
             naive_inbounds="${naive_inbounds},"$'\n'"$h3_block"
         else
@@ -683,6 +688,7 @@ $naive_inbounds
 }
 EOF
 
+    # 写入 systemd / OpenRC 服务并启动
     if pidof systemd >/dev/null 2>&1 || [ -d /etc/systemd/system ]; then
         cat > /etc/systemd/system/naive.service << EOF
 [Unit]
