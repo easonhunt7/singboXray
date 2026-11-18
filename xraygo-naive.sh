@@ -599,8 +599,10 @@ if [ "$enable_naive" = true ]; then
     rm -rf /tmp/sing-box*
 
     naive_inbounds=""
+    inbound_blocks=()
+    
     if [ "$ENABLE_NAIVE_H2" = true ]; then
-        naive_inbounds+='    {
+        inbound_blocks+=( '    {
       "type": "naive",
       "tag": "naive-h2-in",
       "listen": "::",
@@ -620,12 +622,11 @@ if [ "$enable_naive" = true ]; then
         "certificate_path": "'"$NAIVE_CERT_DIR"'/fullchain.cer",
         "key_path": "'"$NAIVE_CERT_DIR"'/private.key"
       }
-    }'
+    }' )
     fi
 
     if [ "$ENABLE_NAIVE_H3" = true ]; then
-        [ -n "$naive_inbounds" ] && naive_inbounds+=','
-        naive_inbounds+='    {
+        inbound_blocks+=( '    {
       "type": "naive",
       "tag": "naive-h3-in",
       "listen": "::",
@@ -645,8 +646,10 @@ if [ "$enable_naive" = true ]; then
         "certificate_path": "'"$NAIVE_CERT_DIR"'/fullchain.cer",
         "key_path": "'"$NAIVE_CERT_DIR"'/private.key"
       }
-    }'
+    }' )
     fi
+
+    naive_inbounds=$(IFS=,; echo "${inbound_blocks[*]}")
 
     cat > "${SBX_DIR}/config.json" << EOF
 {
@@ -658,7 +661,7 @@ if [ "$enable_naive" = true ]; then
   "inbounds": [
 $naive_inbounds
   ]
-    }
+}
 EOF
     if pidof systemd >/dev/null 2>&1 || [ -d /etc/systemd/system ]; then
         cat > /etc/systemd/system/naive.service << EOF
