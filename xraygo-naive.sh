@@ -251,7 +251,7 @@ elif command -v yum >/dev/null 2>&1; then
     yum install -y curl wget unzip tar openssl iptables coreutils socat jq >/dev/null 2>&1
 elif command -v apk >/dev/null 2>&1; then
     apk update >/dev/null 2>&1
-    apk add --no-cache bash curl wget unzip tar openssl iptables coreutils socat jq >/dev/null 2>&1
+    apk add --no-cache bash curl wget unzip tar openssl iptables coreutils socat jq gcompat libc6-compat >/dev/null 2>&1
 else
     yellow "未识别的系统包管理器，无法自动安装依赖！"
     exit 1
