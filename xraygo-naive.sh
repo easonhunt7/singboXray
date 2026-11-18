@@ -853,7 +853,11 @@ elif command -v apk >/dev/null 2>&1; then
     }
 fi
 green "证书自动续期定时任务已成功配置（每日凌晨 3 点自动检查）！"
-green "------------------------------------------------------------------------------------------"
+
+echo "一键查询定时任务状态/证书有效期："
+green "crontab -l && '/root/.acme.sh/acme.sh' --cron --home '/root/.acme.sh'"
+
+yellow "------------------------------------------------------------------------------------------"
 
 echo "一键卸载 (如需移除 Xray-go，请执行)："
 yellow "bash <(curl -Ls https://raw.githubusercontent.com/eishare/Xray-go/main/xraygo-uninstall.sh)"
