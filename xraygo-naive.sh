@@ -579,24 +579,44 @@ if [ "$enable_naive" = true ]; then
     # 申请 NaiveProxy 域名证书
     issue_cf_cert "$NAIVE_DOMAIN" "$NAIVE_API" "$NAIVE_CERT_DIR"
 
-    # 下载 Sing-box 内核 (优先 GitHub 直连，超时切换 CF 代理)
-    echo "正在下载 Sing-box 内核..."
-    SB_VERSION=$(curl -s --connect-timeout 10 "https://api.github.com/repos/SagerNet/sing-box/releases/latest" | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
+    echo "正在获取最新 Sing-box 内核版本..."
+    SB_VERSION=""
+    for i in {1..3}; do
+        SB_VERSION=$(curl -s --connect-timeout 10 "https://api.github.com/repos/SagerNet/sing-box/releases/latest" | grep '"tag_name":' | head -n 1 | sed -E 's/.*"v([^"]+)".*/\1/' | tr -d '[:space:]')
+        [ -n "$SB_VERSION" ] && break
+        sleep 2
+    done
+    
+    # 终极兜底：如果 API 失败，采用安全默认值
     [ -z "$SB_VERSION" ] && SB_VERSION="1.11.4"
+    green "检测到 Sing-box 版本: v${SB_VERSION}"
 
+    # 2. 精准拼装下载链接
     SB_URL="https://github.com/SagerNet/sing-box/releases/download/v${SB_VERSION}/sing-box-${SB_VERSION}-linux-${GO_ARCH}.tar.gz"
     echo "正在下载 Sing-box v${SB_VERSION}..."
     download_file "/tmp/sing-box.tar.gz" "$SB_URL" || exit 1
 
+    # 3. 清理旧临时目录并解压
+    rm -rf /tmp/sing-box-*
     tar -xzf /tmp/sing-box.tar.gz -C /tmp/ || {
         red "错误: Sing-box 解压失败！"
         rm -f /tmp/sing-box.tar.gz
         exit 1
     }
 
-    mv /tmp/sing-box-${SB_VERSION}-linux-${GO_ARCH}/sing-box "${SBX_DIR}/sing-box"
-    chmod +x "${SBX_DIR}/sing-box"
-    rm -rf /tmp/sing-box*
+    # 4. 动态模糊匹配解压后的真实目录（彻底根治因版本号文件夹名微调导致的 mv 失败）
+    extracted_dir=$(ls -d /tmp/sing-box-*-linux-${GO_ARCH} 2>/dev/null | head -n 1)
+    if [ -d "$extracted_dir" ] && [ -f "$extracted_dir/sing-box" ]; then
+        mv "$extracted_dir/sing-box" "${SBX_DIR}/sing-box"
+        chmod +x "${SBX_DIR}/sing-box"
+        green "Sing-box 内核安装并配置成功！"
+    else
+        red "错误: 未能精准定位解压后的 sing-box 二进制文件！"
+        exit 1
+    fi
+    
+    # 清理战场
+    rm -rf /tmp/sing-box* /tmp/sing-box.tar.gz
 
     naive_inbounds=""
     inbound_blocks=()
