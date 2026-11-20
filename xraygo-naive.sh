@@ -646,6 +646,7 @@ if [ "$enable_naive" = true ]; then
         naive_inbounds='    {
       "type": "naive",
       "tag": "naive-h2-in",
+      "network": "tcp",
       "listen": "::",
       "listen_port": '"$naive_h2_port"',
       "users": [
