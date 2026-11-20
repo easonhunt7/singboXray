@@ -9,7 +9,7 @@ red() { echo -e "\e[1;31m$1\033[0m"; }
 
 [[ $EUID -ne 0 ]] && red "请在 root 用户下运行此脚本！" && exit 1
 
-# Cloudflare 安全代理源（由“易分享 easysharing”创建）
+# Cloudflare 安全代理源（“易分享 easysharing”创建）
 GITHUB_PROXY=('https://ess.ieshare.workers.dev/')
 
 download_file() {
