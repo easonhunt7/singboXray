@@ -671,6 +671,7 @@ if [ "$enable_naive" = true ]; then
         h3_block='    {
       "type": "naive",
       "tag": "naive-h3-in",
+      "network": "udp",
       "listen": "::",
       "listen_port": '"$naive_h3_port"',
       "quic_congestion_control": "bbr",
