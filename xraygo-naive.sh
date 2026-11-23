@@ -837,25 +837,33 @@ fi
 # ==============================================================================
 # 8. 自动配置跨平台证书续期定时任务 (Cron)
 # ==============================================================================
-echo "正在配置证书自动续期守护任务..."
-if command -v apt >/dev/null 2>&1 || command -v yum >/dev/null 2>&1; then
-    # Debian / Ubuntu / CentOS 系列
-    (crontab -l 2>/dev/null | grep -q "acme.sh") || {
-        (crontab -l 2>/dev/null; echo "0 3 * * * \"/root/.acme.sh\"/acme.sh --cron --home \"/root/.acme.sh\" > /dev/null 2>&1") | crontab -
-    }
-elif command -v apk >/dev/null 2>&1; then
-    # Alpine 系列：确保 crond 服务已安装并启动
-    apk add --no-cache dcron >/dev/null 2>&1 || true
-    rc-update add crond default 2>/dev/null || true
-    rc-service crond start 2>/dev/null || crond 2>/dev/null || true
-    # 写入定时任务
-    (crontab -l 2>/dev/null | grep -q "acme.sh") || {
-        (crontab -l 2>/dev/null; echo "0 3 * * * \"/root/.acme.sh\"/acme.sh --cron --home \"/root/.acme.sh\" > /dev/null 2>&1") | crontab -
-    }
+# 【核心修正】：只有当 NaiveProxy 启用（100%绑定 acme）或者 xHTTP 直连确实成功调用了 acme 申请时才执行
+if [ "$enable_naive" = true ] || [ "$xhttp_use_acme" = true ]; then
+    echo "正在配置证书自动续期守护任务..."
+    
+    if ! command -v crontab >/dev/null 2>&1; then
+        if command -v apt >/dev/null 2>&1; then
+            apt install -y cron >/dev/null 2>&1 || true
+        elif command -v yum >/dev/null 2>&1; then
+            yum install -y cronie >/dev/null 2>&1 || true
+        elif command -v apk >/dev/null 2>&1; then
+            apk add --no-cache dcron >/dev/null 2>&1 || true
+            rc-update add crond default 2>/dev/null || true
+            rc-service crond start 2>/dev/null || crond 2>/dev/null || true
+        fi
+    fi
+
+    if command -v crontab >/dev/null 2>&1; then
+        (crontab -l 2>/dev/null | grep -q "acme.sh") || {
+            (crontab -l 2>/dev/null; echo "0 3 * * * \"/root/.acme.sh\"/acme.sh --cron --home \"/root/.acme.sh\" > /dev/null 2>&1") | crontab -
+        }
+        green "证书自动续期定时任务已成功配置（每日凌晨 3 点自动检查）！"
+        echo "一键查询定时任务状态 & 证书有效期："
+        yellow "crontab -l && '/root/.acme.sh/acme.sh' --cron --home '/root/.acme.sh'"
+    else
+        yellow "提示：当前系统未检测到 crontab 工具，已跳过自动续期任务配置。"
+    fi
+    echo "=========================================================================================="
 fi
-green "证书自动续期定时任务已成功配置（每日凌晨 3 点自动检查）！"
-echo "一键查询定时任务状态 & 证书有效期："
-yellow "crontab -l && '/root/.acme.sh/acme.sh' --cron --home '/root/.acme.sh'"
-echo "=========================================================================================="
 echo "一键卸载 (如需移除 Xray-go，请执行)："
 yellow "bash <(curl -Ls https://raw.githubusercontent.com/eishare/Xray-go/main/xraygo-uninstall.sh)"
