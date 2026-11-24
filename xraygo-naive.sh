@@ -272,24 +272,6 @@ case "${ARCH_RAW}" in
 esac
 
 # ==============================================================================
-# 补充：Linux 内核网络与 BBR 优化（温和自动调谐版）
-# ==============================================================================
-green "正在进行 Linux 内核网络优化（BBR 与队列管理）..."
-if ! grep -q "net.core.default_qdisc=fq" /etc/sysctl.conf; then
-    echo "net.core.default_qdisc=fq" >> /etc/sysctl.conf
-    echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf
-fi
-
-cat > /etc/sysctl.d/99-quic-tune.conf << EOF
-# 采用温和的自动调谐上限，避免缓冲区膨胀
-net.core.rmem_max = 16777216
-net.core.wmem_max = 16777216
-net.core.netdev_max_backlog = 10000
-EOF
-
-sysctl --system >/dev/null 2>&1
-
-# ==============================================================================
 # 3. 公共 ACME 证书申请函数 (Cloudflare DNS-01)
 # ==============================================================================
 issue_cf_cert() {
