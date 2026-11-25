@@ -309,22 +309,22 @@
             <div class="sub-options">
                 <div class="row-grid">
                     <div class="form-group">
-                        <label class="field-label">H2（TCP协议）</label>
+                        <label class="field-label">TCP协议</label>
                         <div class="proto-port-box">
-                            <label><input type="checkbox" id="naiveH2" checked> H2</label>
+                            <label><input type="checkbox" id="naiveH2" checked> HTTP/2</label>
                             <input type="text" id="naiveH2Port" placeholder="留空：端口随机">
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="field-label">域名（<span class="badge-req">必填</span> CF灰云/ 可与XHTTP共用域名）</label>
+                        <label class="field-label">域名（<span class="badge-req">必填</span> CF DNS关闭黄云）</label>
                         <input type="text" id="naiveDomain" placeholder="naive.example.com">
                     </div>
                 </div>
                 <div class="row-grid">
                     <div class="form-group">
-                        <label class="field-label">H3（UDP协议）</label>
+                        <label class="field-label">UDP协议</label>
                         <div class="proto-port-box">
-                            <label><input type="checkbox" id="naiveH3" checked> H3</label>
+                            <label><input type="checkbox" id="naiveH3" checked> HTTP/3</label>
                             <input type="text" id="naiveH3Port" placeholder="留空：端口随机">
                         </div>
                     </div>
@@ -344,27 +344,27 @@
             <div class="sub-options">
                 <div class="row-grid">
                     <div class="form-group">
-                        <label class="field-label">H2（TCP协议）</label>
+                        <label class="field-label">TCP协议</label>
                         <div class="proto-port-box">
-                            <label><input type="checkbox" id="xhttpH2" checked> H2</label>
+                            <label><input type="checkbox" id="xhttpH2" checked> HTTP/2</label>
                             <input type="text" id="xhttpH2Port" placeholder="留空：端口随机">
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="field-label">域名（留空:自签证书;客户端须跳过验证）</label>
+                        <label class="field-label">域名（留空=自签证书、客户端须跳过验证）</label>
                         <input type="text" id="xhttpDomain" placeholder="xhttp.example.com">
                     </div>
                 </div>
                 <div class="row-grid">
                     <div class="form-group">
-                        <label class="field-label">H3（UDP协议）</label>
+                        <label class="field-label">UDP协议</label>
                         <div class="proto-port-box">
-                            <label><input type="checkbox" id="xhttpH3" checked> H3</label>
+                            <label><input type="checkbox" id="xhttpH3" checked> HTTP/3</label>
                             <input type="text" id="xhttpH3Port" placeholder="留空：端口随机">
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="field-label">API（留空:自签证书;客户端须跳过验证）</label>
+                        <label class="field-label">API（留空=自签证书、客户端须跳过验证）</label>
                         <input type="text" id="xhttpApi" placeholder="CF API Token">
                     </div>
                 </div>
@@ -381,8 +381,8 @@
                     <div class="form-group">
                         <label class="field-label">Protocol（<span class="badge-req">必填</span> CF 与服务器连接协议）</label>
                         <select id="argoProtocol">
-                            <option value="http2" selected>http2</option>
-                            <option value="quic">quic</option>
+                            <option value="HTTP/2" selected>http2</option>
+                            <option value="QUIC">quic</option>
                         </select>
                     </div>
                     <div class="form-group">
