@@ -156,9 +156,6 @@ for arg in "$@"; do
             val="${clean_arg#argo-token}"
             ARGO_TOKEN="${val#=}"
             ;;
-        reality)
-            ENABLE_REALITY=true
-            ;;
         reality-dest*)
             ENABLE_REALITY=true
             val="${clean_arg#reality-dest}"
