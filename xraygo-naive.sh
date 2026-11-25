@@ -156,6 +156,9 @@ for arg in "$@"; do
             val="${clean_arg#argo-token}"
             ARGO_TOKEN="${val#=}"
             ;;
+        reality)
+            ENABLE_REALITY=true
+            ;;
         reality-dest*)
             ENABLE_REALITY=true
             val="${clean_arg#reality-dest}"
@@ -287,6 +290,8 @@ cat > /etc/sysctl.d/99-quic-tune.conf << EOF
 # 允许系统根据实际带宽自动调节 UDP/TCP 缓冲区，上限适度放宽
 net.core.rmem_max = 16777216
 net.core.wmem_max = 16777216
++net.core.rmem_default = 1048576
++net.core.wmem_default = 1048576
 net.core.netdev_max_backlog = 10000
 EOF
 
