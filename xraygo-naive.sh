@@ -275,29 +275,6 @@ case "${ARCH_RAW}" in
 esac
 
 # ==============================================================================
-# Linux 内核网络与 BBR 优化（温和自动调谐版）
-# ==============================================================================
-green "正在进行 Linux 内核网络优化（BBR 与队列管理）..."
-
-# 1. 确保开启 BBR 拥塞控制与 fq 队列
-if ! grep -q "net.core.default_qdisc=fq" /etc/sysctl.conf; then
-    echo "net.core.default_qdisc=fq" >> /etc/sysctl.conf
-    echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf
-fi
-
-# 2. 采用温和的自动调谐参数，避免 Bufferbloat（缓冲区膨胀）
-cat > /etc/sysctl.d/99-quic-tune.conf << EOF
-# 允许系统根据实际带宽自动调节 UDP/TCP 缓冲区，上限适度放宽
-net.core.rmem_max = 16777216
-net.core.wmem_max = 16777216
-+net.core.rmem_default = 1048576
-+net.core.wmem_default = 1048576
-net.core.netdev_max_backlog = 10000
-EOF
-
-sysctl --system >/dev/null 2>&1
-
-# ==============================================================================
 # 3. 公共 ACME 证书申请函数 (Cloudflare DNS-01)
 # ==============================================================================
 issue_cf_cert() {
