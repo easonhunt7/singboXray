@@ -365,7 +365,7 @@ if [ "$enable_naive" = true ]; then
     if [ -d "$extracted_dir" ] && [ -f "$extracted_dir/sing-box" ]; then
         mv "$extracted_dir/sing-box" "${SBX_DIR}/sing-box"
         chmod +x "${SBX_DIR}/sing-box"
-        green "Sing-box 内核安装并配置成功！"
+        green "已启用 Sing-box 内核。"
     else
         red "错误: 未能定位解压后的 sing-box 二进制文件！"
         exit 1
@@ -503,22 +503,7 @@ enable_xray=false
 if [ "$enable_xhttp_direct" = true ] || [ "$enable_argo" = true ] || [ "$ENABLE_REALITY" = true ]; then
     enable_xray=true
     mkdir -p "${work_dir}"
-    echo "正在下载 Xray-core..."
-    download_file "${work_dir}/xray.zip" "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${ARCH}.zip" || exit 1
-    unzip -qo "${work_dir}/xray.zip" -d "${work_dir}/" && rm -f "${work_dir}/xray.zip"
-    chmod +x "${work_dir}/xray"
-
-    if [ "$enable_argo" = true ]; then
-        echo "正在下载 Cloudflared..."
-        download_file "${work_dir}/cloudflared" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${GO_ARCH}" || exit 1
-        chmod +x "${work_dir}/cloudflared"
-    fi
-
-    uuid=$(cat /proc/sys/kernel/random/uuid)
-    xhttp_h2_path="${uuid}-xh2"
-    xhttp_h3_path="${uuid}-xh3"
-    argo_path="${uuid}-argo"
-
+   
     # 处理 xHTTP 直连证书（域名+API 真实证书 vs 自签证书）
     xhttp_use_acme=false
     if [ "$enable_xhttp_direct" = true ]; then
@@ -541,12 +526,30 @@ if [ "$enable_xhttp_direct" = true ] || [ "$enable_argo" = true ] || [ "$ENABLE_
         fi
     fi
 
+ echo "正在下载 Xray-core..."
+    download_file "${work_dir}/xray.zip" "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${ARCH}.zip" || exit 1
+    unzip -qo "${work_dir}/xray.zip" -d "${work_dir}/" && rm -f "${work_dir}/xray.zip"
+    chmod +x "${work_dir}/xray"
+
+    if [ "$enable_argo" = true ]; then
+        echo "正在下载 Cloudflared..."
+        download_file "${work_dir}/cloudflared" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${GO_ARCH}" || exit 1
+        chmod +x "${work_dir}/cloudflared"
+    fi
+
+    uuid=$(cat /proc/sys/kernel/random/uuid)
+    xhttp_h2_path="${uuid}-xh2"
+    xhttp_h3_path="${uuid}-xh3"
+    argo_path="${uuid}-argo"
+
     # 生成 Reality 密钥对
     if [ "$ENABLE_REALITY" = true ]; then
+       green "---> 开始部署 VLESS TCP Reality Vision..."
         key_pair=$("${work_dir}/xray" x25519)
         private_key_x=$(echo "$key_pair" | awk -F':' '/PrivateKey/ {print $2}' | xargs)
         public_key_x=$(echo "$key_pair" | awk -F':' '/Password/ {print $2}' | xargs)
         short_id_x=$(date +%s%N | sha256sum | cut -c 1-8)
+        green "-> VLESS TCP Reality Vision 部署完成。"
     fi
 
     inbounds_arr=()
@@ -676,7 +679,7 @@ EOF
 
     # 启动 Xray 服务
     if pidof systemd >/dev/null 2>&1 || [ -d /etc/systemd/system ]; then
-        green "正在启动 Xray-core 服务..."
+        green "已启用 Xray-core 服务..."
         cat > /etc/systemd/system/xray.service << EOF
 [Unit]
 Description=Xray Service
@@ -697,7 +700,7 @@ EOF
         systemctl daemon-reload
         systemctl enable --now xray
     else
-        green "正在启动 Xray-core 服务 (OpenRC)..."
+        green "已启用 Xray-core 服务 (OpenRC)..."
         cat > /etc/init.d/xray << 'EOF'
 #!/sbin/openrc-run
 description="Xray Service"
