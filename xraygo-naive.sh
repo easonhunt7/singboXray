@@ -316,7 +316,188 @@ fi
 }
 
 # ==============================================================================
-# 4. 部署 Xray-core (xHTTP直连 / xHTTP-Argo / Reality)
+# 4. 部署 NaiveProxy (基于 Sing-box 原生内核)
+# ==============================================================================
+if [ "$enable_naive" = true ]; then
+    green "---> 开始部署 NaiveProxy (Sing-box 内核)..."
+    mkdir -p "${SBX_DIR}"
+    
+    uuid_file="${SBX_DIR}/uuid"
+    if [ ! -f "$uuid_file" ]; then
+        naive_uuid=$(cat /proc/sys/kernel/random/uuid | tr -d '-' | cut -c 1-16)
+        echo "$naive_uuid" > "$uuid_file"
+    else
+        naive_uuid=$(cat "$uuid_file")
+    fi
+
+    # 申请 NaiveProxy 域名证书
+    issue_cf_cert "$NAIVE_DOMAIN" "$NAIVE_API" "$NAIVE_CERT_DIR"
+
+    echo "正在获取最新 Sing-box 内核..."
+    SB_VERSION=""
+    for i in {1..3}; do
+        # 尝试通过 GitHub API 获取最新 Release 标签
+        SB_VERSION=$(curl -s --connect-timeout 20 "https://api.github.com/repos/SagerNet/sing-box/releases/latest" | grep '"tag_name":' | head -n 1 | sed -E 's/.*"v([^"]+)".*/\1/' | tr -d '[:space:]')
+        [ -n "$SB_VERSION" ] && break
+        sleep 2
+    done
+    
+    # 兜底逻辑：如果 API 获取失败或为空，锁定为 1.14.4 稳定版
+    if [ -z "$SB_VERSION" ]; then
+        SB_VERSION="1.14.4"
+        yellow "未检测到在线版本，已启用 1.14.4 稳定版。"
+    else
+        green "检测到 Sing-box 最新版本: v${SB_VERSION}"
+    fi
+
+    SB_URL="https://github.com/SagerNet/sing-box/releases/download/v${SB_VERSION}/sing-box-${SB_VERSION}-linux-${GO_ARCH}.tar.gz"
+    echo "正在下载 Sing-box v${SB_VERSION}..."
+    download_file "/tmp/sing-box.tar.gz" "$SB_URL" || exit 1
+
+    rm -rf /tmp/sing-box-*
+    tar -xzf /tmp/sing-box.tar.gz -C /tmp/ || {
+        red "错误: Sing-box 解压失败！"
+        rm -f /tmp/sing-box.tar.gz
+        exit 1
+    }
+
+    extracted_dir=$(ls -d /tmp/sing-box-*-linux-${GO_ARCH} 2>/dev/null | head -n 1)
+    if [ -d "$extracted_dir" ] && [ -f "$extracted_dir/sing-box" ]; then
+        mv "$extracted_dir/sing-box" "${SBX_DIR}/sing-box"
+        chmod +x "${SBX_DIR}/sing-box"
+        green "Sing-box 内核安装并配置成功！"
+    else
+        red "错误: 未能定位解压后的 sing-box 二进制文件！"
+        exit 1
+    fi
+    rm -rf /tmp/sing-box* /tmp/sing-box.tar.gz
+
+    # ==============================================================================
+    # 构建 H2 与 H3 节点配置块
+    # ==============================================================================
+    naive_inbounds=""
+
+    # 1. 构建 H2 节点（TCP）
+    if [ "$ENABLE_NAIVE_H2" = true ]; then
+        naive_inbounds='    {
+      "type": "naive",
+      "tag": "naive-h2-in",
+      "network": "tcp",
+      "listen": "::",
+      "listen_port": '"$naive_h2_port"',
+      "users": [
+        {
+          "username": "'"$naive_uuid"'",
+          "password": "'"$naive_uuid"'"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "certificate_path": "'"$NAIVE_CERT_DIR"'/fullchain.cer",
+        "key_path": "'"$NAIVE_CERT_DIR"'/private.key"
+      }
+    }'
+    fi
+
+    # 2. 构建 H3 节点（QUIC ）
+    if [ "$ENABLE_NAIVE_H3" = true ]; then
+        h3_block='    {
+      "type": "naive",
+      "tag": "naive-h3-in",
+      "network": "udp",
+      "listen": "::",
+      "listen_port": '"$naive_h3_port"',
+      "quic_congestion_control": "bbr",
+      "users": [
+        {
+          "username": "'"$naive_uuid"'",
+          "password": "'"$naive_uuid"'"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "alpn": [
+          "h3"
+        ],
+        "certificate_path": "'"$NAIVE_CERT_DIR"'/fullchain.cer",
+        "key_path": "'"$NAIVE_CERT_DIR"'/private.key"
+      }
+    }'
+        
+        # 安全拼接：
+        if [ -n "$naive_inbounds" ]; then
+            naive_inbounds="${naive_inbounds},"$'\n'"$h3_block"
+        else
+            naive_inbounds="$h3_block"
+        fi
+    fi
+
+    # 写入 JSON 配置文件
+    cat > "${SBX_DIR}/config.json" << EOF
+{
+  "log": {
+    "disabled": false,
+    "level": "warning",
+    "timestamp": true
+  },
+  "inbounds": [
+$naive_inbounds
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ]
+}
+EOF
+
+    # 写入 systemd / OpenRC 服务并启动
+    if pidof systemd >/dev/null 2>&1 || [ -d /etc/systemd/system ]; then
+        cat > /etc/systemd/system/naive.service << EOF
+[Unit]
+Description=Sing-box NaiveProxy Service
+After=network.target nss-lookup.target
+
+[Service]
+User=root
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+ExecStart=${SBX_DIR}/sing-box run -c ${SBX_DIR}/config.json
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=infinity
+
+[Install]
+WantedBy=multi-user.target
+EOF
+        systemctl daemon-reload
+        systemctl enable --now naive >/dev/null 2>&1
+    else
+        cat > /etc/init.d/naive << 'EOF'
+#!/sbin/openrc-run
+description="Sing-box NaiveProxy Service"
+command="/usr/local/singbox_naive/sing-box"
+command_args="run -c /usr/local/singbox_naive/config.json"
+pidfile="/run/naive.pid"
+command_background="yes"
+
+depend() {
+    need net
+}
+EOF
+        chmod +x /etc/init.d/naive
+        rc-update add naive default
+        rc-service naive restart
+    fi
+fi
+
+# ==============================================================================
+# 5. 部署 Xray-core (xHTTP直连 / xHTTP-Argo / Reality)
 # ==============================================================================
 enable_xray=false
 if [ "$enable_xhttp_direct" = true ] || [ "$enable_argo" = true ] || [ "$ENABLE_REALITY" = true ]; then
@@ -580,186 +761,7 @@ EOF
     fi
 fi
 
-# ==============================================================================
-# 5. 部署 NaiveProxy (基于 Sing-box 原生内核)
-# ==============================================================================
-if [ "$enable_naive" = true ]; then
-    green "---> 开始部署 NaiveProxy (Sing-box 内核)..."
-    mkdir -p "${SBX_DIR}"
-    
-    uuid_file="${SBX_DIR}/uuid"
-    if [ ! -f "$uuid_file" ]; then
-        naive_uuid=$(cat /proc/sys/kernel/random/uuid | tr -d '-' | cut -c 1-16)
-        echo "$naive_uuid" > "$uuid_file"
-    else
-        naive_uuid=$(cat "$uuid_file")
-    fi
 
-    # 申请 NaiveProxy 域名证书
-    issue_cf_cert "$NAIVE_DOMAIN" "$NAIVE_API" "$NAIVE_CERT_DIR"
-
-    echo "正在获取最新 Sing-box 内核..."
-    SB_VERSION=""
-    for i in {1..3}; do
-        # 尝试通过 GitHub API 获取最新 Release 标签
-        SB_VERSION=$(curl -s --connect-timeout 20 "https://api.github.com/repos/SagerNet/sing-box/releases/latest" | grep '"tag_name":' | head -n 1 | sed -E 's/.*"v([^"]+)".*/\1/' | tr -d '[:space:]')
-        [ -n "$SB_VERSION" ] && break
-        sleep 2
-    done
-    
-    # 兜底逻辑：如果 API 获取失败或为空，锁定为 1.14.4 稳定版
-    if [ -z "$SB_VERSION" ]; then
-        SB_VERSION="1.14.4"
-        yellow "未检测到在线版本，已启用 1.14.4 稳定版。"
-    else
-        green "检测到 Sing-box 最新版本: v${SB_VERSION}"
-    fi
-
-    SB_URL="https://github.com/SagerNet/sing-box/releases/download/v${SB_VERSION}/sing-box-${SB_VERSION}-linux-${GO_ARCH}.tar.gz"
-    echo "正在下载 Sing-box v${SB_VERSION}..."
-    download_file "/tmp/sing-box.tar.gz" "$SB_URL" || exit 1
-
-    rm -rf /tmp/sing-box-*
-    tar -xzf /tmp/sing-box.tar.gz -C /tmp/ || {
-        red "错误: Sing-box 解压失败！"
-        rm -f /tmp/sing-box.tar.gz
-        exit 1
-    }
-
-    extracted_dir=$(ls -d /tmp/sing-box-*-linux-${GO_ARCH} 2>/dev/null | head -n 1)
-    if [ -d "$extracted_dir" ] && [ -f "$extracted_dir/sing-box" ]; then
-        mv "$extracted_dir/sing-box" "${SBX_DIR}/sing-box"
-        chmod +x "${SBX_DIR}/sing-box"
-        green "Sing-box 内核安装并配置成功！"
-    else
-        red "错误: 未能定位解压后的 sing-box 二进制文件！"
-        exit 1
-    fi
-    rm -rf /tmp/sing-box* /tmp/sing-box.tar.gz
-
-    # ==============================================================================
-    # 构建 H2 与 H3 节点配置块
-    # ==============================================================================
-    naive_inbounds=""
-
-    # 1. 构建 H2 节点（TCP）
-    if [ "$ENABLE_NAIVE_H2" = true ]; then
-        naive_inbounds='    {
-      "type": "naive",
-      "tag": "naive-h2-in",
-      "network": "tcp",
-      "listen": "::",
-      "listen_port": '"$naive_h2_port"',
-      "users": [
-        {
-          "username": "'"$naive_uuid"'",
-          "password": "'"$naive_uuid"'"
-        }
-      ],
-      "tls": {
-        "enabled": true,
-        "alpn": [
-          "h2",
-          "http/1.1"
-        ],
-        "certificate_path": "'"$NAIVE_CERT_DIR"'/fullchain.cer",
-        "key_path": "'"$NAIVE_CERT_DIR"'/private.key"
-      }
-    }'
-    fi
-
-    # 2. 构建 H3 节点（QUIC ）
-    if [ "$ENABLE_NAIVE_H3" = true ]; then
-        h3_block='    {
-      "type": "naive",
-      "tag": "naive-h3-in",
-      "network": "udp",
-      "listen": "::",
-      "listen_port": '"$naive_h3_port"',
-      "quic_congestion_control": "bbr",
-      "users": [
-        {
-          "username": "'"$naive_uuid"'",
-          "password": "'"$naive_uuid"'"
-        }
-      ],
-      "tls": {
-        "enabled": true,
-        "alpn": [
-          "h3"
-        ],
-        "certificate_path": "'"$NAIVE_CERT_DIR"'/fullchain.cer",
-        "key_path": "'"$NAIVE_CERT_DIR"'/private.key"
-      }
-    }'
-        
-        # 安全拼接：
-        if [ -n "$naive_inbounds" ]; then
-            naive_inbounds="${naive_inbounds},"$'\n'"$h3_block"
-        else
-            naive_inbounds="$h3_block"
-        fi
-    fi
-
-    # 写入 JSON 配置文件
-    cat > "${SBX_DIR}/config.json" << EOF
-{
-  "log": {
-    "disabled": false,
-    "level": "warning",
-    "timestamp": true
-  },
-  "inbounds": [
-$naive_inbounds
-  ],
-  "outbounds": [
-    {
-      "type": "direct",
-      "tag": "direct"
-    }
-  ]
-}
-EOF
-
-    # 写入 systemd / OpenRC 服务并启动
-    if pidof systemd >/dev/null 2>&1 || [ -d /etc/systemd/system ]; then
-        cat > /etc/systemd/system/naive.service << EOF
-[Unit]
-Description=Sing-box NaiveProxy Service
-After=network.target nss-lookup.target
-
-[Service]
-User=root
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
-ExecStart=${SBX_DIR}/sing-box run -c ${SBX_DIR}/config.json
-Restart=on-failure
-RestartSec=5
-LimitNOFILE=infinity
-
-[Install]
-WantedBy=multi-user.target
-EOF
-        systemctl daemon-reload
-        systemctl enable --now naive >/dev/null 2>&1
-    else
-        cat > /etc/init.d/naive << 'EOF'
-#!/sbin/openrc-run
-description="Sing-box NaiveProxy Service"
-command="/usr/local/singbox_naive/sing-box"
-command_args="run -c /usr/local/singbox_naive/config.json"
-pidfile="/run/naive.pid"
-command_background="yes"
-
-depend() {
-    need net
-}
-EOF
-        chmod +x /etc/init.d/naive
-        rc-update add naive default
-        rc-service naive restart
-    fi
-fi
 
 # ==============================================================================
 # 6. 统一防火墙放行
@@ -808,43 +810,49 @@ cfport="443"
 
 clear
 echo "=========================================================================================="
-echo " 部署完成！请查看以下节点链接"
+echo " 部署完成！以下是节点信息："
 echo "=========================================================================================="
 
+# 1. NaiveProxy 输出
+if [ "$enable_naive" = true ]; then
+    green "[sing-box] NaiveProxy 节点 (支持 v2rayN / Hiddify)："
+    [ "$ENABLE_NAIVE_H2" = true ] && echo -e "\e[1;33mnaive+https://${naive_uuid}:${naive_uuid}@${NAIVE_DOMAIN}:${naive_h2_port}?security=tls&sni=${NAIVE_DOMAIN}#${isp}%20Naive-H2%20${ESS}\e[0m"
+    [ "$ENABLE_NAIVE_H3" = true ] && echo -e "\e[1;33mnaive+quic://${naive_uuid}:${naive_uuid}@${NAIVE_DOMAIN}:${naive_h3_port}?congestion_control=bbr&security=tls&sni=${NAIVE_DOMAIN}#${isp}%20Naive-H3%20${ESS}\e[0m"
+    echo "------------------------------------------------------------------------------------------"
+fi
+
 if [ "$enable_xray" = true ]; then
-    > "${work_dir}/url.txt"
-    
-    # 确定 xHTTP 直连地址（有绑定域名则用域名，自签则用服务器 IP）
     xhttp_connect_host="$server_ip"
     [ "$xhttp_use_acme" = true ] && xhttp_connect_host="$XHTTP_DOMAIN"
 
-    [ "$ENABLE_REALITY" = true ] && echo "vless://${uuid}@${server_ip}:${reality_port}?encryption=none&security=reality&sni=${REALITY_DEST}&fp=chrome&pbk=${public_key_x}&sid=${short_id_x}&type=tcp&flow=xtls-rprx-vision#${isp}%20Reality-Vision%20${ESS}" >> "${work_dir}/url.txt"
-    [ "$ENABLE_XHTTP_H2" = true ] && echo "vless://${uuid}@${xhttp_connect_host}:${xhttp_h2_port}?encryption=none&security=tls&sni=${xhttp_sni}&alpn=h2&fp=chrome&type=xhttp&mode=auto&path=/${xhttp_h2_path}&allowInsecure=${xhttp_insecure}#${isp}%20XHTTP-H2%20${ESS}" >> "${work_dir}/url.txt"
-    [ "$ENABLE_XHTTP_H3" = true ] && echo "vless://${uuid}@${xhttp_connect_host}:${xhttp_h3_port}?encryption=none&security=tls&sni=${xhttp_sni}&alpn=h3&fp=chrome&type=xhttp&mode=packet-up&path=/${xhttp_h3_path}&allowInsecure=${xhttp_insecure}#${isp}%20XHTTP-H3%20${ESS}" >> "${work_dir}/url.txt"
+    # 2. xHTTP 直连输出
+    if [ "$ENABLE_XHTTP_H2" = true ] || [ "$ENABLE_XHTTP_H3" = true ]; then
+        green "[Xray-core] xHTTP 直连节点："
+        [ "$ENABLE_XHTTP_H2" = true ] && echo -e "\e[1;33mvless://${uuid}@${xhttp_connect_host}:${xhttp_h2_port}?encryption=none&security=tls&sni=${xhttp_sni}&alpn=h2&fp=chrome&type=xhttp&mode=auto&path=/${xhttp_h2_path}&allowInsecure=${xhttp_insecure}#${isp}%20XHTTP-H2%20${ESS}\e[0m"
+        [ "$ENABLE_XHTTP_H3" = true ] && echo -e "\e[1;33mvless://${uuid}@${xhttp_connect_host}:${xhttp_h3_port}?encryption=none&security=tls&sni=${xhttp_sni}&alpn=h3&fp=chrome&type=xhttp&mode=packet-up&path=/${xhttp_h3_path}&allowInsecure=${xhttp_insecure}#${isp}%20XHTTP-H3%20${ESS}\e[0m"
+        echo "------------------------------------------------------------------------------------------"
+    fi
     
+    # 3. xHTTP Argo 隧道输出
     if [ "$enable_argo" = true ]; then
-        echo "vless://${uuid}@${cfip_h2}:${cfport}?encryption=none&security=tls&alpn=h2&sni=${ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=packet-up&host=${ARGO_DOMAIN}&path=/${argo_path}#${isp}%20Argo-H2%20${ESS}" >> "${work_dir}/url.txt"
-        echo "vless://${uuid}@${cfip_h3}:${cfport}?encryption=none&security=tls&alpn=h3&sni=${ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=packet-up&host=${ARGO_DOMAIN}&path=/${argo_path}#${isp}%20Argo-H3%20${ESS}" >> "${work_dir}/url.txt"
+        green "[Xray-core] xHTTP Argo 隧道节点："
+        echo -e "\e[1;33mvless://${uuid}@${cfip_h2}:${cfport}?encryption=none&security=tls&alpn=h2&sni=${ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=packet-up&host=${ARGO_DOMAIN}&path=/${argo_path}#${isp}%20Argo-H2%20${ESS}\e[0m"
+        echo -e "\e[1;33mvless://${uuid}@${cfip_h3}:${cfport}?encryption=none&security=tls&alpn=h3&sni=${ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=packet-up&host=${ARGO_DOMAIN}&path=/${argo_path}#${isp}%20Argo-H3%20${ESS}\e[0m"
+        echo "------------------------------------------------------------------------------------------"
     fi
 
-    base64_str=$(cat "${work_dir}/url.txt" | base64 | tr -d '\n' | tr -d '\r')
-    green "[Xray-core] Base64 链接 (包含 Reality / xHTTP直连 / Argo)："
-    green "------------------------------------------------------------------------------------------"
-    echo -e "\e[1;33m$base64_str\e[0m"
-    green "------------------------------------------------------------------------------------------"
-fi
-
-if [ "$enable_naive" = true ]; then
-    green "[sing-box] NaiveProxy 链接 (支持 v2rayN / Hiddify)："
-    [ "$ENABLE_NAIVE_H2" = true ] && echo -e "\e[1;33mnaive+https://${naive_uuid}:${naive_uuid}@${NAIVE_DOMAIN}:${naive_h2_port}?security=tls&sni=${NAIVE_DOMAIN}#${isp}%20Naive-H2%20${ESS}\e[0m"
-    [ "$ENABLE_NAIVE_H3" = true ] && echo -e "\e[1;33mnaive+quic://${naive_uuid}:${naive_uuid}@${NAIVE_DOMAIN}:${naive_h3_port}?congestion_control=bbr&security=tls&sni=${NAIVE_DOMAIN}#${isp}%20Naive-H3%20${ESS}\e[0m"
-    green "=========================================================================================="
+    # 4. VLESS TCP Reality 输出
+    if [ "$ENABLE_REALITY" = true ]; then
+        green "[Xray-core] VLESS TCP Reality 节点："
+        echo -e "\e[1;33mvless://${uuid}@${server_ip}:${reality_port}?encryption=none&security=reality&sni=${REALITY_DEST}&fp=chrome&pbk=${public_key_x}&sid=${short_id_x}&type=tcp&flow=xtls-rprx-vision#${isp}%20Reality-Vision%20${ESS}\e[0m"
+        echo "------------------------------------------------------------------------------------------"
+    fi
 fi
 
 # ==============================================================================
 # 8. 自动配置跨平台证书续期定时任务 (Cron)
 # ==============================================================================
-# 【核心修正】：只有当 NaiveProxy 启用（100%绑定 acme）或者 xHTTP 直连确实成功调用了 acme 申请时才执行
+# 【只有当 NaiveProxy 启用（100%绑定 acme）或者 xHTTP 直连确实成功调用了 acme 申请时才执行
 if [ "$enable_naive" = true ] || [ "$xhttp_use_acme" = true ]; then
     echo "正在配置证书自动续期守护任务..."
     
