@@ -436,7 +436,7 @@ if [ "$enable_naive" = true ]; then
         fi
     fi
 
-    # 写入 JSON 配置文件
+  # 写入 JSON 配置文件
     cat > "${SBX_DIR}/config.json" << EOF
 {
   "log": {
@@ -446,12 +446,6 @@ if [ "$enable_naive" = true ]; then
   },
   "inbounds": [
 $naive_inbounds
-  ],
-  "outbounds": [
-    {
-      "type": "direct",
-      "tag": "direct"
-    }
   ]
 }
 EOF
