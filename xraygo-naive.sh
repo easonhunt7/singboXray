@@ -711,6 +711,12 @@ if [ "$enable_naive" = true ]; then
   },
   "inbounds": [
 $naive_inbounds
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
   ]
 }
 EOF
