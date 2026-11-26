@@ -342,6 +342,7 @@ if [ "$enable_xhttp_direct" = true ] || [ "$enable_argo" = true ] || [ "$ENABLE_
     xhttp_use_acme=false
     if [ "$enable_xhttp_direct" = true ]; then
         if [ -n "$XHTTP_DOMAIN" ] && [ -n "$XHTTP_API" ]; then
+            green "---> 开始部署 XHTTP (Xray-core 内核)..."
             issue_cf_cert "$XHTTP_DOMAIN" "$XHTTP_API" "$XHTTP_CERT_DIR"
             xhttp_cert_file="${XHTTP_CERT_DIR}/fullchain.cer"
             xhttp_key_file="${XHTTP_CERT_DIR}/private.key"
@@ -465,7 +466,7 @@ if [ "$enable_xhttp_direct" = true ] || [ "$enable_argo" = true ] || [ "$ENABLE_
         \"security\": \"none\",
         \"xhttpSettings\": {
           \"path\": \"/$argo_path\",
-          \"mode\": \"auto\"
+          \"mode\": \"packet-up\"
         }
       },
       \"sniffing\": {\"enabled\": true, \"destOverride\": [\"http\", \"tls\", \"quic\"], \"metadataOnly\": false}
@@ -710,6 +711,12 @@ if [ "$enable_naive" = true ]; then
   },
   "inbounds": [
 $naive_inbounds
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
   ]
 }
 EOF
@@ -813,11 +820,11 @@ if [ "$enable_xray" = true ]; then
 
     [ "$ENABLE_REALITY" = true ] && echo "vless://${uuid}@${server_ip}:${reality_port}?encryption=none&security=reality&sni=${REALITY_DEST}&fp=chrome&pbk=${public_key_x}&sid=${short_id_x}&type=tcp&flow=xtls-rprx-vision#${isp}%20Reality-Vision%20${ESS}" >> "${work_dir}/url.txt"
     [ "$ENABLE_XHTTP_H2" = true ] && echo "vless://${uuid}@${xhttp_connect_host}:${xhttp_h2_port}?encryption=none&security=tls&sni=${xhttp_sni}&alpn=h2&fp=chrome&type=xhttp&mode=auto&path=/${xhttp_h2_path}&allowInsecure=${xhttp_insecure}#${isp}%20XHTTP-H2%20${ESS}" >> "${work_dir}/url.txt"
-    [ "$ENABLE_XHTTP_H3" = true ] && echo "vless://${uuid}@${xhttp_connect_host}:${xhttp_h3_port}?encryption=none&security=tls&sni=${xhttp_sni}&alpn=h3&fp=chrome&type=xhttp&mode=auto&path=/${xhttp_h3_path}&allowInsecure=${xhttp_insecure}#${isp}%20XHTTP-H3%20${ESS}" >> "${work_dir}/url.txt"
+    [ "$ENABLE_XHTTP_H3" = true ] && echo "vless://${uuid}@${xhttp_connect_host}:${xhttp_h3_port}?encryption=none&security=tls&sni=${xhttp_sni}&alpn=h3&fp=chrome&type=xhttp&mode=packet-up&path=/${xhttp_h3_path}&allowInsecure=${xhttp_insecure}#${isp}%20XHTTP-H3%20${ESS}" >> "${work_dir}/url.txt"
     
     if [ "$enable_argo" = true ]; then
-        echo "vless://${uuid}@${cfip_h2}:${cfport}?encryption=none&security=tls&alpn=h2&sni=${ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=auto&host=${ARGO_DOMAIN}&path=/${argo_path}#${isp}%20Argo-H2%20${ESS}" >> "${work_dir}/url.txt"
-        echo "vless://${uuid}@${cfip_h3}:${cfport}?encryption=none&security=tls&alpn=h3&sni=${ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=auto&host=${ARGO_DOMAIN}&path=/${argo_path}#${isp}%20Argo-H3%20${ESS}" >> "${work_dir}/url.txt"
+        echo "vless://${uuid}@${cfip_h2}:${cfport}?encryption=none&security=tls&alpn=h2&sni=${ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=packet-up&host=${ARGO_DOMAIN}&path=/${argo_path}#${isp}%20Argo-H2%20${ESS}" >> "${work_dir}/url.txt"
+        echo "vless://${uuid}@${cfip_h3}:${cfport}?encryption=none&security=tls&alpn=h3&sni=${ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=packet-up&host=${ARGO_DOMAIN}&path=/${argo_path}#${isp}%20Argo-H3%20${ESS}" >> "${work_dir}/url.txt"
     fi
 
     base64_str=$(cat "${work_dir}/url.txt" | base64 | tr -d '\n' | tr -d '\r')
@@ -837,25 +844,33 @@ fi
 # ==============================================================================
 # 8. 自动配置跨平台证书续期定时任务 (Cron)
 # ==============================================================================
-echo "正在配置证书自动续期守护任务..."
-if command -v apt >/dev/null 2>&1 || command -v yum >/dev/null 2>&1; then
-    # Debian / Ubuntu / CentOS 系列
-    (crontab -l 2>/dev/null | grep -q "acme.sh") || {
-        (crontab -l 2>/dev/null; echo "0 3 * * * \"/root/.acme.sh\"/acme.sh --cron --home \"/root/.acme.sh\" > /dev/null 2>&1") | crontab -
-    }
-elif command -v apk >/dev/null 2>&1; then
-    # Alpine 系列：确保 crond 服务已安装并启动
-    apk add --no-cache dcron >/dev/null 2>&1 || true
-    rc-update add crond default 2>/dev/null || true
-    rc-service crond start 2>/dev/null || crond 2>/dev/null || true
-    # 写入定时任务
-    (crontab -l 2>/dev/null | grep -q "acme.sh") || {
-        (crontab -l 2>/dev/null; echo "0 3 * * * \"/root/.acme.sh\"/acme.sh --cron --home \"/root/.acme.sh\" > /dev/null 2>&1") | crontab -
-    }
+# 【核心修正】：只有当 NaiveProxy 启用（100%绑定 acme）或者 xHTTP 直连确实成功调用了 acme 申请时才执行
+if [ "$enable_naive" = true ] || [ "$xhttp_use_acme" = true ]; then
+    echo "正在配置证书自动续期守护任务..."
+    
+    if ! command -v crontab >/dev/null 2>&1; then
+        if command -v apt >/dev/null 2>&1; then
+            apt install -y cron >/dev/null 2>&1 || true
+        elif command -v yum >/dev/null 2>&1; then
+            yum install -y cronie >/dev/null 2>&1 || true
+        elif command -v apk >/dev/null 2>&1; then
+            apk add --no-cache dcron >/dev/null 2>&1 || true
+            rc-update add crond default 2>/dev/null || true
+            rc-service crond start 2>/dev/null || crond 2>/dev/null || true
+        fi
+    fi
+
+    if command -v crontab >/dev/null 2>&1; then
+        (crontab -l 2>/dev/null | grep -q "acme.sh") || {
+            (crontab -l 2>/dev/null; echo "0 3 * * * \"/root/.acme.sh\"/acme.sh --cron --home \"/root/.acme.sh\" > /dev/null 2>&1") | crontab -
+        }
+        green "证书自动续期定时任务已成功配置（每日凌晨 3 点自动检查）！"
+        echo "一键查询定时任务状态 & 证书有效期："
+        yellow "crontab -l && '/root/.acme.sh/acme.sh' --cron --home '/root/.acme.sh'"
+    else
+        yellow "提示：当前系统未检测到 crontab 工具，已跳过自动续期任务配置。"
+    fi
+    echo "=========================================================================================="
 fi
-green "证书自动续期定时任务已成功配置（每日凌晨 3 点自动检查）！"
-echo "一键查询定时任务状态 & 证书有效期："
-yellow "crontab -l && '/root/.acme.sh/acme.sh' --cron --home '/root/.acme.sh'"
-echo "=========================================================================================="
 echo "一键卸载 (如需移除 Xray-go，请执行)："
 yellow "bash <(curl -Ls https://raw.githubusercontent.com/eishare/Xray-go/main/xraygo-uninstall.sh)"
