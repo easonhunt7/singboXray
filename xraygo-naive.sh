@@ -411,13 +411,13 @@ if [ "$enable_naive" = true ]; then
       "network": "udp",
       "listen": "::",
       "listen_port": '"$naive_h3_port"',
-      "quic_congestion_control": "bbr",
       "users": [
         {
           "username": "'"$naive_uuid"'",
           "password": "'"$naive_uuid"'"
         }
       ],
+      "quic_congestion_control": "bbr",
       "tls": {
         "enabled": true,
         "alpn": [
