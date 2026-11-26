@@ -525,22 +525,66 @@ if [ "$enable_xhttp_direct" = true ] || [ "$enable_argo" = true ] || [ "$ENABLE_
             xhttp_insecure="1"
         fi
     fi
-
- echo "正在下载 Xray-core..."
-    download_file "${work_dir}/xray.zip" "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${ARCH}.zip" || exit 1
-    unzip -qo "${work_dir}/xray.zip" -d "${work_dir}/" && rm -f "${work_dir}/xray.zip"
-    chmod +x "${work_dir}/xray"
-
-    if [ "$enable_argo" = true ]; then
+    
+if [ "$enable_argo" = true ]; then
         echo "正在下载 Cloudflared..."
         download_file "${work_dir}/cloudflared" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${GO_ARCH}" || exit 1
         chmod +x "${work_dir}/cloudflared"
     fi
-
+ echo "正在下载 Xray-core..."
+    download_file "${work_dir}/xray.zip" "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${ARCH}.zip" || exit 1
+    unzip -qo "${work_dir}/xray.zip" -d "${work_dir}/" && rm -f "${work_dir}/xray.zip"
+    chmod +x "${work_dir}/xray"
+    
     uuid=$(cat /proc/sys/kernel/random/uuid)
     xhttp_h2_path="${uuid}-xh2"
     xhttp_h3_path="${uuid}-xh3"
     argo_path="${uuid}-argo"
+
+# 启动 Cloudflared 服务（已适配 systemd 与 OpenRC 双系统）
+    if [ "$enable_argo" = true ]; then
+        argo_connections="1"
+        argo_proto_lower=$(echo "$ARGO_PROTOCOL" | tr '[:upper:]' '[:lower:]')
+        [ "$argo_proto_lower" = "http2" ] && argo_connections="4"
+
+    green "启动 Cloudflare Argo 固定隧道 (协议: ${ARGO_PROTOCOL}, 连接数: ${argo_connections})..."
+        
+        if pidof systemd >/dev/null 2>&1 || [ -d /etc/systemd/system ]; then
+            cat <<EOF > /etc/systemd/system/cloudflared.service
+[Unit]
+Description=Cloudflare Tunnels Service
+After=network.target
+
+[Service]
+TimeoutStartSec=0
+Type=simple
+ExecStart=${work_dir}/cloudflared tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol ${ARGO_PROTOCOL} --ha-connections ${argo_connections} run --token ${ARGO_TOKEN}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+            systemctl daemon-reload
+            systemctl enable --now cloudflared >/dev/null 2>&1
+        else
+            cat > /etc/init.d/cloudflared << EOF
+#!/sbin/openrc-run
+description="Cloudflare Tunnels Service"
+command="${work_dir}/cloudflared"
+command_args="tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol ${ARGO_PROTOCOL} --ha-connections ${argo_connections} run --token ${ARGO_TOKEN}"
+pidfile="/run/cloudflared.pid"
+command_background="yes"
+
+depend() {
+    need net
+}
+EOF
+            chmod +x /etc/init.d/cloudflared
+            rc-update add cloudflared default >/dev/null 2>&1
+            rc-service cloudflared restart
+        fi
+    fi
 
     # 生成 Reality 密钥对
     if [ "$ENABLE_REALITY" = true ]; then
@@ -717,54 +761,7 @@ EOF
         rc-update add xray default
         rc-service xray restart
     fi
-
-    # 启动 Cloudflared 服务（已适配 systemd 与 OpenRC 双系统）
-    if [ "$enable_argo" = true ]; then
-        argo_connections="1"
-        argo_proto_lower=$(echo "$ARGO_PROTOCOL" | tr '[:upper:]' '[:lower:]')
-        [ "$argo_proto_lower" = "http2" ] && argo_connections="4"
-
-        green "启动 Cloudflare Argo 固定隧道 (协议: ${ARGO_PROTOCOL}, 连接数: ${argo_connections})..."
-        
-        if pidof systemd >/dev/null 2>&1 || [ -d /etc/systemd/system ]; then
-            cat <<EOF > /etc/systemd/system/cloudflared.service
-[Unit]
-Description=Cloudflare Tunnels Service
-After=network.target
-
-[Service]
-TimeoutStartSec=0
-Type=simple
-ExecStart=${work_dir}/cloudflared tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol ${ARGO_PROTOCOL} --ha-connections ${argo_connections} run --token ${ARGO_TOKEN}
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
-            systemctl daemon-reload
-            systemctl enable --now cloudflared >/dev/null 2>&1
-        else
-            cat > /etc/init.d/cloudflared << EOF
-#!/sbin/openrc-run
-description="Cloudflare Tunnels Service"
-command="${work_dir}/cloudflared"
-command_args="tunnel --no-autoupdate --retries 5 --grace-period 1s --protocol ${ARGO_PROTOCOL} --ha-connections ${argo_connections} run --token ${ARGO_TOKEN}"
-pidfile="/run/cloudflared.pid"
-command_background="yes"
-
-depend() {
-    need net
-}
-EOF
-            chmod +x /etc/init.d/cloudflared
-            rc-update add cloudflared default >/dev/null 2>&1
-            rc-service cloudflared restart
-        fi
-    fi
 fi
-
-
 
 # ==============================================================================
 # 6. 统一防火墙放行
