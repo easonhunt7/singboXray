@@ -830,7 +830,7 @@ if [ "$enable_xray" = true ]; then
 
     # 2. xHTTP 直连输出
     if [ "$ENABLE_XHTTP_H2" = true ] || [ "$ENABLE_XHTTP_H3" = true ]; then
-        green "[Xray-core] xHTTP 直连节点："
+        green "[Xray-core] xHTTP 直连节点 (支持 v2rayN / Hiddify / Karing / NekoBox)："
         [ "$ENABLE_XHTTP_H2" = true ] && echo -e "\e[1;33mvless://${uuid}@${xhttp_connect_host}:${xhttp_h2_port}?encryption=none&security=tls&sni=${xhttp_sni}&alpn=h2&fp=chrome&type=xhttp&mode=packet-up&path=/${xhttp_h2_path}&allowInsecure=${xhttp_insecure}#${isp}%20XHTTP-H2%20${ESS}\e[0m"
         [ "$ENABLE_XHTTP_H3" = true ] && echo -e "\e[1;33mvless://${uuid}@${xhttp_connect_host}:${xhttp_h3_port}?encryption=none&security=tls&sni=${xhttp_sni}&alpn=h3&fp=chrome&type=xhttp&mode=packet-up&path=/${xhttp_h3_path}&allowInsecure=${xhttp_insecure}#${isp}%20XHTTP-H3%20${ESS}\e[0m"
         echo "------------------------------------------------------------------------------------------"
@@ -838,7 +838,7 @@ if [ "$enable_xray" = true ]; then
     
     # 3. xHTTP Argo 隧道输出
     if [ "$enable_argo" = true ]; then
-        green "[Xray-core] xHTTP Argo 隧道节点："
+        green "[Xray-core] xHTTP Argo 隧道节点 (支持 v2rayN / Hiddify / Karing / NekoBox)："
         echo -e "\e[1;33mvless://${uuid}@${cfip_h2}:${cfport}?encryption=none&security=tls&alpn=h2&sni=${ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=packet-up&host=${ARGO_DOMAIN}&path=/${argo_path}#${isp}%20Argo-H2%20${ESS}\e[0m"
         echo -e "\e[1;33mvless://${uuid}@${cfip_h3}:${cfport}?encryption=none&security=tls&alpn=h3&sni=${ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=packet-up&host=${ARGO_DOMAIN}&path=/${argo_path}#${isp}%20Argo-H3%20${ESS}\e[0m"
         echo "------------------------------------------------------------------------------------------"
@@ -846,7 +846,7 @@ if [ "$enable_xray" = true ]; then
 
     # 4. VLESS TCP Reality 输出
     if [ "$ENABLE_REALITY" = true ]; then
-        green "[Xray-core] VLESS TCP Reality 节点："
+        green "[Xray-core] VLESS TCP Reality 节点 (支持 v2rayN / Hiddify / Karing / NekoBox)："
         echo -e "\e[1;33mvless://${uuid}@${server_ip}:${reality_port}?encryption=none&security=reality&sni=${REALITY_DEST}&fp=chrome&pbk=${public_key_x}&sid=${short_id_x}&type=tcp&flow=xtls-rprx-vision#${isp}%20Reality-Vision%20${ESS}\e[0m"
         echo "------------------------------------------------------------------------------------------"
     fi
