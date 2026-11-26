@@ -508,7 +508,7 @@ if [ "$enable_xhttp_direct" = true ] || [ "$enable_argo" = true ] || [ "$ENABLE_
     xhttp_use_acme=false
     if [ "$enable_xhttp_direct" = true ]; then
         if [ -n "$XHTTP_DOMAIN" ] && [ -n "$XHTTP_API" ]; then
-            green "---> 开始部署 XHTTP (Xray-core 内核)..."
+            green "---> 开始部署 XHTTP (Xray-core)..."
             issue_cf_cert "$XHTTP_DOMAIN" "$XHTTP_API" "$XHTTP_CERT_DIR"
             xhttp_cert_file="${XHTTP_CERT_DIR}/fullchain.cer"
             xhttp_key_file="${XHTTP_CERT_DIR}/private.key"
