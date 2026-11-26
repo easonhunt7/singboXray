@@ -592,7 +592,7 @@ if [ "$enable_xhttp_direct" = true ] || [ "$enable_argo" = true ] || [ "$ENABLE_
         \"network\": \"xhttp\",
         \"security\": \"tls\",
         \"xhttpSettings\": {
-          \"mode\": \"auto\",
+          \"mode\": \"packet-up\",
           \"path\": \"/$xhttp_h2_path\"
         },
         \"tlsSettings\": {
@@ -828,7 +828,7 @@ if [ "$enable_xray" = true ]; then
     # 2. xHTTP 直连输出
     if [ "$ENABLE_XHTTP_H2" = true ] || [ "$ENABLE_XHTTP_H3" = true ]; then
         green "[Xray-core] xHTTP 直连节点："
-        [ "$ENABLE_XHTTP_H2" = true ] && echo -e "\e[1;33mvless://${uuid}@${xhttp_connect_host}:${xhttp_h2_port}?encryption=none&security=tls&sni=${xhttp_sni}&alpn=h2&fp=chrome&type=xhttp&mode=auto&path=/${xhttp_h2_path}&allowInsecure=${xhttp_insecure}#${isp}%20XHTTP-H2%20${ESS}\e[0m"
+        [ "$ENABLE_XHTTP_H2" = true ] && echo -e "\e[1;33mvless://${uuid}@${xhttp_connect_host}:${xhttp_h2_port}?encryption=none&security=tls&sni=${xhttp_sni}&alpn=h2&fp=chrome&type=xhttp&mode=packet-up&path=/${xhttp_h2_path}&allowInsecure=${xhttp_insecure}#${isp}%20XHTTP-H2%20${ESS}\e[0m"
         [ "$ENABLE_XHTTP_H3" = true ] && echo -e "\e[1;33mvless://${uuid}@${xhttp_connect_host}:${xhttp_h3_port}?encryption=none&security=tls&sni=${xhttp_sni}&alpn=h3&fp=chrome&type=xhttp&mode=packet-up&path=/${xhttp_h3_path}&allowInsecure=${xhttp_insecure}#${isp}%20XHTTP-H3%20${ESS}\e[0m"
         echo "------------------------------------------------------------------------------------------"
     fi
