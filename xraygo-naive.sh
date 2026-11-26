@@ -841,9 +841,9 @@ if [ "$enable_xray" = true ]; then
         echo "------------------------------------------------------------------------------------------"
     fi
 
-    # 4. VLESS TCP Reality 输出
+    # 4. VLESS TCP Reality Vision 输出
     if [ "$ENABLE_REALITY" = true ]; then
-        green "[Xray-core] VLESS TCP Reality 节点 (支持 v2rayN / Hiddify / Karing / NekoBox)："
+        green "[Xray-core] VLESS TCP Reality Vision 节点 (支持 v2rayN / Hiddify / Karing / NekoBox)："
         echo -e "\e[1;33mvless://${uuid}@${server_ip}:${reality_port}?encryption=none&security=reality&sni=${REALITY_DEST}&fp=chrome&pbk=${public_key_x}&sid=${short_id_x}&type=tcp&flow=xtls-rprx-vision#${isp}%20Reality-Vision%20${ESS}\e[0m"
         echo "------------------------------------------------------------------------------------------"
     fi
