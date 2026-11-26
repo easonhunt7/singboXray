@@ -666,7 +666,7 @@ EOF
         \"network\": \"xhttp\",
         \"security\": \"tls\",
         \"xhttpSettings\": {
-          \"mode\": \"packet-up\",
+          \"mode\": \"auto\",
           \"path\": \"/$xhttp_h3_path\"
         },
         \"tlsSettings\": {
@@ -694,7 +694,7 @@ EOF
         \"security\": \"none\",
         \"xhttpSettings\": {
           \"path\": \"/$argo_path\",
-          \"mode\": \"packet-up\"
+          \"mode\": \"auto\"
         }
       },
       \"sniffing\": {\"enabled\": true, \"destOverride\": [\"http\", \"tls\", \"quic\"], \"metadataOnly\": false}
@@ -829,7 +829,7 @@ if [ "$enable_xray" = true ]; then
     if [ "$ENABLE_XHTTP_H2" = true ] || [ "$ENABLE_XHTTP_H3" = true ]; then
         green "[Xray-core] xHTTP 直连节点 (支持 v2rayN / Hiddify / Karing / NekoBox)："
         [ "$ENABLE_XHTTP_H2" = true ] && echo -e "\e[1;33mvless://${uuid}@${xhttp_connect_host}:${xhttp_h2_port}?encryption=none&security=tls&sni=${xhttp_sni}&alpn=h2&fp=chrome&type=xhttp&mode=auto&path=/${xhttp_h2_path}&allowInsecure=${xhttp_insecure}#${isp}%20XHTTP-H2%20${ESS}\e[0m"
-        [ "$ENABLE_XHTTP_H3" = true ] && echo -e "\e[1;33mvless://${uuid}@${xhttp_connect_host}:${xhttp_h3_port}?encryption=none&security=tls&sni=${xhttp_sni}&alpn=h3&fp=chrome&type=xhttp&mode=packet-up&path=/${xhttp_h3_path}&allowInsecure=${xhttp_insecure}#${isp}%20XHTTP-H3%20${ESS}\e[0m"
+        [ "$ENABLE_XHTTP_H3" = true ] && echo -e "\e[1;33mvless://${uuid}@${xhttp_connect_host}:${xhttp_h3_port}?encryption=none&security=tls&sni=${xhttp_sni}&alpn=h3&fp=chrome&type=xhttp&mode=auto&path=/${xhttp_h3_path}&allowInsecure=${xhttp_insecure}#${isp}%20XHTTP-H3%20${ESS}\e[0m"
         echo "------------------------------------------------------------------------------------------"
     fi
     
@@ -837,7 +837,7 @@ if [ "$enable_xray" = true ]; then
     if [ "$enable_argo" = true ]; then
         green "[Xray-core] xHTTP Argo 隧道节点 (支持 v2rayN / Hiddify / Karing / NekoBox)："
         echo -e "\e[1;33mvless://${uuid}@${cfip_h2}:${cfport}?encryption=none&security=tls&alpn=h2&sni=${ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=auto&host=${ARGO_DOMAIN}&path=/${argo_path}#${isp}%20Argo-H2%20${ESS}\e[0m"
-        echo -e "\e[1;33mvless://${uuid}@${cfip_h3}:${cfport}?encryption=none&security=tls&alpn=h3&sni=${ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=packet-up&host=${ARGO_DOMAIN}&path=/${argo_path}#${isp}%20Argo-H3%20${ESS}\e[0m"
+        echo -e "\e[1;33mvless://${uuid}@${cfip_h3}:${cfport}?encryption=none&security=tls&alpn=h3&sni=${ARGO_DOMAIN}&fp=chrome&type=xhttp&mode=auto&host=${ARGO_DOMAIN}&path=/${argo_path}#${isp}%20Argo-H3%20${ESS}\e[0m"
         echo "------------------------------------------------------------------------------------------"
     fi
 
