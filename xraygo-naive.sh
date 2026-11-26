@@ -813,7 +813,7 @@ cfport="443"
 
 clear
 echo "=========================================================================================="
-echo " 部署完成！以下是节点信息："
+echo " 部署完成！节点链接如下："
 echo "=========================================================================================="
 
 # 1. NaiveProxy 输出
@@ -857,7 +857,7 @@ fi
 # ==============================================================================
 # 【只有当 NaiveProxy 启用（100%绑定 acme）或者 xHTTP 直连确实成功调用了 acme 申请时才执行
 if [ "$enable_naive" = true ] || [ "$xhttp_use_acme" = true ]; then
-    echo "正在配置证书自动续期守护任务..."
+    echo "正在配置 DNS-01 证书自动续期守护任务..."
     
     if ! command -v crontab >/dev/null 2>&1; then
         if command -v apt >/dev/null 2>&1; then
@@ -875,7 +875,7 @@ if [ "$enable_naive" = true ] || [ "$xhttp_use_acme" = true ]; then
         (crontab -l 2>/dev/null | grep -q "acme.sh") || {
             (crontab -l 2>/dev/null; echo "0 3 * * * \"/root/.acme.sh\"/acme.sh --cron --home \"/root/.acme.sh\" > /dev/null 2>&1") | crontab -
         }
-        green "证书自动续期定时任务已成功配置（每日凌晨 3 点自动检查）！"
+        green "DNS-01 证书自动续期定时任务已成功配置（每日凌晨 3 点自动检查）！"
         echo "一键查询定时任务状态 & 证书有效期："
         yellow "crontab -l && '/root/.acme.sh/acme.sh' --cron --home '/root/.acme.sh'"
     else
