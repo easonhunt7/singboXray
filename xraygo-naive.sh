@@ -41,7 +41,7 @@ download_file() {
     echo "连接 GitHub 官方源中..."
     if curl -# -L --connect-timeout 20 --max-time 180 -o "$output_path" "$official_url"; then
         if validate_file "$output_path"; then
-            echo "下载+校验成功！"
+            green "下载+校验成功！"
             return 0
         else
             yellow "校验失败，切换至 Cloudflare 安全代理..."
@@ -57,7 +57,7 @@ download_file() {
         local proxy_url="${proxy}${official_url}"
         if curl -# -L --connect-timeout 30 --max-time 240 -o "$output_path" "$proxy_url"; then
             if validate_file "$output_path"; then
-                echo "下载+校验成功！"
+                green "下载+校验成功！"
                 return 0
             else
                 yellow "校验失败，已清除残留..."
@@ -541,7 +541,7 @@ if [ "$enable_argo" = true ]; then
         argo_proto_lower=$(echo "$ARGO_PROTOCOL" | tr '[:upper:]' '[:lower:]')
         [ "$argo_proto_lower" = "http2" ] && argo_connections="4"
 
-    green "---> 启用 Cloudflare Argo 固定隧道 (协议: ${ARGO_PROTOCOL}, 连接数: ${argo_connections})..."
+    yellow "---> 启用 xHTTP + Argo 固定隧道 (协议: ${ARGO_PROTOCOL}, 连接数: ${argo_connections})..."
         
         if pidof systemd >/dev/null 2>&1 || [ -d /etc/systemd/system ]; then
             cat <<EOF > /etc/systemd/system/cloudflared.service
@@ -716,7 +716,7 @@ EOF
 
     # 启动 Xray 服务
     if pidof systemd >/dev/null 2>&1 || [ -d /etc/systemd/system ]; then
-        echo "已启动 Xray-core 服务..."
+        green "已启动 Xray-core 服务..."
         cat > /etc/systemd/system/xray.service << EOF
 [Unit]
 Description=Xray Service
@@ -779,6 +779,7 @@ done
 # 7. 获取 IP / GeoIP 并生成全协议节点输出
 # ==============================================================================
 echo "获取服务器 IP 与节点信息中..."
+echo "------------------------------------------------------------------------------------------"
 raw_ip=$(curl -4 -sm 2 ip.sb || curl -6 -sm 2 ip.sb)
 if [[ "$raw_ip" =~ : ]]; then
     server_ip="[$raw_ip]"
@@ -800,11 +801,6 @@ ESS="ᴇꜱꜱ"
 cfip_h2="www.visa.com.hk"
 cfip_h3="www.teamviewer.com"
 cfport="443"
-
-clear
-echo "------------------------------------------------------------------------------------------"
-echo " 节点链接已生成："
-echo "------------------------------------------------------------------------------------------"
 
 # 1. NaiveProxy 输出
 if [ "$enable_naive" = true ]; then
@@ -847,7 +843,6 @@ fi
 # ==============================================================================
 # 【只有当 NaiveProxy 启用（100%绑定 acme）或者 xHTTP 直连确实成功调用了 acme 申请时才执行
 if [ "$enable_naive" = true ] || [ "$xhttp_use_acme" = true ]; then
-    echo "正在配置 DNS-01 证书自动续期守护任务..."
     
     if ! command -v crontab >/dev/null 2>&1; then
         if command -v apt >/dev/null 2>&1; then
@@ -865,7 +860,7 @@ if [ "$enable_naive" = true ] || [ "$xhttp_use_acme" = true ]; then
         (crontab -l 2>/dev/null | grep -q "acme.sh") || {
             (crontab -l 2>/dev/null; echo "0 3 * * * \"/root/.acme.sh\"/acme.sh --cron --home \"/root/.acme.sh\" > /dev/null 2>&1") | crontab -
         }
-        green "DNS-01 证书自动续期定时任务已成功配置（每日凌晨 3 点自动检查）！"
+        green "DNS-01 证书 cron 任务运行中（每日凌晨 3 点检查，到期前30天完成静默续期）..."
         echo "一键查询定时任务状态 & 证书有效期："
         yellow "crontab -l && '/root/.acme.sh/acme.sh' --cron --home '/root/.acme.sh'"
     else
