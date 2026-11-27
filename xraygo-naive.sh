@@ -41,7 +41,7 @@ download_file() {
     echo "连接 GitHub 官方源中..."
     if curl -# -L --connect-timeout 20 --max-time 180 -o "$output_path" "$official_url"; then
         if validate_file "$output_path"; then
-            green "下载+校验成功！"
+            echo "下载+校验成功！"
             return 0
         else
             yellow "校验失败，切换至 Cloudflare 安全代理..."
@@ -57,7 +57,7 @@ download_file() {
         local proxy_url="${proxy}${official_url}"
         if curl -# -L --connect-timeout 30 --max-time 240 -o "$output_path" "$proxy_url"; then
             if validate_file "$output_path"; then
-                green "下载+校验成功！"
+                echo "下载+校验成功！"
                 return 0
             else
                 yellow "校验失败，已清除残留..."
@@ -301,7 +301,7 @@ fi
     
     "$HOME/.acme.sh/acme.sh" --set-default-ca --server letsencrypt >/dev/null 2>&1
     "$HOME/.acme.sh/acme.sh" --issue --dns dns_cf -d "${domain}" --force || {
-        red "错误：[${domain}] 证书申请失败，请检查CF中 API & DNS 设置；若触发次数限制，请更换域名再试！"
+        red "错误：[${domain}] 证书申请失败，请检查 DNS & API 设置；若触发次数限制，请更换域名再试！"
         exit 1
     }
     
@@ -316,10 +316,10 @@ fi
 }
 
 # ==============================================================================
-# 4. 部署 NaiveProxy (基于 Sing-box 原生内核)
+# 4. 部署 NaiveProxy (基于 sing-box core 1.13以上)
 # ==============================================================================
 if [ "$enable_naive" = true ]; then
-    green "---> 开始部署 NaiveProxy (Sing-box 内核)..."
+    yellow "---> 开始部署 NaiveProxy (sing-box core)..."
     mkdir -p "${SBX_DIR}"
     
     uuid_file="${SBX_DIR}/uuid"
@@ -333,7 +333,7 @@ if [ "$enable_naive" = true ]; then
     # 申请 NaiveProxy 域名证书
     issue_cf_cert "$NAIVE_DOMAIN" "$NAIVE_API" "$NAIVE_CERT_DIR"
 
-    echo "正在获取最新 Sing-box 内核..."
+    echo "正在获取最新 sing-box core..."
     SB_VERSION=""
     for i in {1..3}; do
         # 尝试通过 GitHub API 获取最新 Release 标签
@@ -347,16 +347,16 @@ if [ "$enable_naive" = true ]; then
         SB_VERSION="1.14.4"
         yellow "未检测到在线版本，已启用 1.14.4 稳定版。"
     else
-        green "检测到 Sing-box 最新版本: v${SB_VERSION}"
+        echo "检测到 sing-box 最新版本: v${SB_VERSION}"
     fi
 
     SB_URL="https://github.com/SagerNet/sing-box/releases/download/v${SB_VERSION}/sing-box-${SB_VERSION}-linux-${GO_ARCH}.tar.gz"
-    echo "正在下载 Sing-box v${SB_VERSION}..."
+    echo "正在下载 sing-box v${SB_VERSION}..."
     download_file "/tmp/sing-box.tar.gz" "$SB_URL" || exit 1
 
     rm -rf /tmp/sing-box-*
     tar -xzf /tmp/sing-box.tar.gz -C /tmp/ || {
-        red "错误: Sing-box 解压失败！"
+        red "错误: sing-box 解压失败！请稍后再试。"
         rm -f /tmp/sing-box.tar.gz
         exit 1
     }
@@ -365,7 +365,7 @@ if [ "$enable_naive" = true ]; then
     if [ -d "$extracted_dir" ] && [ -f "$extracted_dir/sing-box" ]; then
         mv "$extracted_dir/sing-box" "${SBX_DIR}/sing-box"
         chmod +x "${SBX_DIR}/sing-box"
-        green "已启用 Sing-box 内核。"
+        green "已启动 sing-box core 服务..."
     else
         red "错误: 未能定位解压后的 sing-box 二进制文件！"
         exit 1
@@ -498,11 +498,11 @@ if [ "$enable_xhttp_direct" = true ] || [ "$enable_argo" = true ] || [ "$ENABLE_
     enable_xray=true
     mkdir -p "${work_dir}"
    
-    # 处理 xHTTP 直连证书（域名+API 真实证书 vs 自签证书）
+    # 处理 xHTTP 直连证书（域名+API 证书 vs 自签证书）
     xhttp_use_acme=false
     if [ "$enable_xhttp_direct" = true ]; then
         if [ -n "$XHTTP_DOMAIN" ] && [ -n "$XHTTP_API" ]; then
-            green "---> 开始部署 XHTTP (Xray-core)..."
+            yellow "---> 开始部署 XHTTP (Xray-core)..."
             issue_cf_cert "$XHTTP_DOMAIN" "$XHTTP_API" "$XHTTP_CERT_DIR"
             xhttp_cert_file="${XHTTP_CERT_DIR}/fullchain.cer"
             xhttp_key_file="${XHTTP_CERT_DIR}/private.key"
@@ -510,7 +510,7 @@ if [ "$enable_xhttp_direct" = true ] || [ "$enable_argo" = true ] || [ "$ENABLE_
             xhttp_insecure="0"
             xhttp_use_acme=true
         else
-            echo "xHTTP 未填写域名与 API，将使用自签证书..."
+            echo "xHTTP 未填写有效域名与 API，将使用自签证书..."
             openssl ecparam -genkey -name prime256v1 -out "${work_dir}/private.key"
             openssl req -new -x509 -days 3650 -key "${work_dir}/private.key" -out "${work_dir}/cert.pem" -subj "/CN=bing.com"
             xhttp_cert_file="${work_dir}/cert.pem"
@@ -541,7 +541,7 @@ if [ "$enable_argo" = true ]; then
         argo_proto_lower=$(echo "$ARGO_PROTOCOL" | tr '[:upper:]' '[:lower:]')
         [ "$argo_proto_lower" = "http2" ] && argo_connections="4"
 
-    green "启动 Cloudflare Argo 固定隧道 (协议: ${ARGO_PROTOCOL}, 连接数: ${argo_connections})..."
+    green "---> 启用 Cloudflare Argo 固定隧道 (协议: ${ARGO_PROTOCOL}, 连接数: ${argo_connections})..."
         
         if pidof systemd >/dev/null 2>&1 || [ -d /etc/systemd/system ]; then
             cat <<EOF > /etc/systemd/system/cloudflared.service
@@ -582,12 +582,11 @@ EOF
 
     # 生成 Reality 密钥对
     if [ "$ENABLE_REALITY" = true ]; then
-       green "---> 开始部署 VLESS TCP Reality Vision..."
+       yellow "---> 开始部署 VLESS TCP Reality Vision..."
         key_pair=$("${work_dir}/xray" x25519)
         private_key_x=$(echo "$key_pair" | awk -F':' '/PrivateKey/ {print $2}' | xargs)
         public_key_x=$(echo "$key_pair" | awk -F':' '/Password/ {print $2}' | xargs)
         short_id_x=$(date +%s%N | sha256sum | cut -c 1-8)
-        green "-> VLESS TCP Reality Vision 部署完成。"
     fi
 
     inbounds_arr=()
@@ -717,7 +716,7 @@ EOF
 
     # 启动 Xray 服务
     if pidof systemd >/dev/null 2>&1 || [ -d /etc/systemd/system ]; then
-        green "已启用 Xray-core 服务..."
+        echo "已启动 Xray-core 服务..."
         cat > /etc/systemd/system/xray.service << EOF
 [Unit]
 Description=Xray Service
@@ -738,7 +737,7 @@ EOF
         systemctl daemon-reload
         systemctl enable --now xray
     else
-        green "已启用 Xray-core 服务 (OpenRC)..."
+        echo "已启动 Xray-core 服务 (OpenRC)..."
         cat > /etc/init.d/xray << 'EOF'
 #!/sbin/openrc-run
 description="Xray Service"
@@ -803,9 +802,9 @@ cfip_h3="www.teamviewer.com"
 cfport="443"
 
 clear
-echo "=========================================================================================="
-echo " 部署完成！节点链接如下："
-echo "=========================================================================================="
+echo "------------------------------------------------------------------------------------------"
+echo " 节点链接已生成："
+echo "------------------------------------------------------------------------------------------"
 
 # 1. NaiveProxy 输出
 if [ "$enable_naive" = true ]; then
