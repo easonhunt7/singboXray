@@ -737,7 +737,7 @@ EOF
         systemctl daemon-reload
         systemctl enable --now xray
     else
-        echo "已启动 Xray-core 服务 (OpenRC)..."
+        green "已启动 Xray-core 服务 (OpenRC)..."
         cat > /etc/init.d/xray << 'EOF'
 #!/sbin/openrc-run
 description="Xray Service"
